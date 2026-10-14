@@ -21,6 +21,11 @@ mod input;
 mod out_dir;
 mod runner;
 pub mod safe_area;
+#[cfg(all(
+    feature = "script",
+    not(any(target_os = "android", target_arch = "wasm32"))
+))]
+mod screenshot;
 pub mod script;
 
 pub use app::{Frame, MorphApp};

@@ -29,6 +29,9 @@ web = [
     "wgpu/webgl",
     "cpal?/wasm-bindgen",
 ]
+# Scripted headless runs with PNG screenshots (desktop only; enables
+# nothing on Android and the web).
+script = ["dep:png", "dep:crc32fast"]
 
 [dependencies]
 libdevice = { git = "https://github.com/tmzt/libdevice" }
@@ -50,6 +53,11 @@ winit = "0.30.13"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 pollster = "0.4"
+
+[target.'cfg(not(any(target_os = "android", target_arch = "wasm32")))'.dependencies]
+png = { version = "0.18.1", optional = true }
+# png's own chunk CRC crate, named for the manifest's pixel CRC.
+crc32fast = { version = "1.5", optional = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 raw-window-handle = "0.6"
