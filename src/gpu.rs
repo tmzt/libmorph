@@ -60,16 +60,17 @@ pub(crate) async fn instance(
 }
 
 impl Gpu {
-    /// Pick an adapter that can present to `surface` and open a device on it.
+    /// Pick an adapter that can present to `surface` (any adapter for
+    /// scripted runs, which have none) and open a device on it.
     pub async fn new(
         instance: wgpu::Instance,
-        surface: &wgpu::Surface<'_>,
+        surface: Option<&wgpu::Surface<'_>>,
         force_fallback_adapter: bool,
     ) -> Result<Self, GpuError> {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: Some(surface),
+                compatible_surface: surface,
                 force_fallback_adapter,
                 apply_limit_buckets: false,
             })

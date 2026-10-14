@@ -1,6 +1,8 @@
 //! The host-independent half of a runner: the app, its context and the
 //! current surface, and the per-frame sequence.
 
+use std::time::Duration;
+
 use web_time::Instant;
 
 use crate::gpu::Gpu;
@@ -40,12 +42,26 @@ impl Lifecycle {
     }
 }
 
+/// What frames are drawn into.
+enum Target {
+    /// A platform surface, presented after each frame.
+    Surface(wgpu::Surface<'static>, wgpu::SurfaceConfiguration),
+    /// A texture for scripted runs: rendered, never presented.
+    #[cfg(all(
+        feature = "script",
+        not(any(target_os = "android", target_arch = "wasm32"))
+    ))]
+    Offscreen(wgpu::Texture),
+}
+
 pub(crate) struct Shell<A> {
     pub ctx: MorphContext,
     pub app: A,
-    surface: Option<(wgpu::Surface<'static>, wgpu::SurfaceConfiguration)>,
+    target: Option<Target>,
     lifecycle: Lifecycle,
     last_frame: Instant,
+    /// Scripted runs: the `dt` every frame gets, instead of the clock.
+    fixed_dt: Option<Duration>,
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     pub overlay: Option<Overlay>,
 }
@@ -63,16 +79,21 @@ impl<A: MorphApp> Shell<A> {
             .ok_or(MorphError::NoSurfaceFormat)?;
         ctx.surface_format = config.format;
         ctx.surface_size = (config.width, config.height);
+        Ok(Self::with_app(ctx, Target::Surface(surface, config), None))
+    }
+
+    fn with_app(mut ctx: MorphContext, target: Target, fixed_dt: Option<Duration>) -> Self {
         let app = A::init(&mut ctx);
-        Ok(Self {
+        Self {
             ctx,
             app,
-            surface: Some((surface, config)),
+            target: Some(target),
             lifecycle: Lifecycle::default(),
             last_frame: Instant::now(),
+            fixed_dt,
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             overlay: None,
-        })
+        }
     }
 
     pub fn gpu(&self) -> &Gpu {
@@ -80,7 +101,7 @@ impl<A: MorphApp> Shell<A> {
     }
 
     pub fn has_surface(&self) -> bool {
-        self.surface.is_some()
+        self.target.is_some()
     }
 
     /// Install a new surface: after a resume, or to replace a lost one. The
@@ -97,7 +118,11 @@ impl<A: MorphApp> Shell<A> {
         };
         self.ctx.surface_format = config.format;
         self.ctx.surface_size = (config.width, config.height);
-        self.surface = Some((surface, config));
+        self.install(Target::Surface(surface, config));
+    }
+
+    fn install(&mut self, target: Target) {
+        self.target = Some(target);
         // Frame time does not accumulate across a suspension.
         self.last_frame = Instant::now();
         if self.lifecycle.resume() {
@@ -108,7 +133,7 @@ impl<A: MorphApp> Shell<A> {
     /// Drop the surface (it must not outlive the platform window) and tell
     /// the app, unless it already knows it is suspended.
     pub fn detach(&mut self) {
-        self.surface = None;
+        self.target = None;
         if self.lifecycle.suspend() {
             self.app.on_suspend(&mut self.ctx);
         }
@@ -125,12 +150,12 @@ impl<A: MorphApp> Shell<A> {
         if self.lifecycle.suspend() {
             self.app.on_suspend(&mut self.ctx);
         }
-        self.surface = None;
+        self.target = None;
         drop(self.app);
     }
 
     pub fn resize(&mut self, (width, height): (u32, u32)) {
-        let Some((surface, config)) = &mut self.surface else {
+        let Some(Target::Surface(surface, config)) = &mut self.target else {
             return;
         };
         (config.width, config.height) = (width.max(1), height.max(1));
@@ -139,7 +164,7 @@ impl<A: MorphApp> Shell<A> {
     }
 
     fn reconfigure(&mut self) {
-        if let Some((surface, config)) = &self.surface {
+        if let Some(Target::Surface(surface, config)) = &self.target {
             surface.configure(&self.ctx.gpu.device, config);
         }
     }
@@ -159,8 +184,18 @@ impl<A: MorphApp> Shell<A> {
 
     /// Update, then render and present if the surface hands out a texture.
     pub fn frame(&mut self) -> FrameStatus {
-        let Some((surface, _)) = &self.surface else {
-            return FrameStatus::Skipped;
+        let surface = match &self.target {
+            None => return FrameStatus::Skipped,
+            Some(Target::Surface(surface, _)) => surface,
+            #[cfg(all(
+                feature = "script",
+                not(any(target_os = "android", target_arch = "wasm32"))
+            ))]
+            Some(Target::Offscreen(texture)) => {
+                let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                self.draw(&view);
+                return FrameStatus::Presented;
+            }
         };
         let texture = match surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(texture) => Ok(texture),
@@ -173,7 +208,7 @@ impl<A: MorphApp> Shell<A> {
                 return FrameStatus::Skipped;
             }
             wgpu::CurrentSurfaceTexture::Lost => {
-                self.surface = None;
+                self.target = None;
                 return FrameStatus::Lost;
             }
             wgpu::CurrentSurfaceTexture::Validation => {
@@ -183,31 +218,101 @@ impl<A: MorphApp> Shell<A> {
         };
         let suboptimal = texture.is_err();
         let texture = texture.unwrap_or_else(|texture| texture);
-
-        let now = Instant::now();
-        let dt = now - self.last_frame;
-        self.last_frame = now;
-        self.app.update(&mut self.ctx, dt);
-
         let view = texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let frame = Frame {
-            view: &view,
-            format: self.ctx.surface_format,
-            size: self.ctx.surface_size,
-        };
-        self.app.render(&mut self.ctx, &frame);
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-        if let Some(overlay) = &mut self.overlay {
-            overlay.draw(&self.ctx, &view);
-        }
+        self.draw(&view);
         self.ctx.gpu.queue.present(texture);
         if suboptimal {
             self.reconfigure();
         }
         FrameStatus::Presented
     }
+
+    /// `update`, `render` and the overlay into `view`.
+    fn draw(&mut self, view: &wgpu::TextureView) {
+        let now = Instant::now();
+        let dt = self.fixed_dt.unwrap_or(now - self.last_frame);
+        self.last_frame = now;
+        self.app.update(&mut self.ctx, dt);
+
+        let frame = Frame {
+            view,
+            format: self.ctx.surface_format,
+            size: self.ctx.surface_size,
+        };
+        self.app.render(&mut self.ctx, &frame);
+        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        if let Some(overlay) = &mut self.overlay {
+            overlay.draw(&self.ctx, view);
+        }
+    }
+}
+
+/// Scripted runs: an offscreen texture in place of a surface.
+#[cfg(all(
+    feature = "script",
+    not(any(target_os = "android", target_arch = "wasm32"))
+))]
+// The scripted runner (plan 04, step 5) is the user.
+#[allow(dead_code)]
+impl<A: MorphApp> Shell<A> {
+    /// The offscreen format: RGBA so readback needs no channel swap, sRGB
+    /// or not as the app asks.
+    pub fn offscreen_format() -> wgpu::TextureFormat {
+        if A::SRGB_SURFACE {
+            wgpu::TextureFormat::Rgba8UnormSrgb
+        } else {
+            wgpu::TextureFormat::Rgba8Unorm
+        }
+    }
+
+    /// Create the first offscreen target at `size`, then build the app.
+    /// Every frame gets `dt`.
+    pub fn start_offscreen(mut ctx: MorphContext, size: (u32, u32), dt: Duration) -> Self {
+        ctx.surface_format = Self::offscreen_format();
+        ctx.surface_size = (size.0.max(1), size.1.max(1));
+        let texture = offscreen_texture(&ctx);
+        Self::with_app(ctx, Target::Offscreen(texture), Some(dt))
+    }
+
+    /// A new offscreen target in the kept format and size, after
+    /// [`detach`](Self::detach).
+    pub fn attach_offscreen(&mut self) {
+        let texture = offscreen_texture(&self.ctx);
+        self.install(Target::Offscreen(texture));
+    }
+
+    /// The offscreen texture, while attached.
+    pub fn offscreen(&self) -> Option<&wgpu::Texture> {
+        match &self.target {
+            Some(Target::Offscreen(texture)) => Some(texture),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(all(
+    feature = "script",
+    not(any(target_os = "android", target_arch = "wasm32"))
+))]
+#[allow(dead_code)]
+fn offscreen_texture(ctx: &MorphContext) -> wgpu::Texture {
+    let (width, height) = ctx.surface_size;
+    ctx.gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("libmorph offscreen"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: ctx.surface_format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    })
 }
 
 #[cfg(test)]
