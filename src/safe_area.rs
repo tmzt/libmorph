@@ -32,6 +32,34 @@ impl From<libdevice::Insets> for SafeArea {
     }
 }
 
+/// An Android inset report (`MobileEvent::Insets(insets)` → `insets.safe_area`).
+/// libmobile orders its fields left-first; they are matched by name.
+#[cfg(feature = "mobile")]
+impl From<libmobile::SafeArea> for SafeArea {
+    fn from(safe_area: libmobile::SafeArea) -> Self {
+        Self {
+            top: safe_area.top,
+            right: safe_area.right,
+            bottom: safe_area.bottom,
+            left: safe_area.left,
+        }
+    }
+}
+
+impl SafeArea {
+    /// Scale each edge, e.g. from emulated-device pixels to a window that
+    /// came out a different size.
+    #[must_use]
+    pub fn scaled(self, x: f32, y: f32) -> Self {
+        Self {
+            top: self.top * y,
+            right: self.right * x,
+            bottom: self.bottom * y,
+            left: self.left * x,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::SafeArea;
@@ -65,5 +93,39 @@ mod tests {
     fn s24_safe_drawing_converts() {
         let safe = SafeArea::from(GALAXY_S24.insets(InsetType::SafeDrawing));
         assert_eq!((safe.top, safe.bottom), (110.0, 135.0));
+    }
+
+    #[test]
+    fn scaled_uses_each_axis() {
+        let safe = SafeArea {
+            top: 10.0,
+            right: 20.0,
+            bottom: 30.0,
+            left: 40.0,
+        };
+        assert_eq!(
+            safe.scaled(0.5, 2.0),
+            SafeArea {
+                top: 20.0,
+                right: 10.0,
+                bottom: 60.0,
+                left: 20.0,
+            }
+        );
+    }
+
+    #[cfg(feature = "mobile")]
+    #[test]
+    fn libmobile_converts_by_name() {
+        let mobile = libmobile::SafeArea::new(4.0, 1.0, 2.0, 3.0);
+        assert_eq!(
+            SafeArea::from(mobile),
+            SafeArea {
+                top: 1.0,
+                right: 2.0,
+                bottom: 3.0,
+                left: 4.0,
+            }
+        );
     }
 }

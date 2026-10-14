@@ -98,11 +98,13 @@ compile_error!("The 'mobile' feature must be enabled when compiling for Android.
 
 | Host | Backends | Limits | Await strategy |
 |---|---|---|---|
-| Desktop | `PRIMARY` | adapter-permitting, `downlevel_defaults` base | blocking (`pollster`) is fine |
+| Desktop | `PRIMARY` | `downlevel_defaults` | blocking (`pollster`) is fine |
 | Android | `VULKAN \| GL` | `downlevel_defaults` | blocking on the `android_main` thread is fine |
-| Web | `BROWSER_WEBGPU \| GL` | `downlevel_webgl2_defaults` when the adapter is GL, else `downlevel_defaults` | `wasm_bindgen_futures::spawn_local`; **never block** |
+| Web | `BROWSER_WEBGPU \| GL` | `downlevel_defaults` | `wasm_bindgen_futures::spawn_local`; **never block** |
 
-Always clamp requested limits to `adapter.limits()`. Expose whatever was granted on `MorphContext` so apps can feature-detect.
+On any GL adapter (WebGL2, older Android), use `downlevel_webgl2_defaults` instead. Then raise texture sizes with `.using_resolution(adapter.limits())`. This is implemented in `src/gpu.rs`.
+
+Expose whatever was granted on `MorphContext` so apps can feature-detect.
 
 ### Core API
 

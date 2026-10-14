@@ -6,5 +6,55 @@ license = "MIT OR Apache-2.0"
 description = "Unified windowing, graphics and device-emulation shell for wgpu applications"
 repository = "https://github.com/tmzt/libmorph"
 
+[features]
+default = ["audio"]
+audio = ["dep:cpal"]
+mobile = ["dep:libmobile"]
+# Passthrough: each one also enables `mobile`, so `libmobile/<x>` is never
+# requested without the dependency itself.
+mobile-google-auth = ["mobile", "libmobile/google-auth"]
+mobile-camera = ["mobile", "libmobile/camera"]
+web = [
+    "dep:wasm-bindgen",
+    "dep:wasm-bindgen-futures",
+    "dep:web-sys",
+    "wgpu/webgl",
+    "cpal?/wasm-bindgen",
+]
+
 [dependencies]
 libdevice = { git = "https://github.com/tmzt/libdevice" }
+log = "0.4"
+web-time = "1"
+wgpu = "30.0.1"
+cpal = { version = "0.18.2", optional = true }
+# Its platform-free types (`SafeArea`, `Insets`) build on any host; the
+# runtime is Android-only.
+libmobile = { git = "https://github.com/tmzt/libmobile", optional = true }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+winit = "0.30.13"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+pollster = "0.4"
+
+[target.'cfg(target_os = "android")'.dependencies]
+raw-window-handle = "0.6"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+web-sys = { version = "0.3", optional = true, features = [
+    "CssStyleDeclaration",
+    "Document",
+    "Element",
+    "HtmlCanvasElement",
+    "HtmlElement",
+    "Window",
+] }
+
+[target.'cfg(not(any(target_os = "android", target_arch = "wasm32")))'.dev-dependencies]
+env_logger = "0.11"
+
+[[example]]
+name = "touch"
