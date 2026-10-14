@@ -23,6 +23,8 @@ use std::path::Path;
 
 use crate::{Key, Touch, TouchPhase};
 
+pub use crate::out_dir::{DEFAULT_OUT_ROOT, OutDir};
+
 /// The default frame rate.
 pub const DEFAULT_FPS: u32 = 60;
 const MAX_FPS: u32 = 1000;

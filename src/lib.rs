@@ -18,6 +18,7 @@ mod config;
 mod context;
 mod gpu;
 mod input;
+mod out_dir;
 mod runner;
 pub mod safe_area;
 pub mod script;
