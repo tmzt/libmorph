@@ -1,5 +1,7 @@
 //! What every [`MorphApp`](crate::MorphApp) hook receives.
 
+use std::path::{Path, PathBuf};
+
 use libdevice::DeviceSpec;
 
 use crate::gpu::Gpu;
@@ -17,6 +19,8 @@ pub struct MorphContext {
     pub(crate) surface_format: wgpu::TextureFormat,
     pub(crate) audio: Audio,
     pub(crate) args: Vec<String>,
+    pub(crate) data_dir: Option<PathBuf>,
+    pub(crate) exit_requested: bool,
 }
 
 impl MorphContext {
@@ -31,6 +35,8 @@ impl MorphContext {
             surface_format: wgpu::TextureFormat::Rgba8UnormSrgb,
             audio: Audio::open(),
             args,
+            data_dir: None,
+            exit_requested: false,
         }
     }
 
@@ -97,5 +103,19 @@ impl MorphContext {
     #[must_use]
     pub fn args(&self) -> &[String] {
         &self.args
+    }
+
+    /// Ask the runner to stop. It finishes the current hook, calls
+    /// [`on_suspend`](crate::MorphApp::on_suspend) if the app is not already
+    /// suspended, then drops the surface and the app.
+    pub fn exit(&mut self) {
+        self.exit_requested = true;
+    }
+
+    /// A private, persistent directory for app data: Android's internal data
+    /// path. `None` on desktop and the web.
+    #[must_use]
+    pub fn data_dir(&self) -> Option<&Path> {
+        self.data_dir.as_deref()
     }
 }

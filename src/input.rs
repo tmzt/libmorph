@@ -1,10 +1,14 @@
-//! Uniform touch input. Positions are physical pixels of the surface.
+//! Uniform touch and key input. Positions are physical pixels of the surface.
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum TouchPhase {
     Started,
     Moved,
     Ended,
+    /// The contact ended without a normal release: the host took it away (a
+    /// system gesture, or on desktop the held mouse leaving the window).
+    /// libmorph attaches no further meaning; whether that aborts a drag or
+    /// anything else is the app's call.
     Cancelled,
 }
 
@@ -15,6 +19,28 @@ pub struct Touch {
     pub phase: TouchPhase,
     pub x: f32,
     pub y: f32,
+    /// 0.0..=1.0 where the host reports it: Android, and macOS Force Touch
+    /// while the left button is held. Otherwise `None`.
+    pub pressure: Option<f32>,
+}
+
+/// A key the app can act on, delivered on press by
+/// [`MorphApp::on_key`](crate::MorphApp::on_key).
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+pub enum Key {
+    Character(char),
+    Escape,
+    /// The system Back action (Android Back, a browser-back key on desktop).
+    Back,
+}
+
+/// Whether the app consumed a key. On Android, `Unhandled` lets the system
+/// act on it (Back closes or backgrounds the activity); desktop ignores it.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum KeyStatus {
+    Handled,
+    Unhandled,
 }
 
 /// Turns a mouse into a single finger: the left button is the contact.
@@ -37,6 +63,7 @@ impl MouseTouch {
             phase,
             x: self.x,
             y: self.y,
+            pressure: None,
         }
     }
 

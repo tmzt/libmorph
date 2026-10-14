@@ -1,7 +1,7 @@
 ---
 title: Shell input and lifecycle additions (pressure, hover, keys, second finger, exit, data dir, surface format)
 date: 2026-10-14
-status: Draft
+status: In implementation
 covers:
   - L1 `Touch::pressure`
   - L2 `MorphApp::on_hover`
@@ -331,3 +331,10 @@ The owner approved the plan as amended. Step 1 is in the libmobile
 repository, so the status change to `In implementation` goes in the libmorph
 commit for step 2, as Rule 1.5 says, and that commit's amendment names step
 1's libmobile commit.
+
+## Amendment — 2026-10-14 13:07 EDT: Implementation started
+
+Step 1 is libmobile `e09eba7`. It calls `Activity.finish()` through JNI
+instead of `ANativeActivity_finish`; the departure is recorded in CHANGES.md.
+Step 2 is committed with this amendment. The status is
+`In implementation`, and this document is now immutable (Rule 1.5).

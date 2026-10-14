@@ -301,6 +301,7 @@ impl<A: MorphApp> ApplicationHandler<Ready> for Handler<A> {
                 },
                 x: touch.location.x as f32,
                 y: touch.location.y as f32,
+                pressure: None,
             })),
             _ => {}
         }

@@ -145,6 +145,7 @@ impl<A: MorphApp> Adapter<A> {
                     phase,
                     x: pointer.x(),
                     y: pointer.y(),
+                    pressure: None,
                 });
             }
         }
