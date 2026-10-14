@@ -180,7 +180,12 @@ mobile = ["dep:libmobile"]
 mobile-google-auth = ["mobile", "libmobile/google-auth"]
 mobile-camera = ["mobile", "libmobile/camera"]
 web = ["dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:web-sys", "wgpu/webgl"]
+# Scripted headless runs with PNG screenshots; png and crc32fast are
+# desktop-only dependencies, so this enables nothing on Android and the web.
+script = ["dep:png", "dep:crc32fast"]
 ```
+
+`build.rs` sets `cfg(script_runner)` when `script` is on and the target is neither Android nor wasm32. Gate runner code on `#[cfg(script_runner)]` rather than repeating the feature-and-target condition.
 
 Don't invent passthroughs for features libmobile doesn't have (e.g. `sensors`). Add one only once the upstream feature exists.
 
@@ -252,6 +257,11 @@ Expose whatever was granted on `MorphContext` so apps can feature-detect.
   - `audio()`: a real handle under `audio`, a zero-sized no-op stub otherwise;
   - `exit()`: ask the runner to stop. On desktop and web the window closes; on Android libmorph calls `libmobile::android::finish` and the activity tears down normally;
   - `data_dir() -> Option<&Path>`: Android's internal data path; `None` on desktop and web.
+- **`libmorph::script`** (plan `20261014_04_SCRIPTED_RUNS_AND_PNG_CAPTURE_PLAN.md`): scripted, headless runs.
+  - `Script::parse` / `load` / `from_commands` build a checked script from plain text: one English command per line, space-separated operands, `#` comments. Commands: `fps`, `frames`, `touch <id> <start|move|end|cancel> <x> <y> [<pressure>]`, `tap`, `drag`, `hover`, `key <escape|back|space|char|U+XXXX>`, `screenshot [<name>]`, `suspend`, `resume`, `exit`. Ordering mistakes (touch not down, screenshot before a frame or while suspended, duplicate names) are rejected with the line number before any GPU work. The parser builds without the feature.
+  - `script::run::<A>(&script, ScriptRun)` (`script` feature, desktop): no window or event loop, so it runs from `cargo test` and agent sandboxes. It renders into an offscreen `Rgba8UnormSrgb`/`Rgba8Unorm` texture at `spec.geometry`, with a fixed `dt` of `1 s / fps`, silent audio, the emulated safe area and, unless disabled, the overlay. It returns a `Report`.
+  - Screenshots are RGB PNGs from the `png` crate with fixed settings (level 6, adaptive filter, `sRGB` chunk, no time or text chunks). `run.json` records the device, size, format, fps, adapter, how the run ended, and each screenshot's frame, line and pixel CRC-32. Nothing in the output depends on when the run happened. The same script, app, adapter and `Cargo.lock` give byte-identical files.
+  - `OutDir::Exact(dir)`, or `OutDir::Sequenced` (default `out/morph/YYYYMMDD_NN_<script stem>/`, dated in UTC, named like the plans).
 
 ### Lifecycle
 
@@ -287,6 +297,7 @@ Desktop only. Two separate namespaces, so they never clash:
 
   Append `libdevice::DEVICE_ARGS_HELP` to libmorph's help text.
 - **libmorph's own options:** `--morph-*` (e.g. `--morph-fallback-adapter`), stripped by libmorph.
+  - `--morph-script <path>` runs the script headless instead of opening a window (`MorphError::Script(ScriptError::Disabled)` without the `script` feature). `--morph-out <dir>` gives its exact output directory and is an error without `--morph-script`. Both also take `--opt=value`.
 
 The order of the two passes doesn't matter. Pass the remaining `args` to the app.
 
