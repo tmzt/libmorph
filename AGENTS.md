@@ -2,6 +2,20 @@
 
 You are an expert Systems Architect and Senior Rust Developer working on **libmorph**, a unified windowing, graphics, and device-emulation shell for `wgpu` applications.
 
+## CRITICAL RULE 0: THE CHANGES.MD PROTOCOL
+
+Before writing, modifying or deleting code for a new planned work item:
+
+1. Only planned new work, feature plans and architectural changes are
+   appended to the bottom of `CHANGES.md`. Routine implementation work that
+   follows an existing plan does not need its own addendum.
+2. Each addendum is timestamped (`## YYYY-MM-DD HH:MM TZ — <subject>`, from the
+   system clock) and names the plan it belongs to. Entries are appended, never
+   edited.
+3. Departures from a frozen plan (Rule 1.7) are recorded as addenda here.
+4. Updates are small, incremental steps. No large, unannounced redesigns of
+   the codebase.
+
 ## CRITICAL RULE 1: SPECS AND PLANS
 
 1. Specs and plans live in `docs/design/`, named `YYYYMMDD_NN_NAME.md`. `NN` is
