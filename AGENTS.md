@@ -188,24 +188,23 @@ Make `winit` a target-specific dependency for `cfg(not(target_os = "android"))`.
 
 libmobile publishes its generated Gradle script through `links` metadata, and Cargo passes that only to *direct* dependents. libmorph declares `links = "libmorph"`, and its `build.rs` calls `libmobile::gradle::forward_metadata()` (only under `mobile`) to republish the metadata as `DEP_LIBMORPH_GRADLE_SCRIPT` / `DEP_LIBMORPH_FEATURES`. That is why libmobile is also an optional build-dependency of libmorph, enabled by the same `dep:libmobile`.
 
-Android apps depend on libmorph alone, plus libmobile as a **build-dependency only** (lightweight on the host; the generator lives there), and read libmorph's key:
+Android apps name libmorph crates only: libmorph as a dependency, and `crates/libmorph-build` as the build-dependency. libmorph-build depends only on libmobile, so it is light on the host. It re-exports `libmobile::gradle`, and `gradle_project()` presets libmorph's `links` key (`LINKS`, checked against the root manifest by a test):
 
 ```toml
 [dependencies]
-libmorph = { git = "https://github.com/tmzt/libmorph", features = ["mobile-camera"] }
+libmorph = { git = "https://github.com/tmzt/libmorph", features = ["mobile"] }
 [build-dependencies]
-libmobile = { git = "https://github.com/tmzt/libmobile" }
+libmorph-build = { git = "https://github.com/tmzt/libmorph" }
 ```
 
 ```rust
 // build.rs
-libmobile::gradle::Project::new("com.example.app")
-    .env_prefix("libmorph")
+libmorph_build::gradle_project("com.example.app")
     .generate()
     .expect("gradle project");
 ```
 
-Don't make libmorph itself the build-dependency for this: that would build wgpu and winit for the host.
+Both come from the same git URL, so one commit pins them together. Don't make libmorph itself the build-dependency: that would build wgpu and winit for the host. Examples inside this repository use `libmorph-build` by path.
 
 ### Target Guards
 
