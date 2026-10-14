@@ -20,7 +20,7 @@ pub(crate) fn run<A: MorphApp>(script: &Script, run: ScriptRun) -> Result<Report
 
     let gpu = pollster::block_on(async {
         let instance = gpu::instance(None).await;
-        Gpu::new(instance, None, run.fallback_adapter).await
+        Gpu::new(instance, None, run.fallback_adapter, A::limits).await
     })?;
     let adapter = gpu.adapter.get_info();
     let spec = run.spec;

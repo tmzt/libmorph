@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::{Key, KeyStatus, MorphContext, Touch};
+use crate::{Key, KeyStatus, LimitsRequest, MorphContext, Touch};
 
 /// The surface texture for one frame. libmorph presents it after
 /// [`MorphApp::render`] returns.
@@ -21,6 +21,25 @@ pub trait MorphApp: Sized + 'static {
     /// format already in use is kept across resume when the new surface
     /// offers it.
     const SRGB_SURFACE: bool = true;
+
+    /// The device limits to ask for, before [`init`](Self::init). `base` is
+    /// what libmorph asks for by default: the downlevel defaults (WebGL2
+    /// defaults on a GL adapter) with texture sizes raised to the adapter's.
+    /// Limits in `required` that the adapter lacks fail bring-up with
+    /// [`GpuError::Limits`](crate::GpuError::Limits); `preferred` is granted
+    /// as far as the adapter allows. Read what was granted from
+    /// `ctx.limits()`.
+    ///
+    /// ```
+    /// # use libmorph::{wgpu, LimitsRequest};
+    /// fn limits(base: &wgpu::Limits) -> LimitsRequest {
+    ///     let required = wgpu::Limits { max_storage_buffers_per_shader_stage: 8, ..base.clone() };
+    ///     LimitsRequest { preferred: required.clone(), required }
+    /// }
+    /// ```
+    fn limits(base: &wgpu::Limits) -> LimitsRequest {
+        LimitsRequest::base(base)
+    }
 
     /// Build the app once the GPU is up and the first surface is configured,
     /// so `ctx.surface_format()` is already known.

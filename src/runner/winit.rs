@@ -184,7 +184,7 @@ impl<A: MorphApp> Handler<A> {
             let surface = instance
                 .create_surface(window)
                 .map_err(GpuError::CreateSurface)?;
-            let gpu = Gpu::new(instance, Some(&surface), fallback).await?;
+            let gpu = Gpu::new(instance, Some(&surface), fallback, A::limits).await?;
             Ok((gpu, surface))
         };
 

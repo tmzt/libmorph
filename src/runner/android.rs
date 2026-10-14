@@ -96,7 +96,7 @@ impl<A: MorphApp> Adapter<A> {
             let surface = instance
                 .create_surface(target)
                 .map_err(GpuError::CreateSurface)?;
-            let gpu = Gpu::new(instance, Some(&surface), false).await?;
+            let gpu = Gpu::new(instance, Some(&surface), false, A::limits).await?;
             Ok::<_, GpuError>((gpu, surface))
         };
         let (gpu, surface) = match pollster::block_on(boot) {

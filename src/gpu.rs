@@ -137,11 +137,14 @@ pub(crate) async fn instance(
 
 impl Gpu {
     /// Pick an adapter that can present to `surface` (any adapter for
-    /// scripted runs, which have none) and open a device on it.
+    /// scripted runs, which have none) and open a device on it with the
+    /// limits `limits` asks for (the app's `MorphApp::limits`). A plain `fn`
+    /// pointer, so it moves into the web's `spawn_local` future.
     pub async fn new(
         instance: wgpu::Instance,
         surface: Option<&wgpu::Surface<'_>>,
         force_fallback_adapter: bool,
+        limits: fn(&wgpu::Limits) -> LimitsRequest,
     ) -> Result<Self, GpuError> {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -164,7 +167,7 @@ impl Gpu {
             wgpu::Limits::downlevel_defaults()
         };
         let base = base.using_resolution(adapter.limits());
-        let limits = resolve_limits(&LimitsRequest::base(&base), &adapter.limits())?;
+        let limits = resolve_limits(&limits(&base), &adapter.limits())?;
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("libmorph"),
