@@ -1,9 +1,10 @@
-//! Clears to a colour that follows the last touch (or mouse drag), with the
-//! safe area outlined by a darker band. Try `--device iphone_15`.
+//! Clears to a colour that follows the last touch (or mouse drag). Logs every
+//! touch (with its pressure), every key, and hover at debug level
+//! (`RUST_LOG=debug`). Try `--device iphone_15`.
 
 use std::time::Duration;
 
-use libmorph::{Frame, MorphApp, MorphContext, Touch, TouchPhase, wgpu};
+use libmorph::{Frame, Key, KeyStatus, MorphApp, MorphContext, Touch, TouchPhase, wgpu};
 
 struct TouchDemo {
     touch: Option<(f32, f32)>,
@@ -62,6 +63,16 @@ impl MorphApp for TouchDemo {
             ..Default::default()
         });
         ctx.queue().submit([encoder.finish()]);
+    }
+
+    fn on_hover(&mut self, _ctx: &mut MorphContext, x: f32, y: f32) {
+        log::debug!("hover ({x}, {y})");
+    }
+
+    fn on_key(&mut self, _ctx: &mut MorphContext, key: Key) -> KeyStatus {
+        log::info!("{key:?}");
+        // Leave every key to the system: on Android, Back still closes.
+        KeyStatus::Unhandled
     }
 
     fn on_touch(&mut self, _ctx: &mut MorphContext, touch: Touch) {
