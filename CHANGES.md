@@ -62,3 +62,21 @@ Plan: `docs/design/20261014_03_SHELL_INPUT_AND_LIFECYCLE_PLAN.md`.
   cover running → suspend → resume, exit while running, exit after
   `WindowDestroyed`, and exit after a resume. A `Shell` needs a real surface,
   which macOS test threads cannot create (winit requires the main thread).
+
+## 2026-10-14 14:59 EDT — Scripted runs and PNG capture: new plan (Draft)
+
+Plan: `docs/design/20261014_04_SCRIPTED_RUNS_AND_PNG_CAPTURE_PLAN.md`.
+
+- Proposes a line-based `.morph` script format, a headless desktop runner
+  that renders offscreen with a fixed frame time, PNG captures through the
+  `png` 0.18.1 crate with fixed encoder settings, and a `run.json`
+  manifest.
+- Output goes to `--morph-out <dir>` exactly, or by default to
+  `out/morph/YYYYMMDD_NN_<stem>/`, following the plan naming convention.
+- Behind a new `script` feature, off by default. No existing signature
+  changes; `MorphError` gains a `Script` variant.
+- Section 10 lists five decisions for the owner. No implementation starts
+  until the plan is approved.
+
+Also: `.gitignore` now lists `/out`. AGENTS.md (Rule 3.5) already
+described `out/` as gitignored, but the file didn't list it.
