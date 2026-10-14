@@ -85,7 +85,24 @@ impl<A: MorphApp> Handler<A> {
     fn fail(&mut self, event_loop: &ActiveEventLoop, error: MorphError) {
         log::error!("libmorph: {error}");
         self.error = Some(error);
+        self.shutdown(event_loop);
+    }
+
+    /// Every way out ends here: one `on_suspend` (see `Shell::shutdown`),
+    /// then the surface, the app and the window are dropped.
+    fn shutdown(&mut self, event_loop: &ActiveEventLoop) {
+        if let Some(shell) = self.shell.take() {
+            shell.shutdown();
+        }
+        self.window = None;
         event_loop.exit();
+    }
+
+    /// Called after every event that reaches the app.
+    fn check_exit(&mut self, event_loop: &ActiveEventLoop) {
+        if self.shell.as_ref().is_some_and(Shell::exit_requested) {
+            self.shutdown(event_loop);
+        }
     }
 
     fn create_window(&self, event_loop: &ActiveEventLoop) -> Result<Arc<Window>, MorphError> {
@@ -227,6 +244,37 @@ fn emulated_safe_area(spec: &DeviceSpec, (width, height): (u32, u32)) -> SafeAre
 
 impl<A: MorphApp> ApplicationHandler<Ready> for Handler<A> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        self.resume(event_loop);
+        self.check_exit(event_loop);
+    }
+
+    fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+        if let Some(shell) = &mut self.shell {
+            shell.detach();
+        }
+        self.check_exit(event_loop);
+    }
+
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, Ready(boot): Ready) {
+        self.ready(event_loop, boot);
+        self.check_exit(event_loop);
+    }
+
+    /// The loop is ending for a reason of its own (e.g. Cmd-Q on macOS).
+    fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        if let Some(shell) = self.shell.take() {
+            shell.shutdown();
+        }
+    }
+
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        self.handle_window_event(event_loop, event);
+        self.check_exit(event_loop);
+    }
+}
+
+impl<A: MorphApp> Handler<A> {
+    fn resume(&mut self, event_loop: &ActiveEventLoop) {
         let window = match self.window.clone() {
             Some(window) => window,
             None => match self.create_window(event_loop) {
@@ -249,26 +297,16 @@ impl<A: MorphApp> ApplicationHandler<Ready> for Handler<A> {
         match shell.gpu().instance.create_surface(window.clone()) {
             Ok(surface) => {
                 let size = window.inner_size();
-                shell.attach(surface, (size.width, size.height), true);
+                shell.attach(surface, (size.width, size.height));
                 window.request_redraw();
             }
             Err(error) => self.fail(event_loop, GpuError::CreateSurface(error).into()),
         }
     }
 
-    fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
-        if let Some(shell) = &mut self.shell {
-            shell.detach();
-        }
-    }
-
-    fn user_event(&mut self, event_loop: &ActiveEventLoop, Ready(boot): Ready) {
-        self.ready(event_loop, boot);
-    }
-
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+    fn handle_window_event(&mut self, event_loop: &ActiveEventLoop, event: WindowEvent) {
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => self.shutdown(event_loop),
             WindowEvent::Resized(size) => {
                 let size = (size.width, size.height);
                 if let (Some(shell), Some(window)) = (&mut self.shell, &self.window) {
@@ -284,7 +322,7 @@ impl<A: MorphApp> ApplicationHandler<Ready> for Handler<A> {
                     match shell.gpu().instance.create_surface(window.clone()) {
                         Ok(surface) => {
                             let size = window.inner_size();
-                            shell.attach(surface, (size.width, size.height), false);
+                            shell.attach(surface, (size.width, size.height));
                         }
                         Err(error) => {
                             return self.fail(event_loop, GpuError::CreateSurface(error).into());

@@ -35,6 +35,7 @@ pub fn run_android<A: MorphApp>(app: AndroidApp) {
             resumed: false,
             safe_area: SafeArea::NONE,
             keys: KeyRouting::default(),
+            finishing: false,
         },
     );
 }
@@ -58,6 +59,8 @@ struct Adapter<A> {
     /// The latest inset report, kept for a shell that does not exist yet.
     safe_area: SafeArea,
     keys: KeyRouting,
+    /// `exit()` was answered with `finish`; the teardown is under way.
+    finishing: bool,
 }
 
 fn scale_factor(app: &AndroidApp) -> f32 {
@@ -76,7 +79,7 @@ impl<A: MorphApp> Adapter<A> {
                     return shell.resize(size);
                 }
                 match shell.gpu().instance.create_surface(target) {
-                    Ok(surface) => shell.attach(surface, size, true),
+                    Ok(surface) => shell.attach(surface, size),
                     Err(error) => log::error!("libmorph: {}", GpuError::CreateSurface(error)),
                 }
             }
@@ -109,6 +112,7 @@ impl<A: MorphApp> Adapter<A> {
         let mut ctx = MorphContext::new(gpu, spec, Vec::new());
         ctx.safe_area = self.safe_area;
         ctx.scale_factor = scale_factor(app);
+        ctx.data_dir = app.internal_data_path();
         match Shell::start(ctx, surface, size) {
             Ok(shell) => self.shell = Some(shell),
             Err(error) => {
@@ -180,6 +184,32 @@ impl<A: MorphApp> Adapter<A> {
             }
         }
     }
+
+    /// The app asked to exit: finish the activity, once. The normal teardown
+    /// follows (`WindowDestroyed` suspends the app, `Destroy` shuts down).
+    fn check_exit(&mut self, app: &AndroidApp) {
+        if !self.finishing && self.shell.as_ref().is_some_and(Shell::exit_requested) {
+            self.finishing = true;
+            libmobile::android::finish(app);
+        }
+    }
+
+    /// Render a frame while resumed, replacing a lost surface.
+    fn frame(&mut self, app: &AndroidApp) {
+        let Some(shell) = &mut self.shell else {
+            return;
+        };
+        if !self.resumed || shell.frame() != FrameStatus::Lost {
+            return;
+        }
+        if let Some(target) = SurfaceTarget::current(app) {
+            let size = target.size();
+            match shell.gpu().instance.create_surface(target) {
+                Ok(surface) => shell.attach(surface, size),
+                Err(error) => log::error!("libmorph: {}", GpuError::CreateSurface(error)),
+            }
+        }
+    }
 }
 
 impl<A: MorphApp> MobileApp for Adapter<A> {
@@ -217,35 +247,33 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
                     shell.ctx.scale_factor = scale_factor(app);
                 }
             }
+            // The loop returns after this event: the end of the run.
+            MobileEvent::Destroy => {
+                if let Some(shell) = self.shell.take() {
+                    shell.shutdown();
+                }
+            }
             _ => {}
         }
+        self.check_exit(app);
     }
 
-    fn input(&mut self, _app: &AndroidApp, event: &InputEvent<'_>) -> InputStatus {
-        match event {
+    fn input(&mut self, app: &AndroidApp, event: &InputEvent<'_>) -> InputStatus {
+        let status = match event {
             InputEvent::MotionEvent(motion) => {
                 self.touches(motion);
                 InputStatus::Handled
             }
             InputEvent::KeyEvent(key) => self.key(key),
             _ => InputStatus::Unhandled,
-        }
+        };
+        self.check_exit(app);
+        status
     }
 
     fn tick(&mut self, app: &AndroidApp) {
-        let Some(shell) = &mut self.shell else {
-            return;
-        };
-        if !self.resumed || shell.frame() != FrameStatus::Lost {
-            return;
-        }
-        if let Some(target) = SurfaceTarget::current(app) {
-            let size = target.size();
-            match shell.gpu().instance.create_surface(target) {
-                Ok(surface) => shell.attach(surface, size, false),
-                Err(error) => log::error!("libmorph: {}", GpuError::CreateSurface(error)),
-            }
-        }
+        self.frame(app);
+        self.check_exit(app);
     }
 
     fn poll_timeout(&self) -> Option<Duration> {

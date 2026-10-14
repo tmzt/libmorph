@@ -20,10 +20,31 @@ pub(crate) enum FrameStatus {
     Lost,
 }
 
+/// Whether the app has been told it is suspended. Keeps `on_suspend` and
+/// `on_resume` to one call per transition, and exit to a single `on_suspend`
+/// however many teardown paths fire.
+#[derive(Debug, Default)]
+struct Lifecycle {
+    suspended: bool,
+}
+
+impl Lifecycle {
+    /// Becoming suspended: whether the app must hear `on_suspend`.
+    fn suspend(&mut self) -> bool {
+        !std::mem::replace(&mut self.suspended, true)
+    }
+
+    /// Becoming resumed: whether the app must hear `on_resume`.
+    fn resume(&mut self) -> bool {
+        std::mem::replace(&mut self.suspended, false)
+    }
+}
+
 pub(crate) struct Shell<A> {
     pub ctx: MorphContext,
     pub app: A,
     surface: Option<(wgpu::Surface<'static>, wgpu::SurfaceConfiguration)>,
+    lifecycle: Lifecycle,
     last_frame: Instant,
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     pub overlay: Option<Overlay>,
@@ -47,6 +68,7 @@ impl<A: MorphApp> Shell<A> {
             ctx,
             app,
             surface: Some((surface, config)),
+            lifecycle: Lifecycle::default(),
             last_frame: Instant::now(),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             overlay: None,
@@ -61,9 +83,9 @@ impl<A: MorphApp> Shell<A> {
         self.surface.is_some()
     }
 
-    /// Install a new surface: after a resume, or to replace a lost one.
-    /// `resumed` decides whether the app hears [`MorphApp::on_resume`].
-    pub fn attach(&mut self, surface: wgpu::Surface<'static>, size: (u32, u32), resumed: bool) {
+    /// Install a new surface: after a resume, or to replace a lost one. The
+    /// app hears [`MorphApp::on_resume`] only if it was suspended.
+    pub fn attach(&mut self, surface: wgpu::Surface<'static>, size: (u32, u32)) {
         let previous = Some(self.ctx.surface_format);
         let Some(config) = self.ctx.gpu.configure(&surface, size, previous) else {
             log::error!("libmorph: the new surface has no presentable format");
@@ -74,17 +96,33 @@ impl<A: MorphApp> Shell<A> {
         self.surface = Some((surface, config));
         // Frame time does not accumulate across a suspension.
         self.last_frame = Instant::now();
-        if resumed {
+        if self.lifecycle.resume() {
             self.app.on_resume(&mut self.ctx);
         }
     }
 
     /// Drop the surface (it must not outlive the platform window) and tell
-    /// the app. Does nothing without a surface.
+    /// the app, unless it already knows it is suspended.
     pub fn detach(&mut self) {
-        if self.surface.take().is_some() {
+        self.surface = None;
+        if self.lifecycle.suspend() {
             self.app.on_suspend(&mut self.ctx);
         }
+    }
+
+    /// Whether the app called [`MorphContext::exit`].
+    pub fn exit_requested(&self) -> bool {
+        self.ctx.exit_requested
+    }
+
+    /// The end of the run, however it came: `on_suspend` exactly once (unless
+    /// the app is already suspended), then the surface, then the app.
+    pub fn shutdown(mut self) {
+        if self.lifecycle.suspend() {
+            self.app.on_suspend(&mut self.ctx);
+        }
+        self.surface = None;
+        drop(self.app);
     }
 
     pub fn resize(&mut self, (width, height): (u32, u32)) {
@@ -165,5 +203,37 @@ impl<A: MorphApp> Shell<A> {
             self.reconfigure();
         }
         FrameStatus::Presented
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Lifecycle;
+
+    #[test]
+    fn one_suspend_and_resume_per_transition() {
+        let mut life = Lifecycle::default();
+        assert!(!life.resume(), "running: nothing to resume");
+        assert!(life.suspend());
+        assert!(!life.suspend(), "already suspended");
+        assert!(life.resume());
+        assert!(!life.resume());
+    }
+
+    #[test]
+    fn exit_suspends_once() {
+        // Exit while running: the shutdown suspend is the one call.
+        let mut life = Lifecycle::default();
+        assert!(life.suspend());
+        // Exit after the window went away (Android `WindowDestroyed`, then
+        // `Destroy`): already told, so the shutdown is silent.
+        let mut life = Lifecycle::default();
+        assert!(life.suspend(), "WindowDestroyed");
+        assert!(!life.suspend(), "Destroy");
+        // Exit after a suspend and a resume suspends again, once.
+        let mut life = Lifecycle::default();
+        life.suspend();
+        life.resume();
+        assert!(life.suspend());
     }
 }
