@@ -107,6 +107,11 @@ impl<A: MorphApp> Shell<A> {
     }
 
     #[cfg(not(target_os = "android"))]
+    pub fn key(&mut self, key: crate::Key) -> crate::KeyStatus {
+        self.app.on_key(&mut self.ctx, key)
+    }
+
+    #[cfg(not(target_os = "android"))]
     pub fn hover(&mut self, x: f32, y: f32) {
         self.app.on_hover(&mut self.ctx, x, y);
     }

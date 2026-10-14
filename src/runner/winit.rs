@@ -15,7 +15,7 @@ use winit::window::{Window, WindowId};
 use super::shell::{FrameStatus, Shell};
 use crate::config::Launch;
 use crate::gpu::{self, Gpu};
-use crate::input::{MouseOutput, MouseTouch};
+use crate::input::{MouseOutput, MouseTouch, key_from_winit};
 use crate::{GpuError, MorphApp, MorphContext, MorphError, SafeArea, Touch, TouchPhase};
 
 /// The GPU, and the surface it was chosen for, once bring-up finishes.
@@ -309,6 +309,20 @@ impl<A: MorphApp> ApplicationHandler<Ready> for Handler<A> {
             WindowEvent::CursorLeft { .. } => {
                 let output = self.mouse.left();
                 self.mouse(output);
+            }
+            // Presses only: no releases, no auto-repeat, and no synthetic
+            // presses for keys already held when the window gains focus.
+            WindowEvent::KeyboardInput {
+                event,
+                is_synthetic: false,
+                ..
+            } if event.state == ElementState::Pressed && !event.repeat => {
+                if let (Some(shell), Some(key)) =
+                    (&mut self.shell, key_from_winit(&event.logical_key))
+                {
+                    // winit takes no default action on keys: the status is unused.
+                    let _ = shell.key(key);
+                }
             }
             WindowEvent::TouchpadPressure { pressure, .. } => {
                 let output = self.mouse.pressure(pressure);

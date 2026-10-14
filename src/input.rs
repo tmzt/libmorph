@@ -135,9 +135,28 @@ impl MouseTouch {
     }
 }
 
+/// The [`Key`] for a winit logical key, if the app gets one for it.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn key_from_winit(key: &winit::keyboard::Key) -> Option<Key> {
+    use winit::keyboard::{Key as WinitKey, NamedKey};
+    match key {
+        WinitKey::Character(text) => {
+            let mut chars = text.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) => Some(Key::Character(c)),
+                _ => None,
+            }
+        }
+        WinitKey::Named(NamedKey::Escape) => Some(Key::Escape),
+        WinitKey::Named(NamedKey::BrowserBack | NamedKey::GoBack) => Some(Key::Back),
+        _ => None,
+    }
+}
+
 #[cfg(all(test, not(target_os = "android")))]
 mod tests {
-    use super::{MouseOutput, MouseTouch, Touch, TouchPhase};
+    use super::{Key, MouseOutput, MouseTouch, Touch, TouchPhase, key_from_winit};
+    use winit::keyboard::{Key as WinitKey, NamedKey};
 
     const SIZE: (u32, u32) = (100, 200);
 
@@ -245,5 +264,30 @@ mod tests {
             TouchPhase::Started,
             "a new press starts again"
         );
+    }
+
+    #[test]
+    fn winit_keys_map() {
+        let named = |key| key_from_winit(&WinitKey::Named(key));
+        assert_eq!(
+            key_from_winit(&WinitKey::Character("a".into())),
+            Some(Key::Character('a'))
+        );
+        assert_eq!(
+            key_from_winit(&WinitKey::Character("é".into())),
+            Some(Key::Character('é'))
+        );
+        assert_eq!(named(NamedKey::Escape), Some(Key::Escape));
+        assert_eq!(named(NamedKey::BrowserBack), Some(Key::Back));
+        assert_eq!(named(NamedKey::GoBack), Some(Key::Back));
+    }
+
+    #[test]
+    fn other_winit_keys_are_not_delivered() {
+        assert_eq!(key_from_winit(&WinitKey::Character("ab".into())), None);
+        assert_eq!(key_from_winit(&WinitKey::Character("".into())), None);
+        assert_eq!(key_from_winit(&WinitKey::Named(NamedKey::Enter)), None);
+        assert_eq!(key_from_winit(&WinitKey::Named(NamedKey::Backspace)), None);
+        assert_eq!(key_from_winit(&WinitKey::Dead(None)), None);
     }
 }
