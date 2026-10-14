@@ -253,3 +253,22 @@ The first step sets `status: In implementation` (Rule 1.5).
    with the Android `--features mobile` check. The commits are pushed to
    github.com/tmzt/libmorph, and the pushed commit hash is reported to the
    owner.
+
+## Amendment — 2026-10-14 15:33 EDT: Approval, decisions, and the scripted runner
+
+The owner asked for the work to be finished (2026-10-14), which approves the
+plan. The owner did not choose otherwise on section 7, so its recommended
+choices stand:
+
+1. `GpuError` gains `Limits` and becomes `#[non_exhaustive]` in the same
+   commit (step 1).
+2. `base` stays as it is: the downlevel defaults, or the WebGL2 defaults on
+   a GL adapter, with texture sizes raised. Apps opt in through `limits`.
+
+Plan 04 is now implemented. `Gpu::new` already takes
+`Option<&wgpu::Surface>`, and the headless runner (`src/runner/script.rs`)
+calls it. This replaces section 6's "whichever plan is implemented second"
+note: step 2 also passes `A::limits` from the headless runner, and
+`ScriptRun` gains no limits field. Step 2's checks include
+`--features script`, and its Done when adds that the scripted run test
+passes.
