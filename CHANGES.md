@@ -43,3 +43,22 @@ Plan: `docs/design/20261014_03_SHELL_INPUT_AND_LIFECYCLE_PLAN.md`.
   and behaviour, but calls `Activity.finish()` through JNI. That goes
   through a new `jni_util::with_activity`, which `with_app_class` now builds
   on. libmobile `e09eba7`.
+
+## 2026-10-14 13:12 EDT — Shell input and lifecycle plan, steps 4–6: departures
+
+Plan: `docs/design/20261014_03_SHELL_INPUT_AND_LIFECYCLE_PLAN.md`.
+
+- Step 4, section 3 keys: winit's synthetic key presses (`is_synthetic`,
+  sent for keys already held when the window gains focus) are skipped as
+  well as repeats. Otherwise a key held while switching windows would reach
+  `on_key` as a new press.
+- Step 5, section 4: `KeyRouting::followup` takes `&mut self` (it shares the
+  slot lookup with `pressed`). It stores one status each for Back and
+  Escape, not `[(Key, KeyStatus); 2]`. The behaviour is as planned.
+- Step 6, Done when: the once-per-exit rule is tested on the host without a
+  GPU, in place of the planned `#[ignore]` GPU test of a whole `Shell`.
+  `Shell` keeps its suspended state in a `Lifecycle` with
+  `suspend()`/`resume()` returning whether the hook must run. Unit tests
+  cover running → suspend → resume, exit while running, exit after
+  `WindowDestroyed`, and exit after a resume. A `Shell` needs a real surface,
+  which macOS test threads cannot create (winit requires the main thread).
