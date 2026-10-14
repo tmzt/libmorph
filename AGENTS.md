@@ -40,7 +40,9 @@ To build against sibling checkouts, use a local, **uncommitted** `.cargo/config.
 libdevice = { path = "../libdevice" }
 ```
 
-Never commit a `path` dependency or a `Cargo.lock` that was resolved with the patch active. The patch strips `source = "git+…"` from the libdevice entry.
+Add the same kind of entry for `https://github.com/tmzt/libmobile` to work against a local libmobile.
+
+Never commit a `path` dependency or a `Cargo.lock` that was resolved with a patch active. A patch strips the `source = "git+…"` line from the patched entry.
 
 **`libdevice`**: simulated-device data, built into the binary as constants. No GPU code. libmorph re-exports it as `libmorph::libdevice`.
 - `DeviceSpec { id, name, platform, geometry: PortraitGeometry, pixel_ratio, insets: SystemInsets, cutouts, corners }`. All lengths are `u32` physical pixels of the portrait display.
@@ -56,11 +58,11 @@ Never commit a `path` dependency or a `Cargo.lock` that was resolved with the pa
 - `MobileEvent::Insets(Insets { safe_area: SafeArea, ime_bottom })` uses `f32` physical pixels, fields `left, top, right, bottom`. Only the newest report is delivered per tick. `safe_area` corresponds to libdevice's `InsetType::SafeDrawing`.
 - `SurfaceTarget::current(&app)` implements raw-window-handle 0.6, so pass it to wgpu's safe `create_surface`.
 - Cargo features: `google-auth`, `camera`. No others exist.
-- The app's activity must be `dev.highbay.libmobile.MobileNativeActivity` (Gradle wiring comes from `libmobile::gradle`; see Known Limitations).
+- The app's activity must be `dev.highbay.libmobile.MobileNativeActivity` (Gradle wiring comes from `libmobile::gradle`; see Gradle Handoff).
 
 Two crates use the name `Insets`: `libdevice::Insets` (`u32`, top/right/bottom/left) and `libmobile::Insets` (`f32` safe area plus `ime_bottom`). Both convert into libmorph's fractional `SafeArea` (`src/safe_area.rs`) through `From`, field by field, never by position:
 - `impl From<libdevice::Insets> for SafeArea` exists.
-- Add `impl From<libmobile::SafeArea> for SafeArea` under `#[cfg(feature = "mobile")]` when libmobile is wired in.
+- `impl From<libmobile::SafeArea> for SafeArea` exists under `#[cfg(feature = "mobile")]`.
 
 ### Cargo Features & Passthrough
 
@@ -81,6 +83,29 @@ Don't invent passthroughs for features libmobile doesn't have (e.g. `sensors`). 
 wgpu's default features already include `webgpu`. `web` adds `webgl` so WebGL2 works as a fallback.
 
 Make `winit` a target-specific dependency for `cfg(not(target_os = "android"))`. On Android, `android-activity`/`ndk` come in through libmobile's re-exports (`libmobile::android::{android_activity, ndk}`). Don't declare them separately, or the JavaVM singleton gets duplicated.
+
+### Gradle Handoff (Android)
+
+libmobile publishes its generated Gradle script through `links` metadata, and Cargo passes that only to *direct* dependents. libmorph declares `links = "libmorph"`, and its `build.rs` calls `libmobile::gradle::forward_metadata()` (only under `mobile`) to republish the metadata as `DEP_LIBMORPH_GRADLE_SCRIPT` / `DEP_LIBMORPH_FEATURES`. That is why libmobile is also an optional build-dependency of libmorph, enabled by the same `dep:libmobile`.
+
+Android apps depend on libmorph alone, plus libmobile as a **build-dependency only** (lightweight on the host; the generator lives there), and read libmorph's key:
+
+```toml
+[dependencies]
+libmorph = { git = "https://github.com/tmzt/libmorph", features = ["mobile-camera"] }
+[build-dependencies]
+libmobile = { git = "https://github.com/tmzt/libmobile" }
+```
+
+```rust
+// build.rs
+libmobile::gradle::Project::new("com.example.app")
+    .env_prefix("libmorph")
+    .generate()
+    .expect("gradle project");
+```
+
+Don't make libmorph itself the build-dependency for this: that would build wgpu and winit for the host.
 
 ### Target Guards
 
@@ -154,7 +179,6 @@ The order of the two passes doesn't matter. Pass the remaining `args` to the app
 
 ## Known Limitations
 
-- **Gradle handoff through a facade:** libmobile publishes its Gradle script through `links` metadata (`DEP_LIBMOBILE_GRADLE_SCRIPT`), and Cargo passes that only to *direct* dependents. Until libmorph re-exports it (its own `links = "libmorph"` plus libmobile's `gradle` learning to read `DEP_LIBMORPH_*`), Android apps must still list `libmobile` as a **build-dependency** to call `libmobile::gradle::Project`.
 - No native iOS.
 - Device presets are compile-time constants in libdevice's `devices.toml`, and the figures are marked ESTIMATED there. Treat emulated insets as approximate until they have been checked on hardware.
 

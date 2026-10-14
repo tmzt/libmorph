@@ -953,7 +953,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 [[package]]
 name = "libmobile"
 version = "0.1.0"
-source = "git+https://github.com/tmzt/libmobile#0ad59b543ff8138eb52e286fb749146b76edc0f4"
+source = "git+https://github.com/tmzt/libmobile#791b2aeb0ae12c70a1ab274043e337dbbef5f0d3"
 dependencies = [
  "android-activity",
  "jni",

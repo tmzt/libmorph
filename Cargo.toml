@@ -5,6 +5,11 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Unified windowing, graphics and device-emulation shell for wgpu applications"
 repository = "https://github.com/tmzt/libmorph"
+# Not a native library: `links` lets build.rs republish libmobile's Gradle
+# handoff to the app's build script as `DEP_LIBMORPH_*`, so the app reads it
+# with `libmobile::gradle::Project::env_prefix("libmorph")`.
+links = "libmorph"
+build = "build.rs"
 
 [features]
 default = ["audio"]
@@ -30,6 +35,11 @@ wgpu = "30.0.1"
 cpal = { version = "0.18.2", optional = true }
 # Its platform-free types (`SafeArea`, `Insets`) build on any host; the
 # runtime is Android-only.
+libmobile = { git = "https://github.com/tmzt/libmobile", optional = true }
+
+# The host copy, for `libmobile::gradle::forward_metadata` in build.rs.
+# `dep:libmobile` (the `mobile` feature) enables it with the normal one.
+[build-dependencies]
 libmobile = { git = "https://github.com/tmzt/libmobile", optional = true }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
