@@ -21,3 +21,12 @@ libmorph-build rather than libmobile as their build-dependency. The repository
 root becomes a Cargo workspace. Plan:
 `docs/design/20261014_02_LIBMORPH_BUILD_CRATE_PLAN.md` (Draft, approved),
 built in the three steps of section 5.
+
+## 2026-10-14 12:58 EDT — Shell input and lifecycle plan
+
+New planned work: touch pressure, hover, keys (`Key`, `KeyStatus`, Android
+Back routed by the app's status), a second mouse finger on desktop,
+`MorphContext::exit` with exactly one `on_suspend` per exit, `data_dir`, and
+`MorphApp::SRGB_SURFACE`. Needs `libmobile::android::finish`. Plan:
+`docs/design/20261014_03_SHELL_INPUT_AND_LIFECYCLE_PLAN.md` (Draft), built in
+the nine steps of section 9.
