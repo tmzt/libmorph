@@ -258,3 +258,38 @@ default features and with `--no-default-features`, plus
    data dir and `SRGB_SURFACE`.
 
 Then the commits are pushed to github.com/tmzt/libmorph.
+
+## Amendment — 2026-10-14 13:01 EDT: L4 removed; native trackpad touches get their own plan
+
+The owner decided (2026-10-14) that mouse buttons should not emulate a
+second finger. Desktop click-to-touch is a single-finger convenience.
+Multi-finger input on the Mac should come from the trackpad itself, and that
+will be planned on its own. `Touch`, with its ids and phases, already
+carries it. (winit 0.30 reports no per-finger trackpad touches on macOS, only
+pinch and rotation gestures, so it needs its own design and a trial.)
+
+This replaces:
+
+- **covers:** "L4 a second mouse finger on desktop" is removed.
+- **Section 3:** `MouseTouch` tracks only the left button, the cursor
+  position and the latest pressure. Every table row mentioning the right
+  button or a second touch is removed, along with the note on freezing the
+  primary and the id `MouseTouch::ID - 1`. What remains:
+
+  | Event | Left up | Left held |
+  |---|---|---|
+  | cursor moves | `Hover` | `Moved` |
+  | left press | `Started` | — |
+  | left release | — | `Ended` |
+  | `TouchpadPressure` | stored | stored; `Moved` with the new pressure |
+  | cursor leaves | — | `Cancelled` |
+
+  Hover fires whenever the left button is up; other buttons are ignored.
+- **Section 8:** the example does not log a second finger.
+- **Section 9, step 3:** "hover, second finger, pressure" becomes "hover,
+  pressure". Its unit tests cover the rows of the table above.
+- **Section 9, step 8:** the owner's Mac check covers pressure, hover and
+  keys.
+
+The owner's original Done when, "The touch example logs pressure, hover,
+keys and the second finger", no longer includes the second finger.
