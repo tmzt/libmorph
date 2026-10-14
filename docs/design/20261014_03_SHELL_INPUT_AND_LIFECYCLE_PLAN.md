@@ -293,3 +293,27 @@ This replaces:
 
 The owner's original Done when, "The touch example logs pressure, hover,
 keys and the second finger", no longer includes the second finger.
+
+## Amendment — 2026-10-14 13:03 EDT: Leaving the window, and what Cancelled means
+
+The owner decided (2026-10-14): by default, a held mouse touch is cancelled
+when it leaves the window. `Cancelled` carries no further meaning from
+libmorph. In the section 3 table, as last amended, this replaces the
+"cursor leaves" row and adds the following.
+
+- **Leaving:** while the left button is held, the touch leaves the window
+  when a `CursorMoved` position falls outside `0..width × 0..height` of the
+  surface, or when `CursorLeft` arrives, whichever comes first. The position
+  test works the same on every platform, whether or not the platform keeps
+  sending the mouse to the window during a drag.
+- That emits `Cancelled` once, at the last position inside the window.
+  Further moves emit nothing, and so does the release. Coming back into the
+  window doesn't resume the touch; a new left press starts a new one.
+- **Meaning:** `Cancelled` only says that this contact ended without a normal
+  release. libmorph doesn't abort, revert or otherwise interpret anything
+  (dragging, selection, gestures). Each app decides what a cancelled touch
+  means. The doc comment on `TouchPhase::Cancelled` says so (step 2).
+- This is the default. No option to turn it off is planned.
+- **Step 3:** the `MouseTouch` tests cover leaving by position, leaving by
+  `CursorLeft`, moves and release after a cancel, and a new press after
+  coming back.
