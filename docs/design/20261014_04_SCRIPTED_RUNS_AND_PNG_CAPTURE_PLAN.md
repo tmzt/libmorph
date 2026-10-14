@@ -455,3 +455,45 @@ must stay clean (Rule 3.4). The first step sets `status: In implementation`
    "CLI Overrides" sections, and the README's options table and features
    list, describe scripted runs, `--morph-out` and the `script` feature.
    **Done when:** both describe sections 3, 5 and 8 as built.
+
+## Amendment — 2026-10-14 15:07 EDT: Owner's decisions; screenshot, tap and key names
+
+The owner decided (2026-10-14) on section 10:
+
+1. **Script language:** plain text files, one English command per line,
+   with space-separated operands (section 3 as written). No embedded
+   language.
+2. **Default directory** and 3. **date:** not changed by the owner. Section 5
+   stands: `out/morph/YYYYMMDD_NN_<stem>/`, dated in UTC.
+4. **Feature:** `script` is optional and off by default (section 8).
+5. **PNG:** the `png` crate (section 6).
+
+The owner asked for touch commands, screenshot commands and special keys.
+This replaces the following parts of sections 3, 6, 7 and 11:
+
+- **`screenshot` replaces `capture`** everywhere, as
+  `screenshot [<name>]`, with the same naming rules and behaviour. Unnamed
+  files become `screenshot-NNNNNN.png`. In the API, `Command::Capture`
+  becomes `Command::Screenshot`, `Report::captures` becomes
+  `Report::screenshots`, and `struct Capture` becomes `struct Screenshot`.
+  The `run.json` key `captures` becomes `screenshots`. The parser
+  rejects `capture` as an unknown command.
+- **New touch command `tap <x> <y>`:** `start` at (x, y) with id 0, one
+  frame, then `end` at (x, y). Like `drag`, it is rejected while id 0 is
+  down. In the API it is `Command::Tap(f32, f32)`. `touch` and `drag`
+  are unchanged.
+- **Special keys:** `key <name>` takes the names `escape`, `back` and
+  `space` (`Key::Character(' ')`), case-insensitive, as well as a single
+  non-space character or `U+XXXX`. A single-letter operand is always a
+  character, so `key e` is `Character('e')`. Each `Key` variant has a
+  script name. When `Key` gains variants (enter, tab, arrows and so on, in a
+  later plan), each one gets a lower-case name here, and `key` accepts no
+  name that has no `Key` variant.
+- The example in section 3 and step 7 use `screenshot`. Step 7's files are
+  `idle.png`, `dragged.png` and `after.png`, as before.
+- Step 1's **Done when** also covers `tap`, every key name, and the
+  rejection of `capture`.
+
+The owner approved the plan as amended. Implementation is done in a separate
+git worktree and branch. The first implementing commit sets
+`status: In implementation` (Rule 1.5).
