@@ -58,14 +58,41 @@ cargo run --example touch -- --device iphone_15
 | `--morph-fallback-adapter` | Software GPU adapter |
 | `--morph-no-overlay` | Don't mask corners and cutouts |
 | `--morph-help` | List all options |
+| `--morph-script <path>` | Run a script headless and write screenshots (`script` feature) |
+| `--morph-out <dir>` | Output directory for `--morph-script` |
 
 Other arguments reach the app through `ctx.args()`.
+
+### Scripted runs
+
+A script is a text file with one command per line:
+
+```
+frames 30
+screenshot idle
+drag 1 100 400 900 1800 20
+screenshot dragged
+key escape
+```
+
+Commands: `fps`, `frames`, `touch`, `tap`, `drag`, `hover`, `key`,
+`screenshot`, `suspend`, `resume`, `exit`. The run has no window and a fixed
+frame time. Screenshots are PNG files, and `run.json` lists them. Output
+goes to `out/morph/YYYYMMDD_NN_<script name>/` unless `--morph-out` is
+given. The same script on the same machine writes the same bytes.
+
+```sh
+cargo run --example touch --features script -- --morph-script examples/scripts/touch.morph
+```
+
+From Rust, including tests: `libmorph::script::run::<App>(&script, run)`.
 
 ## Features
 
 | Feature | |
 |---|---|
 | `audio` (default) | In-memory sound playback through cpal |
+| `script` | Scripted headless runs with PNG screenshots (desktop) |
 | `web` | wasm32 support; required on that target |
 | `mobile` | Android support through libmobile; required on that target |
 | `mobile-google-auth` | libmobile's Sign in with Google |
