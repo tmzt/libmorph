@@ -236,7 +236,12 @@ Expose whatever was granted on `MorphContext` so apps can feature-detect.
 
 ### Core API
 
-- **`MorphApp`**: a state-driven trait with `init`, `update`, `render`, `on_touch`, `on_suspend`, `on_resume`.
+- **`MorphApp`**: a state-driven trait with `init`, `update` and `render`, plus hooks with default bodies:
+  - `on_touch(Touch)`. `Touch { id, phase, x, y, pressure: Option<f32> }`; pressure comes from Android, and from macOS Force Touch while the mouse is held. `TouchPhase::Cancelled` only means the contact ended without a release; libmorph gives it no further meaning.
+  - `on_hover(x, y)`: the cursor moved with no button held (desktop and web).
+  - `on_key(Key) -> KeyStatus`, on press only. `Key` is `#[non_exhaustive]`: `Character(char)`, `Escape`, `Back`. On Android, the status decides whether the system acts on Back; desktop ignores it.
+  - `on_suspend` and `on_resume`: exactly once per transition. Every exit calls `on_suspend` once, unless the app is already suspended, before the surface and the app are dropped.
+  - `const SRGB_SURFACE: bool = true`: `false` prefers a non-sRGB surface, for apps that gamma-encode in their own shaders.
 - **`MorphContext`**: passed to every hook. It provides:
   - `wgpu::Device` / `wgpu::Queue`, plus the granted `wgpu::Limits`;
   - `device() -> &libdevice::DeviceSpec`: the emulated spec on desktop. On Android and web, it is the closest data available: the CLI or default spec, with geometry updated from the real surface;
@@ -244,7 +249,9 @@ Expose whatever was granted on `MorphContext` so apps can feature-detect.
     - desktop: `SafeArea::from(spec.insets(InsetType::SafeDrawing))`;
     - Android: `libmobile::SafeArea`, converted;
     - web: zero for now (the browser's `env(safe-area-inset-*)` isn't reachable from wasm without CSS plumbing);
-  - `audio()`: a real handle under `audio`, a zero-sized no-op stub otherwise.
+  - `audio()`: a real handle under `audio`, a zero-sized no-op stub otherwise;
+  - `exit()`: ask the runner to stop. On desktop and web the window closes; on Android libmorph calls `libmobile::android::finish` and the activity tears down normally;
+  - `data_dir() -> Option<&Path>`: Android's internal data path; `None` on desktop and web.
 
 ### Lifecycle
 
@@ -255,14 +262,17 @@ Expose whatever was granted on `MorphContext` so apps can feature-detect.
   - `Insets` → update the safe area.
   - `tick` → `update` + `render`.
   - `poll_timeout` → `Some(Duration::ZERO)` while rendering continuously.
-- **Desktop:** winit `ApplicationHandler`. `resumed` creates the window and surface. `suspended` drops the surface. The device and queue persist across both.
+  - `Destroy` → shut down (no second `on_suspend` after `WindowDestroyed`).
+  - Back and Escape go to `on_key` on their first press. The status the app returns also answers that key's repeats and release (`KeyRouting`), because Android acts on Back when it comes up.
+- **Desktop:** winit `ApplicationHandler`. `resumed` creates the window and surface. `suspended` drops the surface. The device and queue persist across both. Close, `exit()`, a failure and winit's `exiting` all end in `Shell::shutdown`.
 - **Web:** `ApplicationHandler`. The async bring-up runs in `spawn_local` and its result comes back through an `EventLoopProxy` user event. Don't render until it arrives.
 
 ### Emulation & Input (desktop)
 
 - Size the window from `spec.geometry` (physical pixels). Use `spec.pixel_ratio` as the emulated scale factor, independent of the host monitor's DPI.
 - Draw an optional overlay from `spec.cutouts` and `spec.corners` (masked corners, cutout shapes) so layouts can be checked against the real obstructions.
-- Translate winit mouse events into the same touch events that Android `InputEvent::MotionEvent` produces, so `on_touch` behaves the same on both.
+- Translate winit mouse events into the same touch events that Android `InputEvent::MotionEvent` produces, so `on_touch` behaves the same on both. The left button is a single finger (id `u64::MAX`). Moving with no button held is a hover. A held touch is cancelled once when it leaves the window (by position or `CursorLeft`), and nothing more is reported until the next press.
+- Multi-finger input on desktop comes from real touch events (`WindowEvent::Touch`), never from mouse buttons. Native Mac trackpad touches need their own plan.
 
 ### CLI Overrides
 
