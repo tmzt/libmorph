@@ -135,6 +135,85 @@ impl MouseTouch {
     }
 }
 
+/// Android acts on a key such as Back when it comes *up*, so the status the
+/// app gave the press must also answer the repeats and the release.
+#[cfg(any(test, target_os = "android"))]
+#[derive(Debug)]
+pub(crate) struct KeyRouting {
+    back: KeyStatus,
+    escape: KeyStatus,
+}
+
+#[cfg(any(test, target_os = "android"))]
+impl Default for KeyRouting {
+    fn default() -> Self {
+        Self {
+            back: KeyStatus::Unhandled,
+            escape: KeyStatus::Unhandled,
+        }
+    }
+}
+
+#[cfg(any(test, target_os = "android"))]
+impl KeyRouting {
+    fn slot(&mut self, key: Key) -> Option<&mut KeyStatus> {
+        match key {
+            Key::Back => Some(&mut self.back),
+            Key::Escape => Some(&mut self.escape),
+            Key::Character(_) => None,
+        }
+    }
+
+    /// The app answered the first press of `key` with `status`.
+    pub fn pressed(&mut self, key: Key, status: KeyStatus) -> KeyStatus {
+        if let Some(slot) = self.slot(key) {
+            *slot = status;
+        }
+        status
+    }
+
+    /// A repeat or the release of `key`: the press's answer.
+    pub fn followup(&mut self, key: Key) -> KeyStatus {
+        self.slot(key).map_or(KeyStatus::Unhandled, |slot| *slot)
+    }
+}
+
+#[cfg(test)]
+mod routing_tests {
+    use super::{Key, KeyRouting, KeyStatus};
+
+    #[test]
+    fn release_follows_the_press() {
+        let mut routing = KeyRouting::default();
+        assert_eq!(
+            routing.followup(Key::Back),
+            KeyStatus::Unhandled,
+            "no press yet"
+        );
+        assert_eq!(
+            routing.pressed(Key::Back, KeyStatus::Handled),
+            KeyStatus::Handled
+        );
+        assert_eq!(routing.followup(Key::Back), KeyStatus::Handled, "repeat");
+        assert_eq!(routing.followup(Key::Back), KeyStatus::Handled, "release");
+        routing.pressed(Key::Back, KeyStatus::Unhandled);
+        assert_eq!(routing.followup(Key::Back), KeyStatus::Unhandled);
+    }
+
+    #[test]
+    fn keys_are_tracked_apart() {
+        let mut routing = KeyRouting::default();
+        routing.pressed(Key::Escape, KeyStatus::Handled);
+        assert_eq!(routing.followup(Key::Back), KeyStatus::Unhandled);
+        assert_eq!(routing.followup(Key::Escape), KeyStatus::Handled);
+        assert_eq!(
+            routing.pressed(Key::Character('a'), KeyStatus::Handled),
+            KeyStatus::Handled
+        );
+        assert_eq!(routing.followup(Key::Character('a')), KeyStatus::Unhandled);
+    }
+}
+
 /// The [`Key`] for a winit logical key, if the app gets one for it.
 #[cfg(not(target_os = "android"))]
 pub(crate) fn key_from_winit(key: &winit::keyboard::Key) -> Option<Key> {

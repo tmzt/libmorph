@@ -106,7 +106,6 @@ impl<A: MorphApp> Shell<A> {
         self.app.on_touch(&mut self.ctx, touch);
     }
 
-    #[cfg(not(target_os = "android"))]
     pub fn key(&mut self, key: crate::Key) -> crate::KeyStatus {
         self.app.on_key(&mut self.ctx, key)
     }

@@ -3,7 +3,9 @@
 //! (insets, intents, IME text).
 
 use libmobile::MobileEvent;
-use libmobile::android::android_activity::input::{MotionAction, MotionEvent};
+use libmobile::android::android_activity::input::{
+    KeyAction, KeyEvent, Keycode, MotionAction, MotionEvent,
+};
 use libmobile::android::{
     AndroidApp, DEFAULT_POLL_TIMEOUT, InputEvent, InputStatus, MobileApp, SurfaceTarget,
 };
@@ -12,7 +14,8 @@ use std::time::Duration;
 
 use super::shell::{FrameStatus, Shell};
 use crate::gpu::{self, Gpu};
-use crate::{GpuError, MorphApp, MorphContext, SafeArea, Touch, TouchPhase};
+use crate::input::KeyRouting;
+use crate::{GpuError, Key, KeyStatus, MorphApp, MorphContext, SafeArea, Touch, TouchPhase};
 
 /// Run `A` until the activity is destroyed. Call it from the app's
 /// `android_main`:
@@ -31,6 +34,7 @@ pub fn run_android<A: MorphApp>(app: AndroidApp) {
             failed: false,
             resumed: false,
             safe_area: SafeArea::NONE,
+            keys: KeyRouting::default(),
         },
     );
 }
@@ -53,6 +57,7 @@ struct Adapter<A> {
     resumed: bool,
     /// The latest inset report, kept for a shell that does not exist yet.
     safe_area: SafeArea,
+    keys: KeyRouting,
 }
 
 fn scale_factor(app: &AndroidApp) -> f32 {
@@ -124,6 +129,31 @@ impl<A: MorphApp> Adapter<A> {
         }
     }
 
+    /// Back and Escape reach the app on their first press; the app's answer
+    /// decides whether Android acts on the key (see [`KeyRouting`]). Other
+    /// keys produce no [`Key`] and stay unhandled.
+    fn key(&mut self, event: &KeyEvent<'_>) -> InputStatus {
+        let key = match event.key_code() {
+            Keycode::Back => Key::Back,
+            Keycode::Escape => Key::Escape,
+            _ => return InputStatus::Unhandled,
+        };
+        let status = match event.action() {
+            KeyAction::Down if event.repeat_count() == 0 => {
+                let status = self
+                    .shell
+                    .as_mut()
+                    .map_or(KeyStatus::Unhandled, |shell| shell.key(key));
+                self.keys.pressed(key, status)
+            }
+            _ => self.keys.followup(key),
+        };
+        match status {
+            KeyStatus::Handled => InputStatus::Handled,
+            KeyStatus::Unhandled => InputStatus::Unhandled,
+        }
+    }
+
     fn touches(&mut self, motion: &MotionEvent<'_>) {
         let Some(shell) = &mut self.shell else {
             return;
@@ -145,7 +175,7 @@ impl<A: MorphApp> Adapter<A> {
                     phase,
                     x: pointer.x(),
                     y: pointer.y(),
-                    pressure: None,
+                    pressure: Some(pointer.pressure()),
                 });
             }
         }
@@ -197,6 +227,7 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
                 self.touches(motion);
                 InputStatus::Handled
             }
+            InputEvent::KeyEvent(key) => self.key(key),
             _ => InputStatus::Unhandled,
         }
     }
