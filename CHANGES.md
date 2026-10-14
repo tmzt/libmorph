@@ -96,3 +96,32 @@ the downlevel limit of 4 storage buffers.
 - `GpuError` is not `#[non_exhaustive]`, so the new variant is a public
   enum change. Section 7 asks the owner how to handle it. No implementation
   starts until the plan is approved.
+
+## 2026-10-14 15:23 EDT — Scripted runs plan, steps 1–8: departures
+
+Plan: `docs/design/20261014_04_SCRIPTED_RUNS_AND_PNG_CAPTURE_PLAN.md`. All
+small, and none changes an existing signature.
+
+- Section 7, additions to the public API: `Script::path()` (the file a
+  script was loaded from, for `run.json`), `Script::fps()`, `DEFAULT_FPS`,
+  `DEFAULT_OUT_ROOT`, `OutDir::for_script(path)`, and `Clone` on
+  `ScriptRun`.
+- Step 6: a missing value (`--morph-script` with nothing after it, or
+  `--morph-script=`) and `--morph-out` without `--morph-script` are reported
+  as a new `MorphError::InvalidOption { option, reason }`. `MorphError` is
+  already `#[non_exhaustive]`. A value given to a `--morph-*` flag that takes
+  none (`--morph-help=yes`) is `UnknownOption`.
+- `build.rs` sets `cfg(script_runner)` for the `script` feature on native
+  desktop targets, in place of repeating that condition.
+- Section 3, `drag`: the intermediate points are computed in `f64`, and the
+  last move is exactly `<x1> <y1>`, so round operands give round points.
+- Section 3, `key`: `#` can't be written directly because it starts a
+  comment; `U+0023` gives it.
+- Step 4 carried `#[allow(dead_code)]` on the offscreen methods until step 5
+  used them.
+- Section 4.2: a failed readback (device poll, map or mapped range) is
+  `ScriptError::Io` rather than a panic.
+- `MorphContext::new` (crate-private) takes the `Audio` handle, so scripted
+  runs pass a silent one without opening the device.
+- Step 5's GPU test ran on this Mac (Apple M4, Metal), not skipped. Step 7's
+  evidence is in `out/scripted-runs.md` in the worktree.
