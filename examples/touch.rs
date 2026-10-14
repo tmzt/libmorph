@@ -1,6 +1,10 @@
 //! Clears to a colour that follows the last touch (or mouse drag). Logs every
 //! touch (with its pressure), every key, and hover at debug level
 //! (`RUST_LOG=debug`). Try `--device iphone_15`.
+//!
+//! Scripted, without a window: `cargo run --example touch --features script --
+//! --morph-script examples/scripts/touch.morph` writes screenshots to
+//! `out/morph/`.
 
 use std::time::Duration;
 

@@ -1,0 +1,10 @@
+# The touch example, scripted (galaxy_s24, 1080×2340):
+#   cargo run --example touch --features script -- --morph-script examples/scripts/touch.morph
+# Idle, drag across, release, back out.
+frames 30
+screenshot idle
+drag 1 100 400 900 1800 20
+screenshot dragged
+key escape
+frames 1
+screenshot after
