@@ -15,7 +15,7 @@ use winit::window::{Window, WindowId};
 use super::shell::{FrameStatus, Shell};
 use crate::config::Launch;
 use crate::gpu::{self, Gpu};
-use crate::input::MouseTouch;
+use crate::input::{MouseOutput, MouseTouch};
 use crate::{GpuError, MorphApp, MorphContext, MorphError, SafeArea, Touch, TouchPhase};
 
 /// The GPU, and the surface it was chosen for, once bring-up finishes.
@@ -178,10 +178,28 @@ impl<A: MorphApp> Handler<A> {
         }
     }
 
-    fn touch(&mut self, touch: Option<Touch>) {
-        if let (Some(shell), Some(touch)) = (&mut self.shell, touch) {
+    fn touch(&mut self, touch: Touch) {
+        if let Some(shell) = &mut self.shell {
             shell.touch(touch);
         }
+    }
+
+    fn mouse(&mut self, output: Option<MouseOutput>) {
+        let (Some(shell), Some(output)) = (&mut self.shell, output) else {
+            return;
+        };
+        match output {
+            MouseOutput::Touch(touch) => shell.touch(touch),
+            MouseOutput::Hover(x, y) => shell.hover(x, y),
+        }
+    }
+
+    /// The surface size the mouse is tested against.
+    fn surface_size(&self) -> (u32, u32) {
+        self.window.as_ref().map_or((0, 0), |window| {
+            let size = window.inner_size();
+            (size.width, size.height)
+        })
     }
 }
 
@@ -276,22 +294,27 @@ impl<A: MorphApp> ApplicationHandler<Ready> for Handler<A> {
                 window.request_redraw();
             }
             WindowEvent::CursorMoved { position, .. } => {
-                let touch = self.mouse.moved(position.x as f32, position.y as f32);
-                self.touch(touch);
+                let size = self.surface_size();
+                let output = self.mouse.moved(position.x as f32, position.y as f32, size);
+                self.mouse(output);
             }
             WindowEvent::MouseInput {
                 state,
                 button: MouseButton::Left,
                 ..
             } => {
-                let touch = self.mouse.button(state == ElementState::Pressed);
-                self.touch(touch);
+                let output = self.mouse.button(state == ElementState::Pressed);
+                self.mouse(output);
             }
             WindowEvent::CursorLeft { .. } => {
-                let touch = self.mouse.left();
-                self.touch(touch);
+                let output = self.mouse.left();
+                self.mouse(output);
             }
-            WindowEvent::Touch(touch) => self.touch(Some(Touch {
+            WindowEvent::TouchpadPressure { pressure, .. } => {
+                let output = self.mouse.pressure(pressure);
+                self.mouse(output);
+            }
+            WindowEvent::Touch(touch) => self.touch(Touch {
                 id: touch.id,
                 phase: match touch.phase {
                     winit::event::TouchPhase::Started => TouchPhase::Started,
@@ -301,8 +324,8 @@ impl<A: MorphApp> ApplicationHandler<Ready> for Handler<A> {
                 },
                 x: touch.location.x as f32,
                 y: touch.location.y as f32,
-                pressure: None,
-            })),
+                pressure: touch.force.map(|force| force.normalized() as f32),
+            }),
             _ => {}
         }
     }

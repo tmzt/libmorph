@@ -43,13 +43,28 @@ pub enum KeyStatus {
     Unhandled,
 }
 
-/// Turns a mouse into a single finger: the left button is the contact.
+/// What the mouse turned into.
+#[cfg(not(target_os = "android"))]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum MouseOutput {
+    Touch(Touch),
+    Hover(f32, f32),
+}
+
+/// Turns a mouse into a single finger: the left button is the contact, and
+/// the cursor with no button held is a hover. A held contact that leaves the
+/// window is cancelled once; nothing more is reported until the next press.
 #[cfg(not(target_os = "android"))]
 #[derive(Debug, Default)]
 pub(crate) struct MouseTouch {
-    pressed: bool,
+    /// The left button is down and its touch is live.
+    held: bool,
+    /// The left button is down but its touch was cancelled.
+    cancelled: bool,
     x: f32,
     y: f32,
+    /// The latest Force Touch reading since the left press.
+    pressure: Option<f32>,
 }
 
 #[cfg(not(target_os = "android"))]
@@ -57,72 +72,178 @@ impl MouseTouch {
     /// Kept apart from real touch ids, which count up from zero.
     pub const ID: u64 = u64::MAX;
 
-    fn touch(&self, phase: TouchPhase) -> Touch {
-        Touch {
+    fn touch(&self, phase: TouchPhase) -> MouseOutput {
+        MouseOutput::Touch(Touch {
             id: Self::ID,
             phase,
             x: self.x,
             y: self.y,
-            pressure: None,
-        }
+            pressure: self.pressure,
+        })
     }
 
-    pub fn moved(&mut self, x: f32, y: f32) -> Option<Touch> {
+    fn cancel(&mut self) -> MouseOutput {
+        self.held = false;
+        self.cancelled = true;
+        self.touch(TouchPhase::Cancelled)
+    }
+
+    /// The cursor moved to `(x, y)` on a surface of `(width, height)`.
+    pub fn moved(&mut self, x: f32, y: f32, (width, height): (u32, u32)) -> Option<MouseOutput> {
+        let inside = (0.0..width as f32).contains(&x) && (0.0..height as f32).contains(&y);
+        if self.held && !inside {
+            // Cancelled at the last position inside the window.
+            return Some(self.cancel());
+        }
         (self.x, self.y) = (x, y);
-        self.pressed.then(|| self.touch(TouchPhase::Moved))
-    }
-
-    pub fn button(&mut self, pressed: bool) -> Option<Touch> {
-        if pressed == self.pressed {
-            return None;
-        }
-        self.pressed = pressed;
-        Some(self.touch(if pressed {
-            TouchPhase::Started
+        if self.held {
+            Some(self.touch(TouchPhase::Moved))
+        } else if self.cancelled || !inside {
+            None
         } else {
-            TouchPhase::Ended
-        }))
+            Some(MouseOutput::Hover(x, y))
+        }
     }
 
-    /// The cursor left the window: a held contact is cancelled, not ended.
-    pub fn left(&mut self) -> Option<Touch> {
-        std::mem::take(&mut self.pressed).then(|| self.touch(TouchPhase::Cancelled))
+    /// The left button changed.
+    pub fn button(&mut self, pressed: bool) -> Option<MouseOutput> {
+        if pressed {
+            if self.held || self.cancelled {
+                return None;
+            }
+            self.held = true;
+            self.pressure = None;
+            Some(self.touch(TouchPhase::Started))
+        } else if self.held {
+            self.held = false;
+            Some(self.touch(TouchPhase::Ended))
+        } else {
+            self.cancelled = false;
+            None
+        }
+    }
+
+    /// A Force Touch reading (macOS `TouchpadPressure`).
+    pub fn pressure(&mut self, pressure: f32) -> Option<MouseOutput> {
+        self.pressure = Some(pressure);
+        self.held.then(|| self.touch(TouchPhase::Moved))
+    }
+
+    /// The platform reports the cursor left the window.
+    pub fn left(&mut self) -> Option<MouseOutput> {
+        self.held.then(|| self.cancel())
     }
 }
 
 #[cfg(all(test, not(target_os = "android")))]
 mod tests {
-    use super::{MouseTouch, TouchPhase};
+    use super::{MouseOutput, MouseTouch, Touch, TouchPhase};
+
+    const SIZE: (u32, u32) = (100, 200);
+
+    fn touch(output: Option<MouseOutput>) -> Touch {
+        match output {
+            Some(MouseOutput::Touch(touch)) => touch,
+            other => panic!("expected a touch, got {other:?}"),
+        }
+    }
+
+    fn phase(output: Option<MouseOutput>) -> TouchPhase {
+        touch(output).phase
+    }
 
     #[test]
-    fn hover_is_not_a_touch() {
+    fn moving_with_the_button_up_hovers() {
         let mut mouse = MouseTouch::default();
-        assert_eq!(mouse.moved(1.0, 2.0), None);
+        assert_eq!(
+            mouse.moved(1.0, 2.0, SIZE),
+            Some(MouseOutput::Hover(1.0, 2.0))
+        );
         assert_eq!(mouse.button(false), None);
+    }
+
+    #[test]
+    fn hover_outside_the_window_is_dropped() {
+        let mut mouse = MouseTouch::default();
+        assert_eq!(mouse.moved(-1.0, 2.0, SIZE), None);
+        assert_eq!(mouse.moved(100.0, 2.0, SIZE), None);
     }
 
     #[test]
     fn press_drag_release() {
         let mut mouse = MouseTouch::default();
-        mouse.moved(1.0, 2.0);
-        let start = mouse.button(true).unwrap();
+        mouse.moved(1.0, 2.0, SIZE);
+        let start = touch(mouse.button(true));
         assert_eq!(
             (start.phase, start.x, start.y),
             (TouchPhase::Started, 1.0, 2.0)
         );
+        assert_eq!((start.id, start.pressure), (MouseTouch::ID, None));
         assert_eq!(mouse.button(true), None);
-        assert_eq!(mouse.moved(3.0, 4.0).unwrap().phase, TouchPhase::Moved);
-        let end = mouse.button(false).unwrap();
+        assert_eq!(phase(mouse.moved(3.0, 4.0, SIZE)), TouchPhase::Moved);
+        let end = touch(mouse.button(false));
         assert_eq!((end.phase, end.x, end.y), (TouchPhase::Ended, 3.0, 4.0));
-        assert_eq!(end.id, MouseTouch::ID);
+        assert!(matches!(
+            mouse.moved(5.0, 5.0, SIZE),
+            Some(MouseOutput::Hover(..))
+        ));
     }
 
     #[test]
-    fn leaving_cancels_once() {
+    fn pressure_follows_readings_while_held() {
+        let mut mouse = MouseTouch::default();
+        assert_eq!(mouse.pressure(0.3), None, "stored, but nothing is held");
+        assert_eq!(touch(mouse.button(true)).pressure, None, "cleared on press");
+        let pressed = touch(mouse.pressure(0.7));
+        assert_eq!(
+            (pressed.phase, pressed.pressure),
+            (TouchPhase::Moved, Some(0.7))
+        );
+        assert_eq!(touch(mouse.moved(2.0, 2.0, SIZE)).pressure, Some(0.7));
+        assert_eq!(touch(mouse.button(false)).pressure, Some(0.7));
+    }
+
+    #[test]
+    fn leaving_by_position_cancels_at_the_last_inside_point() {
+        let mut mouse = MouseTouch::default();
+        mouse.moved(10.0, 10.0, SIZE);
+        mouse.button(true);
+        mouse.moved(99.0, 50.0, SIZE);
+        let cancel = touch(mouse.moved(120.0, 50.0, SIZE));
+        assert_eq!(
+            (cancel.phase, cancel.x, cancel.y),
+            (TouchPhase::Cancelled, 99.0, 50.0)
+        );
+    }
+
+    #[test]
+    fn leaving_by_event_cancels_once() {
         let mut mouse = MouseTouch::default();
         mouse.button(true);
-        assert_eq!(mouse.left().unwrap().phase, TouchPhase::Cancelled);
+        assert_eq!(phase(mouse.left()), TouchPhase::Cancelled);
         assert_eq!(mouse.left(), None);
-        assert_eq!(mouse.moved(1.0, 1.0), None);
+    }
+
+    #[test]
+    fn nothing_after_a_cancel_until_the_next_press() {
+        let mut mouse = MouseTouch::default();
+        mouse.button(true);
+        mouse.moved(150.0, 10.0, SIZE);
+        assert_eq!(
+            mouse.moved(50.0, 10.0, SIZE),
+            None,
+            "back inside: no resume"
+        );
+        assert_eq!(mouse.pressure(0.5), None);
+        assert_eq!(mouse.button(false), None, "release after a cancel");
+        assert!(matches!(
+            mouse.moved(50.0, 11.0, SIZE),
+            Some(MouseOutput::Hover(..))
+        ));
+        assert_eq!(
+            phase(mouse.button(true)),
+            TouchPhase::Started,
+            "a new press starts again"
+        );
     }
 }

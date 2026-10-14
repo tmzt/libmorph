@@ -106,6 +106,11 @@ impl<A: MorphApp> Shell<A> {
         self.app.on_touch(&mut self.ctx, touch);
     }
 
+    #[cfg(not(target_os = "android"))]
+    pub fn hover(&mut self, x: f32, y: f32) {
+        self.app.on_hover(&mut self.ctx, x, y);
+    }
+
     /// Update, then render and present if the surface hands out a texture.
     pub fn frame(&mut self) -> FrameStatus {
         let Some((surface, _)) = &self.surface else {
