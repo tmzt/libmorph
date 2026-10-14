@@ -73,8 +73,7 @@ Other arguments reach the app through `ctx.args()`.
 
 ## Android
 
-The app crate is a `cdylib`. libmobile generates the Gradle project from the
-app's `build.rs`, which is why libmobile is also a build-dependency:
+The app crate is a `cdylib`, and `build.rs` generates its Gradle project:
 
 ```toml
 [lib]
@@ -84,14 +83,13 @@ crate-type = ["cdylib"]
 libmorph = { git = "https://github.com/tmzt/libmorph", features = ["mobile"] }
 
 [build-dependencies]
-libmobile = { git = "https://github.com/tmzt/libmobile" }
+libmorph-build = { git = "https://github.com/tmzt/libmorph" }
 ```
 
 ```rust
 // build.rs
 fn main() {
-    libmobile::gradle::Project::new("com.example.app")
-        .env_prefix("libmorph")
+    libmorph_build::gradle_project("com.example.app")
         .generate()
         .expect("gradle project");
 }
