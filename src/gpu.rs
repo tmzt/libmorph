@@ -5,10 +5,14 @@ use std::fmt;
 
 /// Why the GPU could not be brought up.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum GpuError {
     CreateSurface(wgpu::CreateSurfaceError),
     Adapter(wgpu::RequestAdapterError),
     Device(wgpu::RequestDeviceError),
+    /// The adapter can't meet the app's required limits; one entry per
+    /// field.
+    Limits(Vec<LimitFailure>),
 }
 
 impl fmt::Display for GpuError {
@@ -17,11 +21,83 @@ impl fmt::Display for GpuError {
             Self::CreateSurface(error) => write!(f, "failed to create surface: {error}"),
             Self::Adapter(error) => write!(f, "no compatible GPU adapter: {error}"),
             Self::Device(error) => write!(f, "failed to request GPU device: {error}"),
+            Self::Limits(failures) => {
+                f.write_str("the adapter can't meet the app's required limits: ")?;
+                for (i, failure) in failures.iter().enumerate() {
+                    if i > 0 {
+                        f.write_str(", ")?;
+                    }
+                    write!(
+                        f,
+                        "{} {} (adapter {})",
+                        failure.name, failure.required, failure.available
+                    )?;
+                }
+                Ok(())
+            }
         }
     }
 }
 
 impl std::error::Error for GpuError {}
+
+/// One limit the adapter can't meet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LimitFailure {
+    /// The `wgpu::Limits` field name, e.g. `max_storage_buffers_per_shader_stage`.
+    pub name: &'static str,
+    pub required: u64,
+    pub available: u64,
+}
+
+/// What an app asks of the device, as whole `wgpu::Limits` values.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LimitsRequest {
+    /// Bring-up fails if the adapter can't meet these.
+    pub required: wgpu::Limits,
+    /// Asked for where the adapter allows; never below `required`.
+    pub preferred: wgpu::Limits,
+}
+
+impl LimitsRequest {
+    /// `required` and `preferred` both `base`: what libmorph asks for when
+    /// the app doesn't say.
+    #[must_use]
+    pub fn base(base: &wgpu::Limits) -> Self {
+        Self {
+            required: base.clone(),
+            preferred: base.clone(),
+        }
+    }
+}
+
+/// The limits to request: `required` must fit the adapter (every field that
+/// doesn't is reported), then `preferred` is clamped to the adapter and
+/// raised back to `required`. wgpu-types' own helpers know which fields are
+/// maxima and which (the alignments) are minima.
+pub(crate) fn resolve_limits(
+    request: &LimitsRequest,
+    adapter: &wgpu::Limits,
+) -> Result<wgpu::Limits, GpuError> {
+    let mut failures = Vec::new();
+    request
+        .required
+        .check_limits_with_fail_fn(adapter, false, |name, required, available| {
+            failures.push(LimitFailure {
+                name,
+                required,
+                available,
+            });
+        });
+    if !failures.is_empty() {
+        return Err(GpuError::Limits(failures));
+    }
+    Ok(request
+        .preferred
+        .clone()
+        .or_worse_values_from(adapter)
+        .or_better_values_from(&request.required))
+}
 
 /// The handles that outlive every surface.
 #[derive(Debug)]
@@ -87,7 +163,8 @@ impl Gpu {
         } else {
             wgpu::Limits::downlevel_defaults()
         };
-        let limits = base.using_resolution(adapter.limits());
+        let base = base.using_resolution(adapter.limits());
+        let limits = resolve_limits(&LimitsRequest::base(&base), &adapter.limits())?;
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("libmorph"),
@@ -194,5 +271,136 @@ mod tests {
             Bgra8UnormSrgb
         );
         assert_eq!(choose_format(&[], Bgra8Unorm, None, true), Bgra8Unorm);
+    }
+
+    mod limits {
+        use crate::gpu::{GpuError, LimitFailure, LimitsRequest, resolve_limits};
+
+        /// The baseline libmorph asks for, and an adapter with more.
+        fn base() -> wgpu::Limits {
+            wgpu::Limits::downlevel_defaults()
+        }
+
+        fn adapter() -> wgpu::Limits {
+            wgpu::Limits {
+                max_storage_buffers_per_shader_stage: 16,
+                max_texture_dimension_2d: 8192,
+                min_uniform_buffer_offset_alignment: 256,
+                ..wgpu::Limits::default()
+            }
+        }
+
+        fn with_storage(limits: &wgpu::Limits, n: u32) -> wgpu::Limits {
+            wgpu::Limits {
+                max_storage_buffers_per_shader_stage: n,
+                ..limits.clone()
+            }
+        }
+
+        fn failures(request: &LimitsRequest, adapter: &wgpu::Limits) -> Vec<LimitFailure> {
+            match resolve_limits(request, adapter) {
+                Err(GpuError::Limits(failures)) => failures,
+                other => panic!("expected a limits error, got {other:?}"),
+            }
+        }
+
+        #[test]
+        fn the_base_request_resolves_to_the_base() {
+            let base = base().using_resolution(adapter());
+            let granted = resolve_limits(&LimitsRequest::base(&base), &adapter()).unwrap();
+            assert_eq!(granted, base);
+        }
+
+        #[test]
+        fn required_within_the_adapter_is_granted() {
+            let required = with_storage(&base(), 8);
+            let request = LimitsRequest {
+                preferred: required.clone(),
+                required: required.clone(),
+            };
+            let granted = resolve_limits(&request, &adapter()).unwrap();
+            assert_eq!(granted.max_storage_buffers_per_shader_stage, 8);
+            assert_eq!(granted, required);
+        }
+
+        #[test]
+        fn required_beyond_the_adapter_fails_naming_every_field() {
+            let small = with_storage(&base(), 4);
+            let request = LimitsRequest::base(&with_storage(&base(), 8));
+            assert_eq!(
+                failures(&request, &small),
+                [LimitFailure {
+                    name: "max_storage_buffers_per_shader_stage",
+                    required: 8,
+                    available: 4,
+                }]
+            );
+            let error = resolve_limits(&request, &small).unwrap_err().to_string();
+            assert_eq!(
+                error,
+                "the adapter can't meet the app's required limits: \
+                 max_storage_buffers_per_shader_stage 8 (adapter 4)"
+            );
+
+            let greedy = wgpu::Limits {
+                max_texture_dimension_2d: 16_384,
+                ..with_storage(&base(), 32)
+            };
+            let names: Vec<&str> = failures(&LimitsRequest::base(&greedy), &adapter())
+                .iter()
+                .map(|failure| failure.name)
+                .collect();
+            assert_eq!(
+                names,
+                [
+                    "max_texture_dimension_2d",
+                    "max_storage_buffers_per_shader_stage"
+                ]
+            );
+        }
+
+        #[test]
+        fn preferred_is_clamped_to_the_adapter() {
+            let request = LimitsRequest {
+                required: base(),
+                preferred: with_storage(&base(), 64),
+            };
+            let granted = resolve_limits(&request, &adapter()).unwrap();
+            assert_eq!(granted.max_storage_buffers_per_shader_stage, 16);
+        }
+
+        #[test]
+        fn preferred_below_required_is_raised() {
+            let request = LimitsRequest {
+                required: with_storage(&base(), 8),
+                preferred: with_storage(&base(), 2),
+            };
+            let granted = resolve_limits(&request, &adapter()).unwrap();
+            assert_eq!(granted.max_storage_buffers_per_shader_stage, 8);
+        }
+
+        #[test]
+        fn alignments_resolve_the_smaller_is_better_way() {
+            let aligned = |n| wgpu::Limits {
+                min_uniform_buffer_offset_alignment: n,
+                ..base()
+            };
+            // Preferring 64 on an adapter that only offers 256 gets 256.
+            let request = LimitsRequest {
+                required: base(),
+                preferred: aligned(64),
+            };
+            let granted = resolve_limits(&request, &adapter()).unwrap();
+            assert_eq!(granted.min_uniform_buffer_offset_alignment, 256);
+            // Requiring 64 there fails.
+            assert_eq!(
+                failures(&LimitsRequest::base(&aligned(64)), &adapter()),
+                [LimitFailure {
+                    name: "min_uniform_buffer_offset_alignment",
+                    required: 64,
+                    available: 256,
+                }]
+            );
+        }
     }
 }

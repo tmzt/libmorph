@@ -1,7 +1,7 @@
 ---
 title: App-requested device limits (LimitsRequest)
 date: 2026-10-14
-status: Draft
+status: In implementation
 covers:
   - A public `LimitsRequest { required, preferred }` of whole `wgpu::Limits`
   - `MorphApp::limits(base)`, an associated function called before `init`
@@ -272,3 +272,8 @@ note: step 2 also passes `A::limits` from the headless runner, and
 `ScriptRun` gains no limits field. Step 2's checks include
 `--features script`, and its Done when adds that the scripted run test
 passes.
+
+## Amendment — 2026-10-14 15:34 EDT: Implementation started
+
+Step 1 is committed with this amendment. The status is
+`In implementation`, and this document is now immutable (Rule 1.5).

@@ -29,7 +29,7 @@ pub use app::{Frame, MorphApp};
 pub use audio::{Audio, Sound, Voice};
 pub use config::{MORPH_ARGS_HELP, MorphError};
 pub use context::MorphContext;
-pub use gpu::GpuError;
+pub use gpu::{GpuError, LimitFailure, LimitsRequest};
 pub use input::{Key, KeyStatus, Touch, TouchPhase};
 pub use safe_area::SafeArea;
 
