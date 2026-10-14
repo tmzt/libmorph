@@ -2,6 +2,8 @@
 //! libdevice's `--device*` options for the emulated device.
 
 use std::fmt;
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+use std::path::PathBuf;
 
 use libdevice::DeviceArgsError;
 #[cfg(not(target_os = "android"))]
@@ -17,6 +19,10 @@ libmorph options:
   --morph-help                     Print this help and the device options, then exit
   --morph-fallback-adapter         Request a software GPU adapter
   --morph-no-overlay               Don't mask the emulated cutouts and corners
+  --morph-script <path>            Run the script headless, without a window
+                                   (needs the `script` feature)
+  --morph-out <dir>                The script's output directory (default
+                                   out/morph/YYYYMMDD_NN_<script name>)
 ";
 
 /// libmorph's own options.
@@ -48,6 +54,12 @@ pub(crate) struct Launch {
     pub options: MorphOptions,
     /// The arguments left for the app, program name first.
     pub args: Vec<String>,
+    /// `--morph-script`: run this script headless.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub script: Option<PathBuf>,
+    /// `--morph-out`: the script's exact output directory.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub out: Option<PathBuf>,
 }
 
 #[cfg(not(target_os = "android"))]
@@ -61,6 +73,7 @@ impl Launch {
         I::Item: Into<String>,
     {
         let mut options = MorphOptions::default();
+        let (mut script, mut out) = (None, None);
         let mut rest = Vec::new();
         let mut args = args.into_iter().map(Into::into);
         while let Some(arg) = args.next() {
@@ -69,7 +82,27 @@ impl Launch {
                 rest.extend(args.by_ref());
                 break;
             }
-            match arg.as_str() {
+            let (name, inline) = match arg.split_once('=') {
+                Some((name, value)) if name.starts_with("--morph-") => {
+                    (name.to_owned(), Some(value.to_owned()))
+                }
+                _ => (arg.clone(), None),
+            };
+            let mut value = || {
+                inline
+                    .clone()
+                    .or_else(|| args.next())
+                    .filter(|value| !value.is_empty())
+                    .map(PathBuf::from)
+                    .ok_or_else(|| MorphError::InvalidOption {
+                        option: name.clone(),
+                        reason: "needs a value",
+                    })
+            };
+            match name.as_str() {
+                "--morph-script" => script = Some(value()?),
+                "--morph-out" => out = Some(value()?),
+                _ if inline.is_some() => return Err(MorphError::UnknownOption(arg)),
                 "--morph-help" => options.help = true,
                 "--morph-fallback-adapter" => options.fallback_adapter = true,
                 "--morph-no-overlay" => options.overlay = false,
@@ -79,11 +112,19 @@ impl Launch {
                 _ => rest.push(arg),
             }
         }
+        if out.is_some() && script.is_none() {
+            return Err(MorphError::InvalidOption {
+                option: "--morph-out".into(),
+                reason: "is only used with --morph-script",
+            });
+        }
         let (spec, args) = DeviceSpec::extract_args(rest)?;
         Ok(Self {
             spec,
             options,
             args,
+            script,
+            out,
         })
     }
 
@@ -111,6 +152,11 @@ pub enum MorphError {
     DeviceArgs(DeviceArgsError),
     /// A `--morph-*` option libmorph does not know.
     UnknownOption(String),
+    /// A known `--morph-*` option used wrongly.
+    InvalidOption {
+        option: String,
+        reason: &'static str,
+    },
     Gpu(GpuError),
     /// The surface reports no format the adapter can present.
     NoSurfaceFormat,
@@ -127,6 +173,7 @@ impl fmt::Display for MorphError {
         match self {
             Self::DeviceArgs(error) => error.fmt(f),
             Self::UnknownOption(option) => write!(f, "unknown libmorph option `{option}`"),
+            Self::InvalidOption { option, reason } => write!(f, "`{option}` {reason}"),
             Self::Gpu(error) => error.fmt(f),
             Self::NoSurfaceFormat => f.write_str("the surface has no presentable format"),
             Self::Script(error) => error.fmt(f),
@@ -169,6 +216,7 @@ impl From<winit::error::EventLoopError> for MorphError {
 mod tests {
     use super::{Launch, MorphError};
     use libdevice::{GALAXY_S24, IPHONE_15};
+    use std::path::Path;
 
     #[test]
     fn plain_args_pass_through() {
@@ -219,5 +267,53 @@ mod tests {
     fn help_lists_both_option_sets() {
         let help = Launch::help();
         assert!(help.contains("--morph-help") && help.contains("--device-width"));
+        assert!(help.contains("--morph-script") && help.contains("--morph-out"));
+    }
+
+    #[test]
+    fn script_and_out_take_values_in_both_forms() {
+        let launch = Launch::from_args([
+            "app",
+            "--morph-script",
+            "a.morph",
+            "--morph-out=out/x",
+            "--device-width=720",
+            "rest",
+        ])
+        .unwrap();
+        assert_eq!(launch.script.as_deref(), Some(Path::new("a.morph")));
+        assert_eq!(launch.out.as_deref(), Some(Path::new("out/x")));
+        assert_eq!(launch.spec.geometry.width, 720);
+        assert_eq!(launch.args, ["app", "rest"]);
+
+        let launch = Launch::from_args(["app", "--morph-script=b.morph"]).unwrap();
+        assert_eq!(launch.script.as_deref(), Some(Path::new("b.morph")));
+        assert_eq!(launch.out, None);
+        let launch = Launch::from_args(["app"]).unwrap();
+        assert_eq!((launch.script, launch.out), (None, None));
+    }
+
+    #[test]
+    fn script_option_errors() {
+        let invalid = |args: &[&str]| match Launch::from_args(args.iter().copied()) {
+            Err(MorphError::InvalidOption { option, reason }) => format!("{option} {reason}"),
+            other => panic!("{args:?}: {other:?}"),
+        };
+        assert_eq!(
+            invalid(&["app", "--morph-script"]),
+            "--morph-script needs a value"
+        );
+        assert_eq!(
+            invalid(&["app", "--morph-script="]),
+            "--morph-script needs a value"
+        );
+        assert_eq!(
+            invalid(&["app", "--morph-out", "x"]),
+            "--morph-out is only used with --morph-script"
+        );
+        assert!(matches!(
+            Launch::from_args(["app", "--morph-help=yes"]),
+            Err(MorphError::UnknownOption(option)) if option == "--morph-help=yes"
+        ));
     }
 }

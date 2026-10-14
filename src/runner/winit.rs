@@ -44,6 +44,11 @@ pub fn run<A: MorphApp>() -> Result<(), MorphError> {
         return Ok(());
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(path) = launch.script.clone() {
+        return run_script::<A>(launch, &path);
+    }
+
     let event_loop = EventLoop::<Ready>::with_user_event().build()?;
     #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
     let mut handler = Handler::<A> {
@@ -66,6 +71,37 @@ pub fn run<A: MorphApp>() -> Result<(), MorphError> {
         use winit::platform::web::EventLoopExtWebSys;
         event_loop.spawn_app(handler);
         Ok(())
+    }
+}
+
+/// `--morph-script`: run the script headless instead of opening a window.
+/// The script is loaded and checked before any GPU work.
+#[cfg(not(target_arch = "wasm32"))]
+#[cfg_attr(not(script_runner), allow(clippy::extra_unused_type_parameters))]
+fn run_script<A: MorphApp>(launch: Launch, path: &std::path::Path) -> Result<(), MorphError> {
+    #[cfg(script_runner)]
+    {
+        use crate::script::{OutDir, Script, ScriptRun};
+        let script = Script::load(path)?;
+        let out = launch
+            .out
+            .map_or_else(|| OutDir::for_script(path), OutDir::Exact);
+        crate::script::run::<A>(
+            &script,
+            ScriptRun {
+                spec: launch.spec,
+                out,
+                overlay: launch.options.overlay,
+                fallback_adapter: launch.options.fallback_adapter,
+                args: launch.args,
+            },
+        )?;
+        Ok(())
+    }
+    #[cfg(not(script_runner))]
+    {
+        let _ = (launch.out, path);
+        Err(crate::script::ScriptError::Disabled.into())
     }
 }
 
@@ -412,5 +448,49 @@ fn fill_page(window: &Window) {
                 ("touch-action", "none"),
             ],
         );
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::run_script;
+    use crate::config::Launch;
+    use crate::{Frame, MorphApp, MorphContext};
+
+    struct Never;
+
+    impl MorphApp for Never {
+        fn init(_ctx: &mut MorphContext) -> Self {
+            unreachable!("no GPU work before the script is loaded")
+        }
+
+        fn render(&mut self, _ctx: &mut MorphContext, _frame: &Frame<'_>) {}
+    }
+
+    #[cfg(not(script_runner))]
+    #[test]
+    fn script_without_the_feature_is_disabled() {
+        let launch = Launch::from_args(["app", "--morph-script", "x.morph"]).unwrap();
+        let error = run_script::<Never>(launch, std::path::Path::new("x.morph")).unwrap_err();
+        assert!(matches!(
+            error,
+            crate::MorphError::Script(crate::script::ScriptError::Disabled)
+        ));
+    }
+
+    #[cfg(script_runner)]
+    #[test]
+    fn a_bad_script_fails_before_any_gpu_work() {
+        let dir = std::env::temp_dir().join(format!("libmorph-cli-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bad.morph");
+        std::fs::write(&path, "frames 1\nscreenshot a\nscreenshot a\n").unwrap();
+        let launch = Launch::from_args(["app"]).unwrap();
+        let error = run_script::<Never>(launch, &path).unwrap_err();
+        assert!(matches!(
+            error,
+            crate::MorphError::Script(crate::script::ScriptError::Parse { line: 3, .. })
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
