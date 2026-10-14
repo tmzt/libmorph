@@ -31,6 +31,10 @@ Before writing, modifying or deleting code for a new planned work item:
    - `Hold`: no work may start or continue until an amendment returns it to
      `Draft`;
    - `In implementation`: frozen.
+   - `Implemented`: every step is done and its **Done when:** holds. It stays
+     frozen, and living sections stay open. It is set by an amendment that lists
+     the commits implementing each step, in the commit that completes the last
+     step or in a later one.
    - `Superseded (by <plan>)`: replaced before implementation by the named
      plan, which carries its content forward. Nothing in it is implemented.
      It is set with an amendment naming the replacement and what moved where.
