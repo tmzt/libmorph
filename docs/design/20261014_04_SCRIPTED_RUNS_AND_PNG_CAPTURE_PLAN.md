@@ -1,7 +1,7 @@
 ---
 title: Scripted runs and PNG capture
 date: 2026-10-14
-status: Draft
+status: In implementation
 covers:
   - A script format that drives a `MorphApp` through frames, touches, hover,
     keys, suspend and resume, with a fixed frame time
@@ -497,3 +497,9 @@ This replaces the following parts of sections 3, 6, 7 and 11:
 The owner approved the plan as amended. Implementation is done in a separate
 git worktree and branch. The first implementing commit sets
 `status: In implementation` (Rule 1.5).
+
+## Amendment — 2026-10-14 15:11 EDT: Implementation started
+
+Step 1 (the parser, `src/script.rs`) is committed with this amendment, on
+the `scripted-runs` branch. The status is `In implementation`, and this
+document is now immutable (Rule 1.5).

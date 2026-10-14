@@ -20,6 +20,7 @@ mod gpu;
 mod input;
 mod runner;
 pub mod safe_area;
+pub mod script;
 
 pub use app::{Frame, MorphApp};
 pub use audio::{Audio, Sound, Voice};
