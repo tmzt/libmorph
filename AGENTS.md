@@ -87,6 +87,21 @@ Before writing, modifying or deleting code for a new planned work item:
    `./`-relative links and descriptions that stand on their own without the
    images. Earlier entries are never edited.
 
+## CRITICAL RULE 4: DECISION STATUS IN THE README
+
+1. `README.md` ends with an `## Architectural decisions` section: one GitHub
+   Markdown table listing every spec and plan in `docs/design/`, oldest first.
+   Nothing follows the table.
+2. Columns: **Document** (the title, as a relative link such as
+   `[Camera view and capture](docs/design/20261014_01_CAMERA_VIEW_AND_CAPTURE_PLAN.md)`;
+   no absolute or GitHub URLs), **Date** (from its front matter), **Status**
+   (exactly its front-matter `status`, including `Superseded (by <link>)`),
+   and **Decision** (one line: what it decides, and why it is at that status).
+3. A row is added in the commit that adds the document, and updated in the
+   same commit as every status-change amendment. This is an exception to
+   Rule 3.1. The table is a summary: the documents and their amendments stay
+   the record.
+
 ## Architecture
 
 `libmorph` gives an app one API (`MorphApp`) across three hosts:
