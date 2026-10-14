@@ -30,3 +30,16 @@ Back routed by the app's status), a second mouse finger on desktop,
 `MorphApp::SRGB_SURFACE`. Needs `libmobile::android::finish`. Plan:
 `docs/design/20261014_03_SHELL_INPUT_AND_LIFECYCLE_PLAN.md` (Draft), built in
 the nine steps of section 9.
+
+## 2026-10-14 13:06 EDT — Shell input and lifecycle plan, step 1: departure
+
+Plan: `docs/design/20261014_03_SHELL_INPUT_AND_LIFECYCLE_PLAN.md`.
+
+- Section 7: `AndroidApp::activity_as_ptr()` returns a JNI global reference
+  to the Java `Activity`, not an `ANativeActivity*`. libmobile's
+  `jni_util` already relies on that. Passing it to
+  `ndk::native_activity::NativeActivity::from_ptr` would have been
+  unsound. `libmobile::android::finish(app)` keeps the planned signature
+  and behaviour, but calls `Activity.finish()` through JNI. That goes
+  through a new `jni_util::with_activity`, which `with_app_class` now builds
+  on. libmobile `e09eba7`.
