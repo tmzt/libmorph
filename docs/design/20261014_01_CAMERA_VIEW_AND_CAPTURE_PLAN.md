@@ -476,3 +476,17 @@ was written. The body stands as written on each point:
 The owner placed the plan on hold after confirming the decisions above; it is
 not approved for implementation. No step of section 9 may start until an
 amendment returns it to `Draft`.
+
+## Amendment — 2026-10-14 12:32 EDT: Example app builds through libmorph-build
+
+Follows docs/design/20261014_02_LIBMORPH_BUILD_CRATE_PLAN.md. This replaces
+two items in section 7 (`examples/camera-app/`):
+
+- `build.rs`: `libmorph_build::gradle_project("dev.highbay.libmorph.camera")
+  .generate()`, replacing
+  `libmobile::gradle::Project::new(…).env_prefix("libmorph").generate()`.
+- `Cargo.toml`: `libmorph-build` as the build-dependency, from the
+  same repository by path (`../../crates/libmorph-build`), in place of
+  libmobile.
+
+The example then names no libmobile dependency. The status stays `Hold`.
