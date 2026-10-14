@@ -231,13 +231,18 @@ compile_error!("The 'mobile' feature must be enabled when compiling for Android.
 
 | Host | Backends | Limits | Await strategy |
 |---|---|---|---|
-| Desktop | `PRIMARY` | `downlevel_defaults` | blocking (`pollster`) is fine |
-| Android | `VULKAN \| GL` | `downlevel_defaults` | blocking on the `android_main` thread is fine |
-| Web | `BROWSER_WEBGPU \| GL` | `downlevel_defaults` | `wasm_bindgen_futures::spawn_local`; **never block** |
+| Desktop | `PRIMARY` | `A::limits(base)`, resolved | blocking (`pollster`) is fine |
+| Android | `VULKAN \| GL` | `A::limits(base)`, resolved | blocking on the `android_main` thread is fine |
+| Web | `BROWSER_WEBGPU \| GL` | `A::limits(base)`, resolved | `wasm_bindgen_futures::spawn_local`; **never block** |
 
-On any GL adapter (WebGL2, older Android), use `downlevel_webgl2_defaults` instead. Then raise texture sizes with `.using_resolution(adapter.limits())`. This is implemented in `src/gpu.rs`.
+`base` is `downlevel_defaults`, or `downlevel_webgl2_defaults` on any GL adapter (WebGL2, older Android), with texture sizes raised by `.using_resolution(adapter.limits())`. The app's `MorphApp::limits(base) -> LimitsRequest { required, preferred }` (default: both `base`) is resolved against the adapter by `resolve_limits` in `src/gpu.rs`:
 
-Expose whatever was granted on `MorphContext` so apps can feature-detect.
+- every field of `required` the adapter can't meet is reported as `GpuError::Limits(Vec<LimitFailure { name, required, available }>)`, and bring-up fails. `required` is never clamped;
+- otherwise the device gets `preferred.or_worse_values_from(&adapter).or_better_values_from(&required)`.
+
+wgpu-types' helpers know which fields are minima (the alignments), so libmorph has no per-field code. `Gpu::new` takes `A::limits` as a `fn` pointer, so it moves into the web's `spawn_local` future. `GpuError` is `#[non_exhaustive]`.
+
+Expose whatever was granted on `MorphContext` (`ctx.limits()`) so apps can feature-detect.
 
 ### Core API
 
@@ -247,6 +252,7 @@ Expose whatever was granted on `MorphContext` so apps can feature-detect.
   - `on_key(Key) -> KeyStatus`, on press only. `Key` is `#[non_exhaustive]`: `Character(char)`, `Escape`, `Back`. On Android, the status decides whether the system acts on Back; desktop ignores it.
   - `on_suspend` and `on_resume`: exactly once per transition. Every exit calls `on_suspend` once, unless the app is already suspended, before the surface and the app are dropped.
   - `const SRGB_SURFACE: bool = true`: `false` prefers a non-sRGB surface, for apps that gamma-encode in their own shaders.
+  - `fn limits(base: &wgpu::Limits) -> LimitsRequest` (no `self`, called before `init`): the device limits to ask for; see GPU Bring-up.
 - **`MorphContext`**: passed to every hook. It provides:
   - `wgpu::Device` / `wgpu::Queue`, plus the granted `wgpu::Limits`;
   - `device() -> &libdevice::DeviceSpec`: the emulated spec on desktop. On Android and web, it is the closest data available: the CLI or default spec, with geometry updated from the real surface;
