@@ -2,6 +2,77 @@
 
 You are an expert Systems Architect and Senior Rust Developer working on **libmorph**, a unified windowing, graphics, and device-emulation shell for `wgpu` applications.
 
+## CRITICAL RULE 1: SPECS AND PLANS
+
+1. Specs and plans live in `docs/design/`, named `YYYYMMDD_NN_NAME.md`. `NN` is
+   the sequence within the day, and plans end in `_PLAN`. Each starts with YAML
+   front matter: `title`, `date`, `status`, what it covers, its sources, and
+   related or dependent documents.
+2. Plans are written in plain engineering language that a person could build
+   from alone: concrete interfaces, data layouts, numbers and paths, and
+   numbered steps, each ending with **Done when:** stating what works at that
+   point.
+3. `status` is one of:
+   - `Draft`: being worked out, changed only by amendments;
+   - `Hold`: no work may start or continue until an amendment returns it to
+     `Draft`;
+   - `In implementation`: frozen.
+   - `Superseded (by <plan>)`: replaced before implementation by the named
+     plan, which carries its content forward. Nothing in it is implemented.
+     It is set with an amendment naming the replacement and what moved where.
+
+   The front-matter `status` is the only part of a document edited in place,
+   and every status change gets its own amendment.
+4. An amendment is appended to the end of the document as
+   `## Amendment — YYYY-MM-DD HH:MM TZ: <subject>`. The body is never rewritten.
+   An amendment states which earlier text it replaces; where they disagree, the
+   later amendment wins. Timestamps come from the system clock, never typed by
+   hand, and a wrong one is corrected by a later note, not by editing.
+5. The first commit that implements a plan sets `status: In implementation`
+   and appends an amendment saying implementation has started and the document
+   is now immutable. After that it changes only on the owner's explicit
+   instruction.
+6. A plan may name **living sections** in its front matter. These stay open
+   after implementation starts: new entries are appended as amendments, and an
+   entry is fixed once its item is implemented. Implementation records, such as
+   which commits implemented an entry, are appended as amendments, not filled in
+   place.
+7. When implementation departs from a frozen plan:
+   - small departures needed to make the plan work are recorded in an addendum
+     to this file, naming the plan, the step and the reason;
+   - a departure that changes behaviour or an interface others depend on is
+     discussed with the owner first (Rule 2), then recorded;
+   - a frozen plan is never edited to match the code. A larger change of
+     direction becomes a new dated plan that names the one it replaces.
+
+## CRITICAL RULE 2: DISCUSS BEFORE CHANGING A PLAN
+
+1. A change to a spec or plan is proposed to the owner first: what changes,
+   where and why. Nothing is written to the document until the owner agrees.
+2. Refinements made during the discussion go into the proposal, not the file.
+   Once agreed, the whole change is written as **one** amendment, not a series
+   of amendments that replace one another.
+
+## CRITICAL RULE 3: COMMITS AND EVIDENCE
+
+1. At most one crate or subproject per commit. Repository-level files go in
+   their own commits: this file, the workspace manifest, evidence logs, tooling
+   config and scripts. The one exception is adding a crate to the workspace in
+   that crate's first commit.
+2. A plan's status change and its immutable marker go in the commit that starts
+   implementing it.
+3. Commits name their paths explicitly (`git add <paths>`,
+   `git commit -- <paths>`), so unrelated work in progress, including another
+   agent's, is never swept in. Commits already on the shared branch are never
+   amended or rewritten.
+4. Before each code commit, the crate passes `cargo fmt -p <crate> -- --check`,
+   `cargo clippy -p <crate> --all-targets` with no new warnings, and
+   `cargo test -p <crate>`.
+5. Renders and other generated evidence go under the gitignored `out/`. Each
+   area keeps its own log file. Entries are appended under dated headings, with
+   `./`-relative links and descriptions that stand on their own without the
+   images. Earlier entries are never edited.
+
 ## Architecture
 
 `libmorph` gives an app one API (`MorphApp`) across three hosts:
