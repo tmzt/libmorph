@@ -47,10 +47,7 @@ enum Target {
     /// A platform surface, presented after each frame.
     Surface(wgpu::Surface<'static>, wgpu::SurfaceConfiguration),
     /// A texture for scripted runs: rendered, never presented.
-    #[cfg(all(
-        feature = "script",
-        not(any(target_os = "android", target_arch = "wasm32"))
-    ))]
+    #[cfg(script_runner)]
     Offscreen(wgpu::Texture),
 }
 
@@ -187,10 +184,7 @@ impl<A: MorphApp> Shell<A> {
         let surface = match &self.target {
             None => return FrameStatus::Skipped,
             Some(Target::Surface(surface, _)) => surface,
-            #[cfg(all(
-                feature = "script",
-                not(any(target_os = "android", target_arch = "wasm32"))
-            ))]
+            #[cfg(script_runner)]
             Some(Target::Offscreen(texture)) => {
                 let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
                 self.draw(&view);
@@ -250,12 +244,7 @@ impl<A: MorphApp> Shell<A> {
 }
 
 /// Scripted runs: an offscreen texture in place of a surface.
-#[cfg(all(
-    feature = "script",
-    not(any(target_os = "android", target_arch = "wasm32"))
-))]
-// The scripted runner (plan 04, step 5) is the user.
-#[allow(dead_code)]
+#[cfg(script_runner)]
 impl<A: MorphApp> Shell<A> {
     /// The offscreen format: RGBA so readback needs no channel swap, sRGB
     /// or not as the app asks.
@@ -292,11 +281,7 @@ impl<A: MorphApp> Shell<A> {
     }
 }
 
-#[cfg(all(
-    feature = "script",
-    not(any(target_os = "android", target_arch = "wasm32"))
-))]
-#[allow(dead_code)]
+#[cfg(script_runner)]
 fn offscreen_texture(ctx: &MorphContext) -> wgpu::Texture {
     let (width, height) = ctx.surface_size;
     ctx.gpu.device.create_texture(&wgpu::TextureDescriptor {

@@ -21,10 +21,7 @@ mod input;
 mod out_dir;
 mod runner;
 pub mod safe_area;
-#[cfg(all(
-    feature = "script",
-    not(any(target_os = "android", target_arch = "wasm32"))
-))]
+#[cfg(script_runner)]
 mod screenshot;
 pub mod script;
 

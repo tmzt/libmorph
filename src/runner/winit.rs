@@ -175,7 +175,7 @@ impl<A: MorphApp> Handler<A> {
         };
         let size = window.inner_size();
         let size = (size.width, size.height);
-        let mut ctx = MorphContext::new(gpu, launch.spec, launch.args);
+        let mut ctx = MorphContext::new(gpu, launch.spec, launch.args, crate::Audio::open());
         place(&mut ctx, &window, size);
 
         match Shell::<A>::start(ctx, surface, size) {

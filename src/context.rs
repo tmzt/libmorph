@@ -24,7 +24,7 @@ pub struct MorphContext {
 }
 
 impl MorphContext {
-    pub(crate) fn new(gpu: Gpu, spec: DeviceSpec, args: Vec<String>) -> Self {
+    pub(crate) fn new(gpu: Gpu, spec: DeviceSpec, args: Vec<String>, audio: Audio) -> Self {
         Self {
             gpu,
             spec,
@@ -33,7 +33,7 @@ impl MorphContext {
             surface_size: (spec.geometry.width, spec.geometry.height),
             // Replaced when the first surface is configured, before `init`.
             surface_format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            audio: Audio::open(),
+            audio,
             args,
             data_dir: None,
             exit_requested: false,

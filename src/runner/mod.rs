@@ -10,11 +10,15 @@ compile_error!("The 'mobile' feature must be enabled when compiling for Android.
 mod android;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 mod overlay;
+#[cfg(script_runner)]
+mod script;
 mod shell;
 #[cfg(not(target_os = "android"))]
 mod winit;
 
 #[cfg(all(target_os = "android", feature = "mobile"))]
 pub use android::run_android;
+#[cfg(script_runner)]
+pub(crate) use script::run as run_script;
 #[cfg(not(target_os = "android"))]
 pub use winit::run;

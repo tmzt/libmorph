@@ -72,6 +72,11 @@ mod stub {
             Self
         }
 
+        #[cfg(script_runner)]
+        pub(crate) fn silent() -> Self {
+            Self
+        }
+
         #[must_use]
         pub fn is_available(&self) -> bool {
             false
@@ -135,6 +140,16 @@ mod output {
                 .ok();
             Self {
                 output,
+                next: Cell::new(1),
+            }
+        }
+
+        /// No output stream, as on a machine without an audio device:
+        /// scripted runs are silent.
+        #[cfg(script_runner)]
+        pub(crate) fn silent() -> Self {
+            Self {
+                output: None,
                 next: Cell::new(1),
             }
         }

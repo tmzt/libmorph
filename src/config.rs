@@ -8,6 +8,7 @@ use libdevice::DeviceArgsError;
 use libdevice::DeviceSpec;
 
 use crate::GpuError;
+use crate::script::ScriptError;
 
 /// Usage text for libmorph's own options. Device options are listed in
 /// [`libdevice::DEVICE_ARGS_HELP`].
@@ -113,6 +114,8 @@ pub enum MorphError {
     Gpu(GpuError),
     /// The surface reports no format the adapter can present.
     NoSurfaceFormat,
+    /// A script that could not be loaded or run (see [`crate::script`]).
+    Script(ScriptError),
     #[cfg(not(target_os = "android"))]
     EventLoop(winit::error::EventLoopError),
     #[cfg(not(target_os = "android"))]
@@ -126,6 +129,7 @@ impl fmt::Display for MorphError {
             Self::UnknownOption(option) => write!(f, "unknown libmorph option `{option}`"),
             Self::Gpu(error) => error.fmt(f),
             Self::NoSurfaceFormat => f.write_str("the surface has no presentable format"),
+            Self::Script(error) => error.fmt(f),
             #[cfg(not(target_os = "android"))]
             Self::EventLoop(error) => write!(f, "event loop: {error}"),
             #[cfg(not(target_os = "android"))]
@@ -145,6 +149,12 @@ impl From<DeviceArgsError> for MorphError {
 impl From<GpuError> for MorphError {
     fn from(error: GpuError) -> Self {
         Self::Gpu(error)
+    }
+}
+
+impl From<ScriptError> for MorphError {
+    fn from(error: ScriptError) -> Self {
+        Self::Script(error)
     }
 }
 

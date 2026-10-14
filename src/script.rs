@@ -19,11 +19,62 @@
 
 use std::collections::HashSet;
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::{Key, Touch, TouchPhase};
 
 pub use crate::out_dir::{DEFAULT_OUT_ROOT, OutDir};
+
+/// How to run a script (`script` feature, desktop only).
+#[cfg(script_runner)]
+#[derive(Clone, Debug)]
+pub struct ScriptRun {
+    /// The emulated device: its geometry is the render size.
+    pub spec: libdevice::DeviceSpec,
+    pub out: OutDir,
+    /// Mask the device's cutouts and corners, as in a window.
+    pub overlay: bool,
+    pub fallback_adapter: bool,
+    /// What `ctx.args()` returns, program name first.
+    pub args: Vec<String>,
+}
+
+/// What a finished run wrote.
+#[cfg(script_runner)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Report {
+    pub dir: PathBuf,
+    pub screenshots: Vec<Screenshot>,
+}
+
+/// One screenshot file.
+#[cfg(script_runner)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Screenshot {
+    pub path: PathBuf,
+    /// Frames run before it, counted from 1.
+    pub frame: u64,
+    /// The script line of the `screenshot` command.
+    pub line: u32,
+    /// CRC-32 of the RGB rows, independent of PNG compression.
+    pub pixels_crc32: u32,
+}
+
+/// Run `A` headless through `script`: no window or event loop, a fixed
+/// frame time, silent audio. Writes the screenshots and `run.json` into
+/// `run.out` and returns what it wrote. Callable from any thread, including
+/// `cargo test`.
+///
+/// # Errors
+///
+/// No GPU adapter, or a failure creating the directory or writing a file.
+#[cfg(script_runner)]
+pub fn run<A: crate::MorphApp>(
+    script: &Script,
+    run: ScriptRun,
+) -> Result<Report, crate::MorphError> {
+    crate::runner::run_script::<A>(script, run)
+}
 
 /// The default frame rate.
 pub const DEFAULT_FPS: u32 = 60;
@@ -105,6 +156,8 @@ impl From<std::io::Error> for ScriptError {
 pub struct Script {
     /// Each command with its line number.
     steps: Vec<(u32, Command)>,
+    /// The file it was loaded from, for the manifest.
+    path: Option<PathBuf>,
 }
 
 impl Script {
@@ -127,7 +180,9 @@ impl Script {
 
     /// Read and parse a script file.
     pub fn load(path: &Path) -> Result<Self, ScriptError> {
-        Self::parse(&std::fs::read_to_string(path)?)
+        let mut script = Self::parse(&std::fs::read_to_string(path)?)?;
+        script.path = Some(path.to_owned());
+        Ok(script)
     }
 
     /// The same checks as [`parse`](Self::parse); lines are numbered from 1
@@ -138,9 +193,21 @@ impl Script {
     }
 
     fn checked(steps: Vec<(u32, Command)>) -> Result<Self, ScriptError> {
-        let script = Self { steps };
+        let script = Self { steps, path: None };
         script.plan()?;
         Ok(script)
+    }
+
+    /// The file the script was loaded from, if any.
+    #[must_use]
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
+    /// The line of the last command; `None` for an empty script.
+    #[cfg_attr(not(script_runner), allow(dead_code))]
+    pub(crate) fn last_line(&self) -> Option<u32> {
+        self.steps.last().map(|(line, _)| *line)
     }
 
     /// The fixed frame rate: the script's `fps`, else [`DEFAULT_FPS`].
@@ -157,8 +224,7 @@ impl Script {
 
     /// The commands expanded into what the runner does, in order, each with
     /// its line. Already checked, so this cannot fail.
-    // The scripted runner (plan 04, step 5) is the user outside the tests.
-    #[allow(dead_code)]
+    #[cfg_attr(not(script_runner), allow(dead_code))]
     pub(crate) fn actions(&self) -> Vec<(u32, Action)> {
         self.plan().expect("checked when the script was built")
     }

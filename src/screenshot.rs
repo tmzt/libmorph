@@ -2,9 +2,6 @@
 //! settings, and `run.json` written by hand in a fixed key order. Nothing
 //! in either depends on when the run happened.
 
-// The scripted runner (plan 04, step 5) is the user outside the tests.
-#![allow(dead_code)]
-
 use std::fmt::Write as _;
 
 /// Readback rows (RGBA, each `bytes_per_row` long with padding) to tight

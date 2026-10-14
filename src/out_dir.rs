@@ -31,8 +31,7 @@ impl OutDir {
     }
 
     /// Create the directory for a run starting now.
-    // The scripted runner (plan 04, step 5) is the user outside the tests.
-    #[allow(dead_code)]
+    #[cfg_attr(not(script_runner), allow(dead_code))]
     pub(crate) fn create(&self) -> io::Result<PathBuf> {
         self.create_on(utc_today())
     }

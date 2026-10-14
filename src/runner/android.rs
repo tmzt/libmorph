@@ -109,7 +109,7 @@ impl<A: MorphApp> Adapter<A> {
         };
         let mut spec = libdevice::DEFAULT_DEVICE;
         (spec.geometry.width, spec.geometry.height) = size;
-        let mut ctx = MorphContext::new(gpu, spec, Vec::new());
+        let mut ctx = MorphContext::new(gpu, spec, Vec::new(), crate::Audio::open());
         ctx.safe_area = self.safe_area;
         ctx.scale_factor = scale_factor(app);
         ctx.data_dir = app.internal_data_path();
