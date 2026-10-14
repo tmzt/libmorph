@@ -1,7 +1,7 @@
 ---
 title: Shell input and lifecycle additions (pressure, hover, keys, second finger, exit, data dir, surface format)
 date: 2026-10-14
-status: In implementation
+status: Implemented
 covers:
   - L1 `Touch::pressure`
   - L2 `MorphApp::on_hover`
@@ -338,3 +338,25 @@ Step 1 is libmobile `e09eba7`. It calls `Activity.finish()` through JNI
 instead of `ANativeActivity_finish`; the departure is recorded in CHANGES.md.
 Step 2 is committed with this amendment. The status is
 `In implementation`, and this document is now immutable (Rule 1.5).
+
+## Amendment — 2026-10-14 14:55 EDT: Implemented
+
+The owner accepted the work on 2026-10-14, including the step 8 check on the
+Mac. The status is `Implemented`. The steps, as amended above (L4 and the
+second finger removed) and with the departures recorded in CHANGES.md, were
+implemented by:
+
+| Step | Commit |
+|---|---|
+| 1. libmobile `android::finish` | libmobile `e09eba7` |
+| 2. API surface | `a4a4f13` |
+| 3. Desktop and web pointer input | `7040cbb` |
+| 4. Keys on desktop and web | `767c26b` |
+| 5. Android input | `3472e6b` |
+| 6. Exit and suspend, data dir | `602e8f3` |
+| 7. Surface format | `cbbbe22` |
+| 8. Touch example | `c96a6aa` |
+| 9. AGENTS.md | `d5f8f82` |
+
+Step 6's **Done when** was met by the host `Lifecycle` tests in place of the
+`#[ignore]` GPU test, as recorded in CHANGES.md (`0a1edc1`).
