@@ -929,7 +929,6 @@ checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 [[package]]
 name = "libdevice"
 version = "0.1.0"
-source = "git+https://github.com/tmzt/libdevice#a13a2b65c55dc77a5f208648732ed37568ac8b1a"
 dependencies = [
  "toml",
 ]
@@ -953,7 +952,6 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 [[package]]
 name = "libmobile"
 version = "0.1.0"
-source = "git+https://github.com/tmzt/libmobile#791b2aeb0ae12c70a1ab274043e337dbbef5f0d3"
 dependencies = [
  "android-activity",
  "jni",
@@ -979,6 +977,13 @@ dependencies = [
  "web-time",
  "wgpu",
  "winit",
+]
+
+[[package]]
+name = "libmorph-build"
+version = "0.1.0"
+dependencies = [
+ "libmobile",
 ]
 
 [[package]]

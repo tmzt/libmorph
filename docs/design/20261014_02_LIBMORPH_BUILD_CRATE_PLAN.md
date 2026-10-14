@@ -1,7 +1,7 @@
 ---
 title: libmorph-build, the build-script crate for Android apps
 date: 2026-10-14
-status: Draft
+status: In implementation
 covers:
   - A crate `crates/libmorph-build` in the libmorph repository, re-exporting
     `libmobile::gradle` with libmorph's `links` key preset
@@ -131,3 +131,8 @@ the two match.
 The owner approved this plan as written (2026-10-14). Its status stays
 `Draft` until the commit that starts step 1 sets `In implementation`, as
 Rule 1.5 says.
+
+## Amendment — 2026-10-14 12:33 EDT: Implementation started
+
+Step 1 is committed with this amendment. The status is `In implementation`,
+and this document is now immutable (Rule 1.5).

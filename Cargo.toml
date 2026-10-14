@@ -11,6 +11,9 @@ repository = "https://github.com/tmzt/libmorph"
 links = "libmorph"
 build = "build.rs"
 
+[workspace]
+members = [".", "crates/libmorph-build"]
+
 [features]
 default = ["audio"]
 audio = ["dep:cpal"]

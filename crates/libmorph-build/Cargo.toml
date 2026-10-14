@@ -1,0 +1,10 @@
+[package]
+name = "libmorph-build"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Build-script helpers for libmorph apps: Gradle project generation for Android"
+repository = "https://github.com/tmzt/libmorph"
+
+[dependencies]
+libmobile = { git = "https://github.com/tmzt/libmobile" }
