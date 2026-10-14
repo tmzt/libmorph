@@ -1,0 +1,10 @@
+[package]
+name = "libmorph"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Unified windowing, graphics and device-emulation shell for wgpu applications"
+repository = "https://github.com/tmzt/libmorph"
+
+[dependencies]
+libdevice = { git = "https://github.com/tmzt/libdevice" }
