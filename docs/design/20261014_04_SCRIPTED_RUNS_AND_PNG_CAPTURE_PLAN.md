@@ -1,7 +1,7 @@
 ---
 title: Scripted runs and PNG capture
 date: 2026-10-14
-status: In implementation
+status: Implemented
 covers:
   - A script format that drives a `MorphApp` through frames, touches, hover,
     keys, suspend and resume, with a fixed frame time
@@ -503,3 +503,23 @@ git worktree and branch. The first implementing commit sets
 Step 1 (the parser, `src/script.rs`) is committed with this amendment, on
 the `scripted-runs` branch. The status is `In implementation`, and this
 document is now immutable (Rule 1.5).
+
+## Amendment — 2026-10-14 15:28 EDT: Implemented
+
+The owner accepted the work on 2026-10-14 and asked for it to be merged and
+pushed. The status is `Implemented`. The steps, as amended above and with the
+departures recorded in CHANGES.md (`3751bf1`), were implemented by:
+
+| Step | Commit |
+|---|---|
+| 1. Parser | `ba34e6e` |
+| 2. Output directory | `b69638c` |
+| 3. PNG and manifest writing | `ece98cc` |
+| 4. Headless target in `Shell` | `e8f48f5` |
+| 5. `script::run` | `75166d0` |
+| 6. CLI | `18aa7d8` |
+| 7. Example script | `66c7cfa` |
+| 8. AGENTS.md and README | `fa166c4`, `40ac8ec` |
+
+Step 5's GPU test ran on the Mac (Apple M4, Metal), not skipped. Step 7's
+four runs gave identical files.
