@@ -317,3 +317,17 @@ libmorph. In the section 3 table, as last amended, this replaces the
 - **Step 3:** the `MouseTouch` tests cover leaving by position, leaving by
   `CursorLeft`, moves and release after a cancel, and a new press after
   coming back.
+
+## Amendment — 2026-10-14 13:05 EDT: Decisions and approval
+
+The owner decided (2026-10-14):
+
+- `Touch` gains `pressure: Option<f32>` as in section 2, accepting that
+  code outside the crate which builds a `Touch` with a struct literal has to
+  add the field.
+- libmobile gains `android::finish(app)` as in section 7.
+
+The owner approved the plan as amended. Step 1 is in the libmobile
+repository, so the status change to `In implementation` goes in the libmorph
+commit for step 2, as Rule 1.5 says, and that commit's amendment names step
+1's libmobile commit.
