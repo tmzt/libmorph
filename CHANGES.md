@@ -80,3 +80,19 @@ Plan: `docs/design/20261014_04_SCRIPTED_RUNS_AND_PNG_CAPTURE_PLAN.md`.
 
 Also: `.gitignore` now lists `/out`. AGENTS.md (Rule 3.5) already
 described `out/` as gitignored, but the file didn't list it.
+
+## 2026-10-14 15:04 EDT — App-requested device limits: new plan (Draft)
+
+Plan: `docs/design/20261014_05_APP_LIMITS_REQUEST_PLAN.md`. Requested by
+the owner (relayed by another session) after a Galaxy S23 compute shader hit
+the downlevel limit of 4 storage buffers.
+
+- Proposes `LimitsRequest { required, preferred }` of whole
+  `wgpu::Limits`, and `MorphApp::limits(base)` with a default that keeps
+  today's behaviour.
+- `required` is checked against the adapter and never clamped; a failure
+  is a new `GpuError::Limits` naming each field. `preferred` is clamped
+  to the adapter and raised to `required` with wgpu-types' own helpers.
+- `GpuError` is not `#[non_exhaustive]`, so the new variant is a public
+  enum change. Section 7 asks the owner how to handle it. No implementation
+  starts until the plan is approved.
