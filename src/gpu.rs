@@ -106,20 +106,18 @@ impl Gpu {
     }
 
     /// Configure `surface` at `size`, keeping `previous` (the format the
-    /// app's pipelines were built for) whenever the surface still offers it.
+    /// app's pipelines were built for) whenever the surface still offers it,
+    /// else preferring an sRGB or non-sRGB format as `srgb` asks.
     pub fn configure(
         &self,
         surface: &wgpu::Surface<'_>,
         (width, height): (u32, u32),
         previous: Option<wgpu::TextureFormat>,
+        srgb: bool,
     ) -> Option<wgpu::SurfaceConfiguration> {
         let mut config = surface.get_default_config(&self.adapter, width.max(1), height.max(1))?;
         let formats = surface.get_capabilities(&self.adapter).formats;
-        let preferred = formats.iter().copied().find(|format| format.is_srgb());
-        config.format = previous
-            .filter(|format| formats.contains(format))
-            .or(preferred)
-            .unwrap_or(config.format);
+        config.format = choose_format(&formats, config.format, previous, srgb);
         if previous.is_some_and(|format| format != config.format) {
             log::warn!(
                 "libmorph: surface format changed from {previous:?} to {:?}; \
@@ -129,5 +127,71 @@ impl Gpu {
         }
         surface.configure(&self.device, &config);
         Some(config)
+    }
+}
+
+/// The surface format: `previous` while the surface still offers it (so a
+/// resume keeps the app's pipelines valid), else the first offered format
+/// whose sRGB-ness matches `srgb`, else the adapter's `default`.
+fn choose_format(
+    formats: &[wgpu::TextureFormat],
+    default: wgpu::TextureFormat,
+    previous: Option<wgpu::TextureFormat>,
+    srgb: bool,
+) -> wgpu::TextureFormat {
+    previous
+        .filter(|format| formats.contains(format))
+        .or_else(|| {
+            formats
+                .iter()
+                .copied()
+                .find(|format| format.is_srgb() == srgb)
+        })
+        .unwrap_or(default)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::choose_format;
+    use wgpu::TextureFormat::{Bgra8Unorm, Bgra8UnormSrgb, Rgba16Float};
+
+    const OFFERED: [wgpu::TextureFormat; 3] = [Bgra8UnormSrgb, Bgra8Unorm, Rgba16Float];
+
+    #[test]
+    fn preference_picks_by_srgb() {
+        assert_eq!(
+            choose_format(&OFFERED, Rgba16Float, None, true),
+            Bgra8UnormSrgb
+        );
+        assert_eq!(
+            choose_format(&OFFERED, Rgba16Float, None, false),
+            Bgra8Unorm
+        );
+    }
+
+    #[test]
+    fn previous_wins_while_offered() {
+        assert_eq!(
+            choose_format(&OFFERED, Rgba16Float, Some(Bgra8Unorm), true),
+            Bgra8Unorm
+        );
+        assert_eq!(
+            choose_format(&OFFERED, Rgba16Float, Some(Bgra8UnormSrgb), false),
+            Bgra8UnormSrgb
+        );
+    }
+
+    #[test]
+    fn falls_back_when_nothing_matches() {
+        let srgb_only = [Bgra8UnormSrgb];
+        assert_eq!(
+            choose_format(&srgb_only, Bgra8UnormSrgb, None, false),
+            Bgra8UnormSrgb
+        );
+        assert_eq!(
+            choose_format(&srgb_only, Bgra8UnormSrgb, Some(Bgra8Unorm), false),
+            Bgra8UnormSrgb
+        );
+        assert_eq!(choose_format(&[], Bgra8Unorm, None, true), Bgra8Unorm);
     }
 }

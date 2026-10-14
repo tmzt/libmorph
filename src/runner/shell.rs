@@ -59,7 +59,7 @@ impl<A: MorphApp> Shell<A> {
     ) -> Result<Self, MorphError> {
         let config = ctx
             .gpu
-            .configure(&surface, size, None)
+            .configure(&surface, size, None, A::SRGB_SURFACE)
             .ok_or(MorphError::NoSurfaceFormat)?;
         ctx.surface_format = config.format;
         ctx.surface_size = (config.width, config.height);
@@ -87,7 +87,11 @@ impl<A: MorphApp> Shell<A> {
     /// app hears [`MorphApp::on_resume`] only if it was suspended.
     pub fn attach(&mut self, surface: wgpu::Surface<'static>, size: (u32, u32)) {
         let previous = Some(self.ctx.surface_format);
-        let Some(config) = self.ctx.gpu.configure(&surface, size, previous) else {
+        let Some(config) = self
+            .ctx
+            .gpu
+            .configure(&surface, size, previous, A::SRGB_SURFACE)
+        else {
             log::error!("libmorph: the new surface has no presentable format");
             return;
         };
