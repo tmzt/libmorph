@@ -1,18 +1,25 @@
+![libmorph](docs/images/libmorph.png)
+
 # libmorph
 
-A unified windowing, graphics and device-emulation shell for
-[`wgpu`](https://github.com/gfx-rs/wgpu) applications. Write one `MorphApp`
-and run it on:
+A windowing and device-emulation shell for [wgpu](https://github.com/gfx-rs/wgpu)
+apps. One `MorphApp` runs on desktop, the web and Android.
 
-| Host | Driven by | Notes |
+| Host | Event loop | |
 |---|---|---|
-| Desktop | `winit` | The window takes the exact pixel size of an emulated phone (`--device iphone_15`, from [libdevice](https://github.com/tmzt/libdevice)). The mouse arrives as touches, and an overlay masks the phone's corners and cutouts. |
-| Web (`web`) | `winit` | Full-screen canvas; WebGPU with a WebGL2 fallback. |
-| Android (`mobile`) | [libmobile](https://github.com/tmzt/libmobile) | `NativeActivity`, system insets as the safe area; the Gradle project is generated from `build.rs`. |
+| Desktop | winit | Window sized to an emulated phone ([libdevice](https://github.com/tmzt/libdevice)); mouse becomes touch; corners and cutouts masked |
+| Web | winit | Full-screen canvas; WebGPU, falling back to WebGL2 |
+| Android | [libmobile](https://github.com/tmzt/libmobile) | `NativeActivity`; system insets become the safe area |
 
-The wgpu device and queue live for the whole run; only the surface is
-recreated across suspend and resume. See [AGENTS.md](AGENTS.md) for the
-architecture and [CHANGES.md](CHANGES.md) for planned work.
+The wgpu device and queue persist for the whole run. Only the surface is
+recreated on suspend and resume.
+
+## Usage
+
+```toml
+[dependencies]
+libmorph = { git = "https://github.com/tmzt/libmorph" }
+```
 
 ```rust
 use libmorph::{Frame, MorphApp, MorphContext};
@@ -25,7 +32,7 @@ impl MorphApp for App {
     }
 
     fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
-        // Record into frame.view with ctx.device() / ctx.queue().
+        // Draw to frame.view with ctx.device() and ctx.queue().
     }
 }
 
@@ -34,8 +41,88 @@ fn main() -> Result<(), libmorph::MorphError> {
 }
 ```
 
-`cargo run --example touch -- --device iphone_15` runs a small demo;
-`--morph-help` lists the options.
+Other hooks: `update`, `on_touch`, `on_suspend`, `on_resume`. `MorphContext`
+also provides the safe area, scale factor, surface size and format, the device
+spec and audio.
+
+```sh
+cargo run --example touch -- --device iphone_15
+```
+
+### Options (desktop)
+
+| Option | |
+|---|---|
+| `--device <name>` | Emulated device: `galaxy_s24` (default), `iphone_15` |
+| `--device-<field> <value>` | Override one field, e.g. `--device-width 720` |
+| `--morph-fallback-adapter` | Software GPU adapter |
+| `--morph-no-overlay` | Don't mask corners and cutouts |
+| `--morph-help` | List all options |
+
+Other arguments reach the app through `ctx.args()`.
+
+## Features
+
+| Feature | |
+|---|---|
+| `audio` (default) | In-memory sound playback through cpal |
+| `web` | wasm32 support; required on that target |
+| `mobile` | Android support through libmobile; required on that target |
+| `mobile-google-auth` | libmobile's Sign in with Google |
+| `mobile-camera` | libmobile's photo capture (to be replaced, see below) |
+
+## Android
+
+The app crate is a `cdylib`. libmobile generates the Gradle project from the
+app's `build.rs`, which is why libmobile is also a build-dependency:
+
+```toml
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+libmorph = { git = "https://github.com/tmzt/libmorph", features = ["mobile"] }
+
+[build-dependencies]
+libmobile = { git = "https://github.com/tmzt/libmobile" }
+```
+
+```rust
+// build.rs
+fn main() {
+    libmobile::gradle::Project::new("com.example.app")
+        .env_prefix("libmorph")
+        .generate()
+        .expect("gradle project");
+}
+```
+
+```rust
+// src/lib.rs
+#[unsafe(no_mangle)]
+fn android_main(app: libmorph::AndroidApp) {
+    libmorph::run_android::<App>(app);
+}
+```
+
+```sh
+cargo build --release --target aarch64-linux-android --lib
+gradle -p target/aarch64-linux-android/release/gradle/<package> assembleDebug
+```
+
+## Limitations
+
+- No native iOS. iPhone geometry can be emulated on desktop.
+- Device insets in libdevice are estimates, not measured on hardware.
+
+## Development
+
+Contributor and agent rules are in [AGENTS.md](AGENTS.md); planned work is
+logged in [CHANGES.md](CHANGES.md).
+
+## License
+
+MIT OR Apache-2.0.
 
 ## Architectural decisions
 
