@@ -1,7 +1,7 @@
 ---
 title: libmorph-build, the build-script crate for Android apps
 date: 2026-10-14
-status: In implementation
+status: Implemented
 covers:
   - A crate `crates/libmorph-build` in the libmorph repository, re-exporting
     `libmobile::gradle` with libmorph's `links` key preset
@@ -136,3 +136,11 @@ Rule 1.5 says.
 
 Step 1 is committed with this amendment. The status is `In implementation`,
 and this document is now immutable (Rule 1.5).
+
+## Amendment — 2026-10-14 12:36 EDT: Status In implementation → Implemented
+
+Every step in section 5 is done and meets its **Done when:** check:
+
+- Step 1, the crate and the workspace: `933c5be`
+- Step 2, README.md: `d146bff`
+- Step 3, AGENTS.md: `48962bf`
