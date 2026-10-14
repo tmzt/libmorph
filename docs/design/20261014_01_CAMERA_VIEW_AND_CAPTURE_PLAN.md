@@ -1,7 +1,7 @@
 ---
 title: Camera view and camera capture across desktop, web and Android
 date: 2026-10-14
-status: Draft
+status: Hold
 covers:
   - Splitting the camera into two features on libmorph's public surface,
     `camera-view` (a live preview the app samples as a wgpu texture) and
@@ -451,3 +451,28 @@ are not stretched to cover it. It would build on the same backends, with
 encoders on top: `MediaCodec` (Android), `MediaRecorder` (web), and a
 platform encoder or ffmpeg on desktop. Not part of this plan; it needs its
 own.
+
+## Amendment — 2026-10-14 12:14 EDT: Decisions confirmed
+
+The owner confirmed (2026-10-14) the five decisions put to them when the plan
+was written. The body stands as written on each point:
+
+1. Desktop and web `camera-capture` takes one frame from the webcam (4.1,
+   4.2); there is no system camera app to hand off to.
+2. Android `camera-view` uses the NDK camera (`ACamera*` and
+   `AImageReader`), with a Kotlin plugin only for the CAMERA permission
+   (6.2, 6.3), not CameraX. Frames are copied out each tick and converted from
+   YUV on the GPU (4.3, 5).
+3. On desktop, the first webcam serves both `Facing::Front` and
+   `Facing::Back`, and `mirrored` is true for `Front` (4.1).
+4. nokhwa is used without its default features. That leaves out mozjpeg and
+   `output-wgpu` (wgpu 27). MJPEG webcams are decoded with zune-jpeg (2.1,
+   4.1).
+5. The example is the standalone crate `examples/camera-app/`, for desktop
+   and Android (7).
+
+## Amendment — 2026-10-14 12:14 EDT: Status Draft → Hold
+
+The owner placed the plan on hold after confirming the decisions above; it is
+not approved for implementation. No step of section 9 may start until an
+amendment returns it to `Draft`.
