@@ -1,0 +1,7 @@
+# The raymarch example, scripted (galaxy_s24, 1080×2340):
+#   cargo run --example raymarch --features script -- --morph-script examples/scripts/raymarch.morph
+# Let the camera circle, then drag it round and up.
+frames 60
+screenshot orbit
+drag 1 800 1500 300 1200 20
+screenshot dragged
