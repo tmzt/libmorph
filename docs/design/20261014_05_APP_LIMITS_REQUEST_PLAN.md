@@ -1,7 +1,7 @@
 ---
 title: App-requested device limits (LimitsRequest)
 date: 2026-10-14
-status: In implementation
+status: Implemented
 covers:
   - A public `LimitsRequest { required, preferred }` of whole `wgpu::Limits`
   - `MorphApp::limits(base)`, an associated function called before `init`
@@ -277,3 +277,18 @@ passes.
 
 Step 1 is committed with this amendment. The status is
 `In implementation`, and this document is now immutable (Rule 1.5).
+
+## Amendment — 2026-10-14 15:35 EDT: Implemented
+
+Every step is done; the owner asked for the work to be finished. The status
+is `Implemented`. The steps were implemented by:
+
+| Step | Commit |
+|---|---|
+| 1. Types and resolution | `5125ea2` |
+| 2. `MorphApp::limits` and the runners (with the headless runner) | `2439313` |
+| 3. AGENTS.md | `1926e6c` |
+
+The checks of step 3's Done when ran against libdevice `a13a2b6` and
+libmobile `e09eba7` from GitHub, without a local `[patch]`. The pushed
+commit is reported to the owner.
