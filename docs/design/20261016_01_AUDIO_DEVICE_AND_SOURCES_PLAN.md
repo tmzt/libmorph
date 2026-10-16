@@ -1,7 +1,7 @@
 ---
 title: Audio output device and streaming sources
 date: 2026-10-16
-status: Draft
+status: In implementation
 covers:
   - Exposing the cpal output device libmorph opens, and its stream format,
     through `ctx.audio()`, as wgpu is exposed through `MorphContext`
@@ -368,3 +368,9 @@ below. Where they disagree with earlier text, they win.
 Section 7's step 2 checks clippy for default, `--no-default-features`,
 `--features audio-cpal`, Android `mobile` and `mobile,audio-cpal`, and
 wasm `web`.
+
+## Amendment — 2026-10-16 16:53 EDT: Implementation started
+
+Implementation has started; this document is now immutable (AGENTS.md
+Rule 1.5). libmobile's `cpal` feature (step 0) is implemented and pushed
+as libmobile 0.1.1 (`02758ec`, tag `v0.1.1`), and libmorph pins it.

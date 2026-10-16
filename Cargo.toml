@@ -16,7 +16,11 @@ members = [".", "crates/libmorph-build"]
 
 [features]
 default = ["audio"]
-audio = ["dep:cpal"]
+# cpal on desktop and the web; on Android, libmobile's copy (its `cpal`
+# feature), so cpal stays optional in both crates.
+audio = ["dep:cpal", "libmobile?/cpal"]
+# The cpal re-export (`libmorph::cpal`) and the output device it opened.
+audio-cpal = ["audio"]
 mobile = ["dep:libmobile"]
 # Passthrough: each one also enables `mobile`, so `libmobile/<x>` is never
 # requested without the dependency itself.
@@ -38,7 +42,6 @@ libdevice = { git = "https://github.com/tmzt/libdevice" }
 log = "0.4"
 web-time = "1"
 wgpu = "30.0.1"
-cpal = { version = "0.18.2", optional = true }
 # Its platform-free types (`SafeArea`, `Insets`) build on any host; the
 # runtime is Android-only.
 libmobile = { git = "https://github.com/tmzt/libmobile", optional = true }
@@ -50,6 +53,8 @@ libmobile = { git = "https://github.com/tmzt/libmobile", optional = true }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 winit = "0.30.13"
+# On Android, cpal comes from libmobile (`libmobile::android::cpal`).
+cpal = { version = "0.18.2", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 pollster = "0.4"
@@ -95,3 +100,6 @@ name = "touch"
 
 [[example]]
 name = "raymarch"
+
+[[example]]
+name = "tone"
