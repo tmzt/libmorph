@@ -213,3 +213,14 @@ approval before implementation.
   stream now pauses in winit's `suspended`, which a caller can observe
   (Rule 5.4). libmorph-build is unchanged at 0.1.0; libmobile 0.1.1 is
   compatible with 0.1.0.
+
+## 2026-10-16 13:20 EDT — Persistent pipeline cache
+
+Plan: `docs/design/20261016_02_PIPELINE_CACHE_PLAN.md` (Draft).
+
+Requested by the owner for the tower defense game, which spends about
+0.9 s compiling one compute pipeline on every launch on a Galaxy S23.
+libmorph will request wgpu's `PIPELINE_CACHE` on Android with Vulkan,
+keep the cache's data under `<data_dir>/libmorph/`, offer it as
+`ctx.pipeline_cache()`, and save it after `init`, on suspend and on
+exit. Waiting for the owner's approval before implementation.
