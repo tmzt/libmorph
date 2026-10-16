@@ -7,7 +7,7 @@ apps. One `MorphApp` runs on desktop, the web and Android.
 
 | Host | Event loop | |
 |---|---|---|
-| Desktop | winit | Window sized to an emulated phone ([libdevice](https://github.com/tmzt/libdevice)); mouse becomes touch; corners and cutouts masked |
+| Desktop | winit | Window sized to an emulated phone ([libdevice](https://github.com/tmzt/libdevice)); mouse becomes touch, and on macOS so do two or more trackpad fingers; corners and cutouts masked |
 | Web | winit | Full-screen canvas; WebGPU, falling back to WebGL2 |
 | Android | [libmobile](https://github.com/tmzt/libmobile) | `NativeActivity`; system insets become the safe area |
 
@@ -60,6 +60,8 @@ cargo run --example touch -- --device iphone_15
 | `--morph-help` | List all options |
 | `--morph-script <path>` | Run a script headless and write screenshots (`script` feature) |
 | `--morph-out <dir>` | Output directory for `--morph-script` |
+| `--morph-trackpad <physical\|fit\|off>` | macOS: two or more trackpad fingers are touches, at the device's real scale around the cursor (`physical`, default), across the whole screen (`fit`), or not at all |
+| `--morph-window-scale <fit\|n>` | Window size as a multiple of the device's pixels; `fit` (default) shrinks it to fit the display |
 
 Other arguments reach the app through `ctx.args()`.
 
