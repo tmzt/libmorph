@@ -337,3 +337,34 @@ Before section 7's step 1:
    **Done when:** `cargo clippy --target aarch64-linux-android --features
    mobile` passes with one cpal in `Cargo.lock`, and Android playback
    is unchanged.
+
+## Amendment — 2026-10-16 09:10 EDT: Approval and answers
+
+The owner approved this plan (2026-10-16), with the answers to section 8
+below. Where they disagree with earlier text, they win.
+
+1. **Backend passthroughs: none.** `audio-jack`, `audio-pulseaudio`,
+   `audio-pipewire` and `audio-asio` are dropped from section 3 and from
+   the amendment "libmobile owns cpal on Android". Desktop development is
+   on macOS, where cpal uses CoreAudio with no feature. They come back,
+   each a one-line passthrough, when Linux or Windows is supported. The
+   features are `audio` and `audio-cpal` only.
+2. **Volume: one for the whole app.** No volume per source. `Audio`
+   gains:
+
+   ```rust
+   /// Scales the whole mix (voices and sources) before it is clipped.
+   /// 1.0 at start; negative values are treated as 0.
+   pub fn set_master_volume(&self, volume: f32);
+   ```
+
+   It is a `Command::SetMasterVolume(f32)` to the mixer, which multiplies
+   every sample by it after summing and before clamping. The stub has it
+   too, doing nothing. `Sound` voices keep `set_volume`. Step 1 adds a
+   test that it scales voices and sources together.
+3. **Device changes:** out of scope, as recommended.
+4. **Choosing the host:** out of scope, as recommended.
+
+Section 7's step 2 checks clippy for default, `--no-default-features`,
+`--features audio-cpal`, Android `mobile` and `mobile,audio-cpal`, and
+wasm `web`.
