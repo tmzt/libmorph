@@ -125,3 +125,19 @@ small, and none changes an existing signature.
   runs pass a silent one without opening the device.
 - Step 5's GPU test ran on this Mac (Apple M4, Metal), not skipped. Step 7's
   evidence is in `out/scripted-runs.md` in the worktree.
+
+## 2026-10-15 23:29 EDT — Mac trackpad fingers as touches: plan drafted
+
+Plan: `docs/design/20261015_01_MAC_TRACKPAD_TOUCH_PLAN.md` (Draft). The
+owner asked for this through the Noble's Keep session.
+
+- On macOS, AppKit `NSTouch` fingers, read through a local event monitor
+  on winit's view, become `Touch` events with ids from `1 << 32`. Step 1
+  is a trial of that route.
+- A session starts at two fingers and lasts until the last finger lifts.
+  One finger stays the mouse, and the mouse is held off during a session.
+- `--morph-trackpad <physical|fit|off>`. `physical` places the fingers
+  at phone scale around the cursor, using libdevice's planned `ppi` /
+  `px_per_mm`. libdevice keeps only device facts; host input stays here.
+- No public type changes. Section 8 asks the owner four questions. No
+  implementation starts until the plan is approved.
