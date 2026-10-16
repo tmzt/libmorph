@@ -274,3 +274,68 @@ this plan's steps 1–4 build with `fit` as the only mapping. Step 5 adds
 6. **Docs.** Update the "Emulation & Input" section in AGENTS.md and the
    README.
    **Done when:** both describe trackpad touches and `--morph-trackpad`.
+
+## Amendment — 2026-10-15 23:35 EDT: Approval, answers, and fitting the window to Retina displays
+
+The owner approved the plan for implementation (2026-10-15), and accepted the
+recommendations in section 8:
+
+1. A session starts at two or more fingers; one finger stays the mouse.
+2. A mouse touch that is held when a session starts is cancelled.
+3. `physical`, anchored at the cursor, is the default mapping.
+4. Android's real display density is left to a separate libmobile plan.
+
+The owner also asked, in the same instruction, for the mapping between the
+host's physical pixels and the device's pixels to be fixed on Retina
+displays: "Opening tinytrowel earlier was larger than the screen." The owner
+suggested the pixel density plan. That plan is libdevice's and is data only,
+and window size is host behaviour, so the work is added here as a new
+section 10 and step 7. It needs nothing from libdevice.
+
+### 10. Fitting the window to the display
+
+Today the desktop window is created at `spec.geometry` in host physical
+pixels. A Galaxy S24 (1080 × 2340) on a 14-inch MacBook Pro (3024 × 1964
+physical pixels, scale factor 2) is taller than the display.
+
+- **Window size.** Before the window is created, the runner takes
+  `event_loop.primary_monitor()` and its physical size `(mw, mh)`, and
+  computes `fit = min(1, 0.9 × mw / w, 0.85 × mh / h)` for the device
+  size `(w, h)`. The margins leave room for the menu bar, Dock and title
+  bar. The window is requested at `(round(w × fit), round(h × fit))`
+  physical pixels. With no monitor, `fit` is 1. The S24 on the 14-inch
+  MacBook Pro gets `fit` 0.713, a 770 × 1669 window (385 × 834 points),
+  which is drawn at full Retina resolution.
+- **The device's pixels on a smaller surface.** The surface keeps the size
+  the window got, as it does today when the window manager shrinks it. The
+  safe area and the overlay already scale by `surface / spec.geometry`.
+  `MorphContext::scale_factor()` is now scaled the same way: it is
+  `spec.pixel_ratio × surface_width / spec.geometry.width`, so a layout in
+  dp keeps the phone's proportions. `ctx.device_spec()` still reports the
+  emulated device itself. The `physical` trackpad mapping (section 4)
+  already includes that ratio.
+- **Millimetres.** Step 5 adds `MorphContext::px_per_mm() -> Option<f32>`:
+  libdevice's `px_per_mm()` scaled by surface width / device width on
+  desktop. It is the spec's own value on Android and the web, and `None`
+  until the libdevice pin has `ppi`. This is a new method, not a change to
+  an existing signature.
+- **`--morph-window-scale <fit|factor>`**. The default is `fit`. A number
+  such as `1` or `0.5` sets the window to that multiple of the device size
+  exactly; `1` gives today's behaviour. A value that does not parse, or is
+  not above 0, is `InvalidOption`. It is ignored on the web, as are scripted
+  runs, which always render at `spec.geometry`.
+
+Showing the phone at its real size on screen would need the display's
+physical size (`CGDisplayScreenSize`). It is not part of this plan.
+
+Step added:
+
+7. **Window fit.** The fit computation, as a pure function with tests (the
+   S24 on 3024 × 1964 gives 770 × 1669; a small device is not enlarged; no
+   monitor gives 1), plus `--morph-window-scale` and the scaled
+   `scale_factor`.
+   **Done when:** the touch example opens on the owner's MacBook Pro fully
+   on screen at the default device, and
+   `--morph-window-scale 1` opens it at device size as before.
+
+Step 6 also describes `--morph-window-scale`.
