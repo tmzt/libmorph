@@ -141,3 +141,25 @@ owner asked for this through the Noble's Keep session.
   `px_per_mm`. libdevice keeps only device facts; host input stays here.
 - No public type changes. Section 8 asks the owner four questions. No
   implementation starts until the plan is approved.
+
+## 2026-10-15 23:43 EDT — Mac trackpad touch plan, steps 1–7: departures
+
+Plan: `docs/design/20261015_01_MAC_TRACKPAD_TOUCH_PLAN.md`. All small.
+
+- Steps 1–4 went in one commit (be32d07). The trial's logging (step 1) is
+  the `log::debug!("trackpad: …")` line in the runner. The owner's check on
+  hardware is still to come.
+- Section 2, monitor mask: `ScrollWheel` is left out and `SmartMagnify`
+  added. `touchesMatchingPhase:inView:` is documented for gesture events
+  only, and an Objective-C exception from a scroll event would abort the
+  process.
+- Section 2, dependencies: no `raw-window-handle` entry, since winit
+  re-exports it as `winit::raw_window_handle`. objc2-foundation also
+  needs `NSEnumerator` (for `NSSet::to_vec`), and objc2-app-kit needs
+  `block2` (for the monitor). The lockfile resolves objc2 0.5.3, the copy
+  winit already uses.
+- Section 10: `MorphContext::px_per_mm()` returns `f32`, not
+  `Option<f32>`. libdevice b27ba72 was pinned in the same step, and its
+  `ppi` is a required field.
+- `MorphOptions` no longer derives `Eq`, because `WindowScale::Factor`
+  holds an `f32`.
