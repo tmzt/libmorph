@@ -252,3 +252,31 @@ is paused:
    libmorph to open that host (JACK, say) instead of the default.
    Recommended: a later plan, with a `--morph-audio-host` option, once an
    app asks for it.
+
+## Amendment — 2026-10-16 09:01 EDT: The device as `DeviceTrait`, not `cpal::Device`
+
+Replaces the `device()` signature in section 4. On the owner's
+instruction (2026-10-16): "it should just be the trait device, not the
+underlying implementation".
+
+cpal's `DeviceTrait` has associated types and generic methods, so it
+cannot be a `dyn` trait object. `device()` returns it as an opaque type
+instead:
+
+```rust
+/// The output device libmorph opened; `None` without one. Only
+/// `DeviceTrait`'s methods are reachable through it.
+pub fn device(&self) -> Option<&impl cpal::traits::DeviceTrait>;
+```
+
+The concrete `cpal::Device` (the platform's host-dispatch type) is not
+part of libmorph's API, so libmorph can change how it opens the device,
+such as the host chosen in section 8 question 4, without breaking apps.
+Apps call `description()`, `id()`, `supported_output_configs()` and the
+other trait methods, with `use libmorph::cpal::traits::DeviceTrait;`.
+
+`stream_config()` and `sample_format()` are unchanged. `StreamConfig`
+and `SampleFormat` are plain data in cpal, not a host's implementation.
+
+Also: one line in section 5's "Dropping off the audio thread" paragraph
+runs past the wrapping width. The text is correct.
