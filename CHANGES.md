@@ -193,3 +193,23 @@ with the `Sound` voices. A new `audio-cpal` feature re-exports cpal and
 exposes the output device, with passthroughs for cpal's host backends. The
 stream is also paused in winit's `suspended`. Waiting for the owner's
 approval before implementation.
+
+## 2026-10-16 09:16 EDT — Rule 5: versions and tags
+
+- Owner's instruction (2026-10-16): apply libcontrols' versioning rules,
+  recorded here rather than in a plan. AGENTS.md gains Rule 5: the version
+  commit is tagged, `VERSIONS.md` lists the public API changes of each
+  version, `0.x` bumps the minor version for anything not strictly
+  additive and the patch version otherwise, and incompatible bumps of a
+  dependency propagate up. libmobile adopted the same rules (its
+  `9b36728`, released as 0.1.1).
+- libmorph and libmorph-build are versioned separately, tagged
+  `v<version>` and `libmorph-build-v<version>`.
+- `VERSIONS.md` starts with both crates' 0.1.0, recorded retroactively,
+  and the tags `v0.1.0` (`9bf131f`) and `libmorph-build-v0.1.0`
+  (`933c5be`) are added.
+- The audio plan (`docs/design/20261016_01_AUDIO_DEVICE_AND_SOURCES_PLAN.md`)
+  is released as libmorph 0.2.0: besides its additions, the desktop and web
+  stream now pauses in winit's `suspended`, which a caller can observe
+  (Rule 5.4). libmorph-build is unchanged at 0.1.0; libmobile 0.1.1 is
+  compatible with 0.1.0.
