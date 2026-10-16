@@ -47,6 +47,7 @@ spec and audio.
 
 ```sh
 cargo run --example touch -- --device iphone_15
+cargo run --example tone
 ```
 
 ### Options (desktop)
@@ -93,7 +94,8 @@ From Rust, including tests: `libmorph::script::run::<App>(&script, run)`.
 
 | Feature | |
 |---|---|
-| `audio` (default) | In-memory sound playback through cpal |
+| `audio` (default) | Sound playback and streaming sources through cpal (libmobile's cpal on Android) |
+| `audio-cpal` | Re-exports cpal as `libmorph::cpal`, with the output device and stream config |
 | `script` | Scripted headless runs with PNG screenshots (desktop) |
 | `web` | wasm32 support; required on that target |
 | `mobile` | Android support through libmobile; required on that target |
