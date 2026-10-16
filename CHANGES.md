@@ -163,3 +163,21 @@ Plan: `docs/design/20261015_01_MAC_TRACKPAD_TOUCH_PLAN.md`. All small.
   `ppi` is a required field.
 - `MorphOptions` no longer derives `Eq`, because `WindowScale::Factor`
   holds an `f32`.
+
+## 2026-10-15 23:52 EDT — Mac trackpad touch plan: trial result and fix
+
+Plan: `docs/design/20261015_01_MAC_TRACKPAD_TOUCH_PLAN.md`, steps 1, 3, 5
+and 7, checked by the owner on a MacBook Pro (Apple M1, macOS 14.5).
+
+- Step 1: the local event monitor on winit's view does receive per-finger
+  `NSTouch` data, so the `class_addMethod` fallback is not needed.
+- Some gesture events (magnify, rotate) carry no touches. They were being
+  read as every finger lifting, so a pinch ended and restarted every few
+  events. Such events are now ignored, because a lift arrives as a touch
+  in the `Ended` phase (a1555a6).
+- The raymarch example orbits by the centroid of all touches (0a1c025),
+  and zooms with a pinch (4abb56a), for step 5's check.
+- The owner confirmed: a two-finger pinch keeps two ids from `Started` to
+  `Ended`; one finger still clicks and hovers; raymarch's pinch zoom
+  follows the fingers; the window fits on the display, and
+  `--morph-window-scale 1` gives the device size.
