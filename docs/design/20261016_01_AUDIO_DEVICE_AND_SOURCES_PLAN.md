@@ -1,7 +1,7 @@
 ---
 title: Audio output device and streaming sources
 date: 2026-10-16
-status: In implementation
+status: Implemented
 covers:
   - Exposing the cpal output device libmorph opens, and its stream format,
     through `ctx.audio()`, as wgpu is exposed through `MorphContext`
@@ -374,3 +374,22 @@ wasm `web`.
 Implementation has started; this document is now immutable (AGENTS.md
 Rule 1.5). libmobile's `cpal` feature (step 0) is implemented and pushed
 as libmobile 0.1.1 (`02758ec`, tag `v0.1.1`), and libmorph pins it.
+
+## Amendment — 2026-10-16 16:53 EDT: Implemented
+
+Every step is done.
+
+- Step 0: libmobile `ee0f098` (the `cpal` feature), released as
+  libmobile 0.1.1 (`02758ec`, tag `v0.1.1`), pinned in `ae33763`.
+- Steps 1–3: `ae33763` (sources, master volume, `audio-cpal`, the
+  Android cpal alias, pausing in winit's `suspended`). fmt, clippy (default,
+  `--no-default-features`, `audio-cpal`, `script,audio-cpal`, Android
+  `mobile` and `mobile,audio-cpal`, wasm `web`) and tests pass, with four
+  new mixer tests.
+- Step 4: `examples/tone.rs` in `ae33763`, built for the owner's MacBook
+  Pro as `~/TestBinaries/libmorph-examples/tone`. The owner accepted the
+  work with no defect reported.
+- Step 5: AGENTS.md `9c0a726`, README `079a5fd`.
+
+Released as libmorph 0.2.0 (AGENTS.md Rule 5): pausing the stream in
+`suspended` on desktop and the web is a change a caller can observe.
