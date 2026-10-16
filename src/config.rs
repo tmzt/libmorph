@@ -23,6 +23,9 @@ libmorph options:
                                    (needs the `script` feature)
   --morph-out <dir>                The script's output directory (default
                                    out/morph/YYYYMMDD_NN_<script name>)
+  --morph-trackpad <fit|off>       macOS: two or more trackpad fingers are
+                                   touches, the whole pad covering the screen
+                                   (fit, the default), or not at all (off)
 ";
 
 /// libmorph's own options.
@@ -32,6 +35,21 @@ pub(crate) struct MorphOptions {
     pub help: bool,
     pub fallback_adapter: bool,
     pub overlay: bool,
+    /// Read on macOS only; accepted everywhere so one command line works.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub trackpad: TrackpadOption,
+}
+
+/// `--morph-trackpad`: how trackpad fingers become touches (macOS).
+#[cfg(not(target_os = "android"))]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) enum TrackpadOption {
+    /// The whole pad covers the whole surface.
+    #[default]
+    Fit,
+    /// No trackpad touches.
+    Off,
 }
 
 #[cfg(not(target_os = "android"))]
@@ -41,6 +59,7 @@ impl Default for MorphOptions {
             help: false,
             fallback_adapter: false,
             overlay: true,
+            trackpad: TrackpadOption::default(),
         }
     }
 }
@@ -93,15 +112,26 @@ impl Launch {
                     .clone()
                     .or_else(|| args.next())
                     .filter(|value| !value.is_empty())
-                    .map(PathBuf::from)
                     .ok_or_else(|| MorphError::InvalidOption {
                         option: name.clone(),
                         reason: "needs a value",
                     })
             };
             match name.as_str() {
-                "--morph-script" => script = Some(value()?),
-                "--morph-out" => out = Some(value()?),
+                "--morph-script" => script = Some(PathBuf::from(value()?)),
+                "--morph-out" => out = Some(PathBuf::from(value()?)),
+                "--morph-trackpad" => {
+                    options.trackpad = match value()?.as_str() {
+                        "fit" => TrackpadOption::Fit,
+                        "off" => TrackpadOption::Off,
+                        _ => {
+                            return Err(MorphError::InvalidOption {
+                                option: name,
+                                reason: "must be fit or off",
+                            });
+                        }
+                    }
+                }
                 _ if inline.is_some() => return Err(MorphError::UnknownOption(arg)),
                 "--morph-help" => options.help = true,
                 "--morph-fallback-adapter" => options.fallback_adapter = true,
@@ -315,5 +345,37 @@ mod tests {
             Launch::from_args(["app", "--morph-help=yes"]),
             Err(MorphError::UnknownOption(option)) if option == "--morph-help=yes"
         ));
+    }
+}
+
+#[cfg(test)]
+mod trackpad_option_tests {
+    use super::{Launch, MorphError, TrackpadOption};
+
+    #[test]
+    fn trackpad_option() {
+        let trackpad =
+            |args: &[&str]| Launch::from_args(args.iter().copied()).map(|l| l.options.trackpad);
+        assert_eq!(trackpad(&["app"]).unwrap(), TrackpadOption::Fit);
+        assert_eq!(
+            trackpad(&["app", "--morph-trackpad", "off"]).unwrap(),
+            TrackpadOption::Off
+        );
+        assert_eq!(
+            trackpad(&["app", "--morph-trackpad=fit"]).unwrap(),
+            TrackpadOption::Fit
+        );
+        assert!(matches!(
+            trackpad(&["app", "--morph-trackpad=sideways"]),
+            Err(MorphError::InvalidOption { option, .. }) if option == "--morph-trackpad"
+        ));
+        assert!(matches!(
+            trackpad(&["app", "--morph-trackpad"]),
+            Err(MorphError::InvalidOption {
+                reason: "needs a value",
+                ..
+            })
+        ));
+        assert!(Launch::help().contains("--morph-trackpad"));
     }
 }

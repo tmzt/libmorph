@@ -13,6 +13,8 @@ mod overlay;
 #[cfg(script_runner)]
 mod script;
 mod shell;
+#[cfg(target_os = "macos")]
+mod trackpad;
 #[cfg(not(target_os = "android"))]
 mod winit;
 

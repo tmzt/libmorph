@@ -59,6 +59,19 @@ png = { version = "0.18.1", optional = true }
 # png's own chunk CRC crate, named for the manifest's pixel CRC.
 crc32fast = { version = "1.5", optional = true }
 
+# Trackpad fingers from AppKit, at the versions winit already uses.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5.2"
+objc2-foundation = { version = "0.2.2", features = ["NSEnumerator", "NSGeometry", "NSSet"] }
+objc2-app-kit = { version = "0.2.2", features = [
+    "block2",
+    "NSEvent",
+    "NSResponder",
+    "NSTouch",
+    "NSView",
+] }
+block2 = "0.5.1"
+
 [target.'cfg(target_os = "android")'.dependencies]
 raw-window-handle = "0.6"
 

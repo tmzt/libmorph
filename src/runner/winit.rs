@@ -16,6 +16,8 @@ use super::shell::{FrameStatus, Shell};
 use crate::config::Launch;
 use crate::gpu::{self, Gpu};
 use crate::input::{MouseOutput, MouseTouch, key_from_winit};
+#[cfg(target_os = "macos")]
+use crate::input::{PadMapping, PadTouch};
 use crate::{GpuError, MorphApp, MorphContext, MorphError, SafeArea, Touch, TouchPhase};
 
 /// The GPU, and the surface it was chosen for, once bring-up finishes.
@@ -49,6 +51,8 @@ pub fn run<A: MorphApp>() -> Result<(), MorphError> {
         return run_script::<A>(launch, &path);
     }
 
+    #[cfg(target_os = "macos")]
+    let pad = Pad::new(launch.options.trackpad);
     let event_loop = EventLoop::<Ready>::with_user_event().build()?;
     #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
     let mut handler = Handler::<A> {
@@ -58,6 +62,8 @@ pub fn run<A: MorphApp>() -> Result<(), MorphError> {
         window: None,
         shell: None,
         mouse: MouseTouch::default(),
+        #[cfg(target_os = "macos")]
+        pad,
         error: None,
     };
 
@@ -114,7 +120,32 @@ struct Handler<A> {
     window: Option<Arc<Window>>,
     shell: Option<Shell<A>>,
     mouse: MouseTouch,
+    #[cfg(target_os = "macos")]
+    pad: Pad,
     error: Option<MorphError>,
+}
+
+/// Trackpad fingers as touches (macOS).
+#[cfg(target_os = "macos")]
+struct Pad {
+    /// Off with `--morph-trackpad off`; installed with the window.
+    enabled: bool,
+    reader: Option<super::trackpad::Trackpad>,
+    touch: PadTouch,
+    /// The cursor, while it is over the surface.
+    cursor: Option<(f32, f32)>,
+}
+
+#[cfg(target_os = "macos")]
+impl Pad {
+    fn new(option: crate::config::TrackpadOption) -> Self {
+        Self {
+            enabled: option != crate::config::TrackpadOption::Off,
+            reader: None,
+            touch: PadTouch::new(PadMapping::Fit),
+            cursor: None,
+        }
+    }
 }
 
 impl<A: MorphApp> Handler<A> {
@@ -129,6 +160,10 @@ impl<A: MorphApp> Handler<A> {
     fn shutdown(&mut self, event_loop: &ActiveEventLoop) {
         if let Some(shell) = self.shell.take() {
             shell.shutdown();
+        }
+        #[cfg(target_os = "macos")]
+        {
+            self.pad.reader = None;
         }
         self.window = None;
         event_loop.exit();
@@ -247,6 +282,46 @@ impl<A: MorphApp> Handler<A> {
         }
     }
 
+    /// Deliver the trackpad frames read since the last call.
+    #[cfg(target_os = "macos")]
+    fn drain_pad(&mut self) {
+        let Some(reader) = &self.pad.reader else {
+            return;
+        };
+        let frames = reader.drain();
+        let surface = self.surface_size();
+        let scale = self.shell.as_ref().map_or((1.0, 1.0), |shell| {
+            let device = shell.ctx.device_spec().geometry;
+            (
+                surface.0 as f32 / device.width as f32,
+                surface.1 as f32 / device.height as f32,
+            )
+        });
+        for frame in frames {
+            log::debug!("trackpad: {frame:?}");
+            let was_active = self.pad.touch.active();
+            let touches = self
+                .pad
+                .touch
+                .frame(&frame, self.pad.cursor, surface, scale);
+            if !was_active && self.pad.touch.active() {
+                let output = self.mouse.interrupt();
+                self.mouse(output);
+            }
+            for touch in touches {
+                self.touch(touch);
+            }
+        }
+    }
+
+    /// Cancel every trackpad finger still down.
+    #[cfg(target_os = "macos")]
+    fn cancel_pad(&mut self) {
+        for touch in self.pad.touch.cancel() {
+            self.touch(touch);
+        }
+    }
+
     /// The surface size the mouse is tested against.
     fn surface_size(&self) -> (u32, u32) {
         self.window.as_ref().map_or((0, 0), |window| {
@@ -285,9 +360,17 @@ impl<A: MorphApp> ApplicationHandler<Ready> for Handler<A> {
     }
 
     fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+        #[cfg(target_os = "macos")]
+        self.cancel_pad();
         if let Some(shell) = &mut self.shell {
             shell.detach();
         }
+        self.check_exit(event_loop);
+    }
+
+    #[cfg(target_os = "macos")]
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.drain_pad();
         self.check_exit(event_loop);
     }
 
@@ -315,6 +398,13 @@ impl<A: MorphApp> Handler<A> {
             Some(window) => window,
             None => match self.create_window(event_loop) {
                 Ok(window) => {
+                    #[cfg(target_os = "macos")]
+                    if self.pad.enabled {
+                        self.pad.reader = super::trackpad::Trackpad::new(&window);
+                        if self.pad.reader.is_none() {
+                            log::warn!("libmorph: trackpad touches are unavailable");
+                        }
+                    }
                     self.window = Some(window.clone());
                     window
                 }
@@ -351,6 +441,8 @@ impl<A: MorphApp> Handler<A> {
                 }
             }
             WindowEvent::RedrawRequested => {
+                #[cfg(target_os = "macos")]
+                self.drain_pad();
                 let (Some(shell), Some(window)) = (&mut self.shell, &self.window) else {
                     return;
                 };
@@ -369,7 +461,18 @@ impl<A: MorphApp> Handler<A> {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let size = self.surface_size();
-                let output = self.mouse.moved(position.x as f32, position.y as f32, size);
+                let (x, y) = (position.x as f32, position.y as f32);
+                let output = self.mouse.moved(x, y, size);
+                #[cfg(target_os = "macos")]
+                let output = {
+                    let inside =
+                        (0.0..size.0 as f32).contains(&x) && (0.0..size.1 as f32).contains(&y);
+                    self.pad.cursor = inside.then_some((x, y));
+                    // No hover while trackpad fingers are touches.
+                    output.filter(|output| {
+                        !(self.pad.touch.active() && matches!(output, MouseOutput::Hover(..)))
+                    })
+                };
                 self.mouse(output);
             }
             WindowEvent::MouseInput {
@@ -377,13 +480,26 @@ impl<A: MorphApp> Handler<A> {
                 button: MouseButton::Left,
                 ..
             } => {
-                let output = self.mouse.button(state == ElementState::Pressed);
+                let pressed = state == ElementState::Pressed;
+                // Presses during a trackpad session (three-finger drag) are
+                // not a second source of touches.
+                #[cfg(target_os = "macos")]
+                if pressed && self.pad.touch.active() {
+                    return;
+                }
+                let output = self.mouse.button(pressed);
                 self.mouse(output);
             }
             WindowEvent::CursorLeft { .. } => {
+                #[cfg(target_os = "macos")]
+                {
+                    self.pad.cursor = None;
+                }
                 let output = self.mouse.left();
                 self.mouse(output);
             }
+            #[cfg(target_os = "macos")]
+            WindowEvent::Focused(false) => self.cancel_pad(),
             // Presses only: no releases, no auto-repeat, and no synthetic
             // presses for keys already held when the window gains focus.
             WindowEvent::KeyboardInput {

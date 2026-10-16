@@ -1001,12 +1001,16 @@ dependencies = [
 name = "libmorph"
 version = "0.1.0"
 dependencies = [
+ "block2 0.5.1",
  "cpal",
  "crc32fast",
  "env_logger",
  "libdevice",
  "libmobile",
  "log",
+ "objc2 0.5.3",
+ "objc2-app-kit",
+ "objc2-foundation 0.2.2",
  "png",
  "pollster",
  "raw-window-handle",

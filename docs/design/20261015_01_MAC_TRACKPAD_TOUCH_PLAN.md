@@ -1,7 +1,7 @@
 ---
 title: Mac trackpad fingers as touches
 date: 2026-10-15
-status: Draft
+status: In implementation
 covers:
   - Reading the fingers on a Mac trackpad (AppKit `NSTouch`) in the desktop
     runner and delivering them as `Touch` events with stable ids, as Android does
@@ -339,3 +339,8 @@ Step added:
    `--morph-window-scale 1` opens it at device size as before.
 
 Step 6 also describes `--morph-window-scale`.
+
+## Amendment — 2026-10-15 23:40 EDT: Implementation started
+
+Implementation has started. This document is now immutable, and changes
+only on the owner's explicit instruction.
