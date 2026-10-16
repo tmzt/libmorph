@@ -108,12 +108,18 @@ impl Keys {
     }
 }
 
-/// The fingers in one event, or `None` if it has none and none were down.
+/// The fingers in one event, or `None` if it carries no touches.
 fn read(event: &NSEvent, view: &NSView, keys: &mut Keys) -> Option<PadFrame> {
     // SAFETY: the monitor only sees gesture events, which carry touches.
     let touches = unsafe { event.touchesMatchingPhase_inView(NSTouchPhase::Any, Some(view)) };
     let touches = touches.to_vec();
-    if touches.is_empty() && keys.known.is_empty() {
+    // SAFETY: a plain property read.
+    let kind = unsafe { event.r#type() };
+    log::trace!("trackpad: {kind:?} with {} touches", touches.len());
+    // Some gesture events (magnify, rotate) carry no touches at all. They
+    // say nothing about the fingers: a lift arrives as a touch in the
+    // `Ended` phase.
+    if touches.is_empty() {
         return None;
     }
     let mut frame = PadFrame::default();
