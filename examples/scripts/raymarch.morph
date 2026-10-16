@@ -1,7 +1,17 @@
 # The raymarch example, scripted (galaxy_s24, 1080×2340):
 #   cargo run --example raymarch --features script -- --morph-script examples/scripts/raymarch.morph
-# Let the camera circle, then drag it round and up.
+# Let the camera circle, drag it round and up, then pinch to zoom in.
 frames 60
 screenshot orbit
 drag 1 800 1500 300 1200 20
 screenshot dragged
+# Two fingers apart: zoom in to half the distance.
+touch 1 start 440 1200
+touch 2 start 640 1200
+frames 1
+touch 1 move 340 1200
+touch 2 move 740 1200
+frames 1
+screenshot pinched
+touch 1 end 340 1200
+touch 2 end 740 1200

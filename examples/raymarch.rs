@@ -6,7 +6,8 @@
 //! has none) instead of drawing a blank screen.
 //!
 //! Drag with any number of fingers to orbit (their centroid moves the
-//! camera); left alone, the camera circles slowly. Scripted, without a
+//! camera), and pinch to zoom; left alone, the camera circles slowly. On a
+//! Mac, two trackpad fingers are touches. Scripted, without a
 //! window: `cargo run --example raymarch --features script --
 //! --morph-script examples/scripts/raymarch.morph`.
 
@@ -52,6 +53,8 @@ struct Raymarch {
     time: f32,
     yaw: f32,
     pitch: f32,
+    /// The camera's distance from the scene.
+    distance: f32,
     /// The touches down: id and last position.
     touches: Vec<(u64, f32, f32)>,
 }
@@ -180,6 +183,7 @@ impl MorphApp for Raymarch {
             time: 0.0,
             yaw: 0.6,
             pitch: 0.35,
+            distance: 6.0,
             touches: Vec::new(),
         }
     }
@@ -196,7 +200,7 @@ impl MorphApp for Raymarch {
         let (width, height) = frame.size;
         let uniforms = [
             [width as f32, height as f32, self.time, encode],
-            [self.yaw, self.pitch, 6.0, 0.0],
+            [self.yaw, self.pitch, self.distance, 0.0],
         ];
         ctx.queue().write_buffer(&self.frame, 0, &bytes(&uniforms));
 
@@ -233,11 +237,33 @@ impl MorphApp for Raymarch {
                 let (_, x, y) = self.touches[index];
                 self.yaw -= 0.005 * (touch.x - x) / n;
                 self.pitch = (self.pitch + 0.005 * (touch.y - y) / n).clamp(0.05, 1.4);
+                let before = spread(&self.touches);
                 self.touches[index] = (touch.id, touch.x, touch.y);
+                // Fingers apart move the camera in, by the ratio of spreads.
+                if let (Some(before), Some(after)) = (before, spread(&self.touches)) {
+                    self.distance = (self.distance * before / after).clamp(3.0, 15.0);
+                }
             }
             TouchPhase::Ended | TouchPhase::Cancelled => self.touches.retain(|t| t.0 != touch.id),
         }
     }
+}
+
+/// The mean distance of the touches from their centroid, with two or more.
+fn spread(touches: &[(u64, f32, f32)]) -> Option<f32> {
+    if touches.len() < 2 {
+        return None;
+    }
+    let n = touches.len() as f32;
+    let (cx, cy) = touches
+        .iter()
+        .fold((0.0, 0.0), |(x, y), t| (x + t.1 / n, y + t.2 / n));
+    let spread = touches
+        .iter()
+        .map(|t| (t.1 - cx).hypot(t.2 - cy))
+        .sum::<f32>()
+        / n;
+    (spread > 1.0).then_some(spread)
 }
 
 fn main() -> Result<(), libmorph::MorphError> {
