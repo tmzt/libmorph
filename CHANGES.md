@@ -181,3 +181,15 @@ and 7, checked by the owner on a MacBook Pro (Apple M1, macOS 14.5).
   `Ended`; one finger still clicks and hovers; raymarch's pinch zoom
   follows the fingers; the window fits on the display, and
   `--morph-window-scale 1` gives the device size.
+
+## 2026-10-16 08:42 EDT — Audio output device and streaming sources
+
+Plan: `docs/design/20261016_01_AUDIO_DEVICE_AND_SOURCES_PLAN.md` (Draft).
+
+Requested by the owner for the tower defense game, whose audio is a node
+graph rendered by the app. libmorph keeps owning the cpal stream and adds
+streaming sources (`Audio::add_source`, `remove_source`, `format`), mixed
+with the `Sound` voices. A new `audio-cpal` feature re-exports cpal and
+exposes the output device, with passthroughs for cpal's host backends. The
+stream is also paused in winit's `suspended`. Waiting for the owner's
+approval before implementation.
