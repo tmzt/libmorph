@@ -14,3 +14,25 @@ on 2026-10-16; the tag was added on 2026-10-16.
 
 Initial release. Recorded retroactively on 2026-10-16; the tag was added on
 2026-10-16.
+
+## libmorph 0.2.0 — 2026-10-16 (tag `v0.2.0`)
+
+Audio output device and streaming sources
+(`docs/design/20261016_01_AUDIO_DEVICE_AND_SOURCES_PLAN.md`). The commit is
+the one tagged `v0.2.0`: the entry is written in that commit, which cannot
+name its own hash.
+
+- **Breaking:** on desktop and the web, the audio stream (voices and
+  sources) pauses in winit's `suspended` and plays again in `resumed`, as
+  it already did on Android.
+- Added `Audio::add_source(Source) -> SourceId`, `remove_source`,
+  `format() -> Option<OutputFormat>` and `set_master_volume`, with the
+  types `Source` (`Box<dyn FnMut(&mut [f32]) + Send>`), `SourceId` and
+  `OutputFormat { sample_rate, channels }`. Without `audio`, they exist and
+  do nothing.
+- Added the `audio-cpal` feature: `libmorph::cpal`, and
+  `Audio::device() -> Option<&impl DeviceTrait>`, `stream_config()` and
+  `sample_format()`.
+- `stop_all` stops voices only; sources keep running.
+- On Android, cpal now comes from libmobile 0.1.1 (`libmobile/cpal`); the
+  libmobile version is compatible with 0.1.0.
