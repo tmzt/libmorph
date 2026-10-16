@@ -213,7 +213,10 @@ Two crates use the name `Insets`: `libdevice::Insets` (`u32`, top/right/bottom/l
 ```toml
 [features]
 default = ["audio"]
-audio = ["dep:cpal"]
+# cpal on desktop and the web; on Android, libmobile's copy.
+audio = ["dep:cpal", "libmobile?/cpal"]
+# The cpal re-export (`libmorph::cpal`) and the output device it opened.
+audio-cpal = ["audio"]
 mobile = ["dep:libmobile"]
 # Passthrough: each one also enables `mobile`, so `libmobile/<x>` is never
 # requested without the dependency itself.
@@ -230,6 +233,8 @@ script = ["dep:png", "dep:crc32fast"]
 Don't invent passthroughs for features libmobile doesn't have (e.g. `sensors`). Add one only once the upstream feature exists.
 
 wgpu's default features already include `webgpu`. `web` adds `webgl` so WebGL2 works as a fallback.
+
+cpal is owned like the NDK: libmobile owns it on Android (its `cpal` feature, re-exported as `libmobile::android::cpal`), and libmorph owns it on desktop and the web (a `cfg(not(target_os = "android"))` dependency). `src/audio.rs` aliases whichever copy applies as `audio::cpal`, and `lib.rs` re-exports that alias under `audio-cpal`. Without `audio`, neither crate depends on cpal. cpal's host backends (JACK, PulseAudio, PipeWire, ASIO) get passthroughs only when Linux or Windows is supported.
 
 Make `winit` a target-specific dependency for `cfg(not(target_os = "android"))`. On Android, `android-activity`/`ndk` come in through libmobile's re-exports (`libmobile::android::{android_activity, ndk}`). Don't declare them separately, or the JavaVM singleton gets duplicated.
 
@@ -302,7 +307,12 @@ Expose whatever was granted on `MorphContext` (`ctx.limits()`) so apps can featu
     - web: zero for now (the browser's `env(safe-area-inset-*)` isn't reachable from wasm without CSS plumbing);
   - `scale_factor()`: surface pixels per dp/point/CSS pixel. On desktop, `spec.pixel_ratio` scaled by surface width / device width;
   - `px_per_mm()`: surface pixels per millimetre of the device's display, `spec.px_per_mm()` scaled the same way;
-  - `audio()`: a real handle under `audio`, a zero-sized no-op stub otherwise;
+  - `audio()`: a real handle under `audio`, a zero-sized no-op stub otherwise (plan `20261016_01_AUDIO_DEVICE_AND_SOURCES_PLAN.md`):
+    - `play`/`play_with` a `Sound` (in-memory `f32` samples, resampled), giving a `Voice` for `set_volume` and `stop`; `stop_all` stops voices only;
+    - `add_source(Source) -> SourceId` and `remove_source`: a `Box<dyn FnMut(&mut [f32]) + Send>` called on the audio thread with a zeroed, interleaved buffer at `format()`'s rate and channel count, mixed with the voices. Removed sources are sent back and dropped on the main thread;
+    - `set_master_volume(f32)` scales the whole mix before clipping to -1..1; `format() -> Option<OutputFormat { sample_rate, channels }>`;
+    - under `audio-cpal`: `device() -> Option<&impl DeviceTrait>` (the concrete `cpal::Device` is not exposed), `stream_config()`, `sample_format()`. The stream itself is never exposed;
+    - the stream pauses with the app: on Android at `Pause`/`Resume`, on desktop and web in winit's `suspended`/`resumed`. Scripted runs have no stream, so sources are never called;
   - `exit()`: ask the runner to stop. On desktop and web the window closes; on Android libmorph calls `libmobile::android::finish` and the activity tears down normally;
   - `data_dir() -> Option<&Path>`: Android's internal data path; `None` on desktop and web.
 - **`libmorph::script`** (plan `20261014_04_SCRIPTED_RUNS_AND_PNG_CAPTURE_PLAN.md`): scripted, headless runs.
