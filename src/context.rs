@@ -80,6 +80,14 @@ impl MorphContext {
         self.scale_factor
     }
 
+    /// Surface pixels per millimetre of the device's display. On desktop,
+    /// the emulated device's density, scaled when the window is smaller
+    /// than the device; on Android and the web, the spec's own figure.
+    #[must_use]
+    pub fn px_per_mm(&self) -> f32 {
+        surface_px_per_mm(&self.spec, self.surface_size)
+    }
+
     /// Physical pixels.
     #[must_use]
     pub fn surface_size(&self) -> (u32, u32) {
@@ -117,5 +125,25 @@ impl MorphContext {
     #[must_use]
     pub fn data_dir(&self) -> Option<&Path> {
         self.data_dir.as_deref()
+    }
+}
+
+/// `spec.px_per_mm()` in pixels of a surface of `width` (device pixels
+/// scaled by surface width / device width).
+fn surface_px_per_mm(spec: &DeviceSpec, (width, _): (u32, u32)) -> f32 {
+    spec.px_per_mm() * width as f32 / spec.geometry.width as f32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::surface_px_per_mm;
+    use libdevice::GALAXY_S24;
+
+    #[test]
+    fn px_per_mm_follows_the_surface() {
+        let full = surface_px_per_mm(&GALAXY_S24, (1080, 2340));
+        assert!((full - 416.0 / 25.4).abs() < 1e-4);
+        let half = surface_px_per_mm(&GALAXY_S24, (540, 1170));
+        assert!((half - full / 2.0).abs() < 1e-4);
     }
 }

@@ -170,7 +170,6 @@ pub(crate) struct PadFrame {
 pub(crate) enum PadMapping {
     /// Pad distances equal distances on the emulated device, centred on the
     /// cursor. `px_per_mm` is in device pixels.
-    #[cfg_attr(not(test), allow(dead_code))]
     Physical { px_per_mm: f32 },
     /// The whole pad covers the whole surface.
     Fit,

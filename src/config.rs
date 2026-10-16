@@ -23,9 +23,11 @@ libmorph options:
                                    (needs the `script` feature)
   --morph-out <dir>                The script's output directory (default
                                    out/morph/YYYYMMDD_NN_<script name>)
-  --morph-trackpad <fit|off>       macOS: two or more trackpad fingers are
-                                   touches, the whole pad covering the screen
-                                   (fit, the default), or not at all (off)
+  --morph-trackpad <mode>          macOS: two or more trackpad fingers are
+                                   touches. physical (default): pad distances
+                                   equal distances on the device, centred on
+                                   the cursor; fit: the whole pad covers the
+                                   screen; off: no trackpad touches
 ";
 
 /// libmorph's own options.
@@ -45,8 +47,10 @@ pub(crate) struct MorphOptions {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 pub(crate) enum TrackpadOption {
-    /// The whole pad covers the whole surface.
+    /// Pad distances equal distances on the device, centred on the cursor.
     #[default]
+    Physical,
+    /// The whole pad covers the whole surface.
     Fit,
     /// No trackpad touches.
     Off,
@@ -122,12 +126,13 @@ impl Launch {
                 "--morph-out" => out = Some(PathBuf::from(value()?)),
                 "--morph-trackpad" => {
                     options.trackpad = match value()?.as_str() {
+                        "physical" => TrackpadOption::Physical,
                         "fit" => TrackpadOption::Fit,
                         "off" => TrackpadOption::Off,
                         _ => {
                             return Err(MorphError::InvalidOption {
                                 option: name,
-                                reason: "must be fit or off",
+                                reason: "must be physical, fit or off",
                             });
                         }
                     }
@@ -356,7 +361,11 @@ mod trackpad_option_tests {
     fn trackpad_option() {
         let trackpad =
             |args: &[&str]| Launch::from_args(args.iter().copied()).map(|l| l.options.trackpad);
-        assert_eq!(trackpad(&["app"]).unwrap(), TrackpadOption::Fit);
+        assert_eq!(trackpad(&["app"]).unwrap(), TrackpadOption::Physical);
+        assert_eq!(
+            trackpad(&["app", "--morph-trackpad", "physical"]).unwrap(),
+            TrackpadOption::Physical
+        );
         assert_eq!(
             trackpad(&["app", "--morph-trackpad", "off"]).unwrap(),
             TrackpadOption::Off

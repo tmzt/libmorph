@@ -52,7 +52,7 @@ pub fn run<A: MorphApp>() -> Result<(), MorphError> {
     }
 
     #[cfg(target_os = "macos")]
-    let pad = Pad::new(launch.options.trackpad);
+    let pad = Pad::new(launch.options.trackpad, &launch.spec);
     let event_loop = EventLoop::<Ready>::with_user_event().build()?;
     #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
     let mut handler = Handler::<A> {
@@ -138,11 +138,18 @@ struct Pad {
 
 #[cfg(target_os = "macos")]
 impl Pad {
-    fn new(option: crate::config::TrackpadOption) -> Self {
+    fn new(option: crate::config::TrackpadOption, spec: &DeviceSpec) -> Self {
+        use crate::config::TrackpadOption;
+        let mapping = match option {
+            TrackpadOption::Fit | TrackpadOption::Off => PadMapping::Fit,
+            TrackpadOption::Physical => PadMapping::Physical {
+                px_per_mm: spec.px_per_mm(),
+            },
+        };
         Self {
-            enabled: option != crate::config::TrackpadOption::Off,
+            enabled: option != TrackpadOption::Off,
             reader: None,
-            touch: PadTouch::new(PadMapping::Fit),
+            touch: PadTouch::new(mapping),
             cursor: None,
         }
     }

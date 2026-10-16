@@ -964,7 +964,7 @@ checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 [[package]]
 name = "libdevice"
 version = "0.1.0"
-source = "git+https://github.com/tmzt/libdevice#a13a2b65c55dc77a5f208648732ed37568ac8b1a"
+source = "git+https://github.com/tmzt/libdevice#b27ba72a52bbf0567ba25f685f06cc5211aadb7d"
 dependencies = [
  "toml",
 ]
