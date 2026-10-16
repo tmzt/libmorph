@@ -5,7 +5,8 @@
 //! adapter without that fails at bring-up with `GpuError::Limits` (WebGL2
 //! has none) instead of drawing a blank screen.
 //!
-//! Drag to orbit; left alone, the camera circles slowly. Scripted, without a
+//! Drag with any number of fingers to orbit (their centroid moves the
+//! camera); left alone, the camera circles slowly. Scripted, without a
 //! window: `cargo run --example raymarch --features script --
 //! --morph-script examples/scripts/raymarch.morph`.
 
@@ -51,8 +52,8 @@ struct Raymarch {
     time: f32,
     yaw: f32,
     pitch: f32,
-    /// The last point of a drag in progress.
-    drag: Option<(f32, f32)>,
+    /// The touches down: id and last position.
+    touches: Vec<(u64, f32, f32)>,
 }
 
 fn bytes(values: &[[f32; 4]]) -> Vec<u8> {
@@ -179,13 +180,13 @@ impl MorphApp for Raymarch {
             time: 0.0,
             yaw: 0.6,
             pitch: 0.35,
-            drag: None,
+            touches: Vec::new(),
         }
     }
 
     fn update(&mut self, _ctx: &mut MorphContext, dt: Duration) {
         self.time += dt.as_secs_f32();
-        if self.drag.is_none() {
+        if self.touches.is_empty() {
             self.yaw += 0.25 * dt.as_secs_f32();
         }
     }
@@ -222,15 +223,19 @@ impl MorphApp for Raymarch {
 
     fn on_touch(&mut self, _ctx: &mut MorphContext, touch: Touch) {
         match touch.phase {
-            TouchPhase::Started => self.drag = Some((touch.x, touch.y)),
+            TouchPhase::Started => self.touches.push((touch.id, touch.x, touch.y)),
             TouchPhase::Moved => {
-                if let Some((x, y)) = self.drag {
-                    self.yaw -= 0.005 * (touch.x - x);
-                    self.pitch = (self.pitch + 0.005 * (touch.y - y)).clamp(0.05, 1.4);
-                    self.drag = Some((touch.x, touch.y));
-                }
+                let Some(index) = self.touches.iter().position(|t| t.0 == touch.id) else {
+                    return;
+                };
+                // The centroid moves by this finger's share of its movement.
+                let n = self.touches.len() as f32;
+                let (_, x, y) = self.touches[index];
+                self.yaw -= 0.005 * (touch.x - x) / n;
+                self.pitch = (self.pitch + 0.005 * (touch.y - y) / n).clamp(0.05, 1.4);
+                self.touches[index] = (touch.id, touch.x, touch.y);
             }
-            TouchPhase::Ended | TouchPhase::Cancelled => self.drag = None,
+            TouchPhase::Ended | TouchPhase::Cancelled => self.touches.retain(|t| t.0 != touch.id),
         }
     }
 }
