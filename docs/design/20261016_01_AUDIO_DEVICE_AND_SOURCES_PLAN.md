@@ -280,3 +280,60 @@ and `SampleFormat` are plain data in cpal, not a host's implementation.
 
 Also: one line in section 5's "Dropping off the audio thread" paragraph
 runs past the wrapping width. The text is correct.
+
+## Amendment — 2026-10-16 09:07 EDT: libmobile owns cpal on Android
+
+Replaces the feature table in section 3 and adds a step before section 7's
+step 1. Agreed with the owner (2026-10-16): "libmobile own cpal on android
+and libmorph owns it on desktop/web, feature passed down to libmobile so
+that cpal dependency remains optional".
+
+libmobile owns the Android platform layer, including the NDK. cpal reaches
+AAudio through the `ndk` crate, so on Android cpal belongs to libmobile,
+and libmorph uses libmobile's copy, as it already does for
+`android_activity` and `ndk`. On desktop and the web, libmorph is the
+platform layer and keeps its own cpal. libdevice stays data only.
+
+### libmobile (its own plan, in its repository)
+
+- A `cpal` feature: `cpal = ["dep:cpal"]`, with cpal 0.18 (the version
+  libmorph uses) as an optional Android-only dependency.
+- `libmobile::android::cpal`: a re-export, next to `android_activity`
+  and `ndk`. libmobile adds no wrapper of its own.
+- Without the feature, libmobile does not depend on cpal.
+
+### libmorph features
+
+```toml
+# cpal on desktop and the web; libmobile's cpal on Android.
+audio = ["dep:cpal", "libmobile?/cpal"]
+# The cpal re-export and the output device it opened, on every host.
+audio-cpal = ["audio"]
+# Passthrough: cpal host backends (desktop). Each also enables
+# `audio-cpal`. They enable nothing on Android or the web.
+audio-jack = ["audio-cpal", "cpal/jack"]
+audio-pulseaudio = ["audio-cpal", "cpal/pulseaudio"]
+audio-pipewire = ["audio-cpal", "cpal/pipewire"]
+audio-asio = ["audio-cpal", "cpal/asio"]
+```
+
+- libmorph's own cpal becomes a dependency for
+  `cfg(not(target_os = "android"))` only. `web` keeps
+  `cpal?/wasm-bindgen`.
+- On Android, `mobile` is always on (the target guard), so `audio` turns
+  on `libmobile/cpal`. Without `audio`, neither crate depends on cpal.
+- In `src/audio.rs` and `lib.rs`, one alias picks the copy: on Android
+  `libmobile::android::cpal`, elsewhere `::cpal`. `pub use cpal;`
+  (under `audio-cpal`) re-exports that alias, so apps write
+  `libmorph::cpal` on every host, and `device()`, `stream_config()`
+  and `sample_format()` exist on Android too.
+
+### Steps
+
+Before section 7's step 1:
+
+0. **libmobile.** The libmobile plan above is implemented and pushed, and
+   libmorph pins it. Android audio then builds with libmobile's cpal.
+   **Done when:** `cargo clippy --target aarch64-linux-android --features
+   mobile` passes with one cpal in `Cargo.lock`, and Android playback
+   is unchanged.
