@@ -184,21 +184,29 @@ impl<A: MorphApp> Handler<A> {
     }
 
     fn create_window(&self, event_loop: &ActiveEventLoop) -> Result<Arc<Window>, MorphError> {
-        let spec = &self
+        let launch = self
             .launch
             .as_ref()
-            .expect("launch is taken after the window")
-            .spec;
+            .expect("launch is taken after the window");
+        let spec = &launch.spec;
         let attributes =
             Window::default_attributes().with_title(format!("{} (libmorph)", spec.name));
 
         #[cfg(not(target_arch = "wasm32"))]
-        let attributes = attributes
-            .with_inner_size(winit::dpi::PhysicalSize::new(
-                spec.geometry.width,
-                spec.geometry.height,
-            ))
-            .with_resizable(false);
+        let attributes = {
+            let monitor = event_loop.primary_monitor().map(|monitor| {
+                let size = monitor.size();
+                (size.width, size.height)
+            });
+            let (width, height) = window_size(
+                (spec.geometry.width, spec.geometry.height),
+                monitor,
+                launch.options.window_scale,
+            );
+            attributes
+                .with_inner_size(winit::dpi::PhysicalSize::new(width, height))
+                .with_resizable(false)
+        };
 
         #[cfg(target_arch = "wasm32")]
         let attributes = {
@@ -348,7 +356,29 @@ fn place(ctx: &mut MorphContext, window: &Window, (width, height): (u32, u32)) {
         ctx.scale_factor = window.scale_factor() as f32;
     } else {
         ctx.safe_area = emulated_safe_area(&ctx.spec, (width, height));
+        // A window smaller than the device shows the same dp layout.
+        ctx.scale_factor = ctx.spec.pixel_ratio * width as f32 / ctx.spec.geometry.width as f32;
     }
+}
+
+/// The window size, in host physical pixels, for a device of `device`
+/// pixels on a display of `monitor` pixels. `Fit` leaves room for the menu
+/// bar, Dock and title bar, and never enlarges the device.
+#[cfg(not(target_arch = "wasm32"))]
+fn window_size(
+    (width, height): (u32, u32),
+    monitor: Option<(u32, u32)>,
+    scale: crate::config::WindowScale,
+) -> (u32, u32) {
+    let factor = match (scale, monitor) {
+        (crate::config::WindowScale::Factor(factor), _) => factor,
+        (crate::config::WindowScale::Fit, None) => 1.0,
+        (crate::config::WindowScale::Fit, Some((monitor_width, monitor_height))) => 1f32
+            .min(0.9 * monitor_width as f32 / width as f32)
+            .min(0.85 * monitor_height as f32 / height as f32),
+    };
+    let scaled = |length: u32| ((length as f32 * factor).round() as u32).max(1);
+    (scaled(width), scaled(height))
 }
 
 /// The spec's safe area, scaled if the window manager did not grant the
@@ -615,5 +645,38 @@ mod tests {
             crate::MorphError::Script(crate::script::ScriptError::Parse { line: 3, .. })
         ));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod window_size_tests {
+    use super::window_size;
+    use crate::config::WindowScale;
+
+    const S24: (u32, u32) = (1080, 2340);
+
+    #[test]
+    fn fit_shrinks_a_tall_device_onto_a_laptop_display() {
+        // A 14-inch MacBook Pro.
+        assert_eq!(
+            window_size(S24, Some((3024, 1964)), WindowScale::Fit),
+            (770, 1669)
+        );
+    }
+
+    #[test]
+    fn fit_never_enlarges() {
+        assert_eq!(window_size(S24, Some((7680, 4320)), WindowScale::Fit), S24);
+        assert_eq!(window_size(S24, None, WindowScale::Fit), S24);
+    }
+
+    #[test]
+    fn a_factor_is_exact() {
+        let display = Some((3024, 1964));
+        assert_eq!(window_size(S24, display, WindowScale::Factor(1.0)), S24);
+        assert_eq!(
+            window_size(S24, display, WindowScale::Factor(0.5)),
+            (540, 1170)
+        );
     }
 }

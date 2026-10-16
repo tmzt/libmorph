@@ -28,11 +28,14 @@ libmorph options:
                                    equal distances on the device, centred on
                                    the cursor; fit: the whole pad covers the
                                    screen; off: no trackpad touches
+  --morph-window-scale <fit|n>     The window's size as a multiple of the
+                                   device's pixels. fit (default): as large as
+                                   fits the display, at most 1
 ";
 
 /// libmorph's own options.
 #[cfg(not(target_os = "android"))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct MorphOptions {
     pub help: bool,
     pub fallback_adapter: bool,
@@ -40,6 +43,20 @@ pub(crate) struct MorphOptions {
     /// Read on macOS only; accepted everywhere so one command line works.
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub trackpad: TrackpadOption,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub window_scale: WindowScale,
+}
+
+/// `--morph-window-scale`: the desktop window's size in device pixels.
+#[cfg(not(target_os = "android"))]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) enum WindowScale {
+    /// As large as fits the display, at most 1.
+    #[default]
+    Fit,
+    /// Exactly this multiple of the device size.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    Factor(f32),
 }
 
 /// `--morph-trackpad`: how trackpad fingers become touches (macOS).
@@ -64,6 +81,7 @@ impl Default for MorphOptions {
             fallback_adapter: false,
             overlay: true,
             trackpad: TrackpadOption::default(),
+            window_scale: WindowScale::default(),
         }
     }
 }
@@ -124,6 +142,23 @@ impl Launch {
             match name.as_str() {
                 "--morph-script" => script = Some(PathBuf::from(value()?)),
                 "--morph-out" => out = Some(PathBuf::from(value()?)),
+                "--morph-window-scale" => {
+                    let value = value()?;
+                    options.window_scale = match value.as_str() {
+                        "fit" => WindowScale::Fit,
+                        _ => match value.parse::<f32>() {
+                            Ok(factor) if factor.is_finite() && factor > 0.0 => {
+                                WindowScale::Factor(factor)
+                            }
+                            _ => {
+                                return Err(MorphError::InvalidOption {
+                                    option: name,
+                                    reason: "must be fit or a number above 0",
+                                });
+                            }
+                        },
+                    }
+                }
                 "--morph-trackpad" => {
                     options.trackpad = match value()?.as_str() {
                         "physical" => TrackpadOption::Physical,
@@ -355,7 +390,32 @@ mod tests {
 
 #[cfg(test)]
 mod trackpad_option_tests {
-    use super::{Launch, MorphError, TrackpadOption};
+    use super::{Launch, MorphError, TrackpadOption, WindowScale};
+
+    #[test]
+    fn window_scale_option() {
+        let scale =
+            |args: &[&str]| Launch::from_args(args.iter().copied()).map(|l| l.options.window_scale);
+        assert_eq!(scale(&["app"]).unwrap(), WindowScale::Fit);
+        assert_eq!(
+            scale(&["app", "--morph-window-scale", "fit"]).unwrap(),
+            WindowScale::Fit
+        );
+        assert_eq!(
+            scale(&["app", "--morph-window-scale=0.5"]).unwrap(),
+            WindowScale::Factor(0.5)
+        );
+        for bad in ["0", "-1", "big", "NaN", "inf"] {
+            assert!(
+                matches!(
+                    scale(&["app", "--morph-window-scale", bad]),
+                    Err(MorphError::InvalidOption { .. })
+                ),
+                "{bad}"
+            );
+        }
+        assert!(Launch::help().contains("--morph-window-scale"));
+    }
 
     #[test]
     fn trackpad_option() {
