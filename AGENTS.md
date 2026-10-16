@@ -106,6 +106,46 @@ Before writing, modifying or deleting code for a new planned work item:
    Rule 3.1. The table is a summary: the documents and their amendments stay
    the record.
 
+## CRITICAL RULE 5: VERSIONS AND TAGS
+
+Adopted from libcontrols (its Rule 5) on the owner's instruction,
+2026-10-16; see CHANGES.md. The workspace has two crates with public APIs,
+each versioned on its own: `libmorph` (tags `v<version>`) and
+`crates/libmorph-build` (tags `libmorph-build-v<version>`).
+
+1. The commit that changes a crate's `version` in its `Cargo.toml` is tagged
+   (for example `git tag v0.2.0 <commit>`) as soon as it is committed. A tag
+   that has been pushed is never moved or deleted.
+2. `VERSIONS.md` records each version change, and only version changes:
+   one entry per version, appended oldest first, headed
+   `## <crate> <version> — YYYY-MM-DD (<short commit>, tag <tag>)`. The
+   entry lists the public API changes since the previous version: what was
+   added, changed or removed, with breaking changes marked **Breaking**.
+   Internal changes are not listed, and commits that do not change a version
+   get no entry. Earlier entries are never edited. An entry written in the
+   version commit itself names only the tag, since a commit cannot contain
+   its own hash.
+3. The `VERSIONS.md` entry is in the same commit as the version change. This
+   is an exception to Rule 3.1.
+4. While the version is `0.x`, the bump follows the public API change. A
+   release whose public API changes are not strictly additive bumps the minor
+   version (`0.x.y` to `0.(x+1).0`): anything removed, renamed or changed in
+   signature or type, behaviour a caller can observe changing, or a variant or
+   field added to an exhaustive public enum or struct. A release whose changes
+   are strictly additive, or change no public API, bumps the patch version
+   (`0.x.y` to `0.x.(y+1)`). This applies to releases after 0.1.0.
+5. The public API rule is recursive through dependencies. When a crate with
+   a public API moves a dependency to a version that is not semver-compatible
+   with the one it used (for a `0.x` dependency, a new minor version; from
+   1.0, a new major version), its own release is not strictly additive and
+   bumps its minor version under Rule 5.4 (its major version from 1.0), even
+   when its own code does not change. Every crate with a public API that
+   depends on it does the same when it takes that release, and so on up the
+   chain. libmorph re-exports libdevice, libmobile's types, wgpu and cpal,
+   so their incompatible bumps are libmorph's too. The `VERSIONS.md` entry
+   names the dependency with its old and new versions and marks the change
+   **Breaking**.
+
 ## Architecture
 
 `libmorph` gives an app one API (`MorphApp`) across three hosts:
