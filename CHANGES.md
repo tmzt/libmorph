@@ -224,3 +224,14 @@ libmorph will request wgpu's `PIPELINE_CACHE` on Android with Vulkan,
 keep the cache's data under `<data_dir>/libmorph/`, offer it as
 `ctx.pipeline_cache()`, and save it after `init`, on suspend and on
 exit. Waiting for the owner's approval before implementation.
+
+## 2026-10-20 00:06 EDT — Persistent pipeline cache approved and built
+
+Plan: `docs/design/20261016_02_PIPELINE_CACHE_PLAN.md` (In implementation).
+
+The owner approved the plan with section 8's recommendations (no
+opt-out switch, no desktop Vulkan cache, cache growth accepted). Steps 1
+to 3 are built: `Gpu::new` requests `PIPELINE_CACHE` from the Android
+runner, `src/pipeline_cache.rs` loads and saves the data, and
+`MorphContext::pipeline_cache()` offers it. Step 4, the trial on the S23,
+follows in the game. To be released as libmorph 0.2.1 (strictly additive).
