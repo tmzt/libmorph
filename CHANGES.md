@@ -235,3 +235,14 @@ to 3 are built: `Gpu::new` requests `PIPELINE_CACHE` from the Android
 runner, `src/pipeline_cache.rs` loads and saves the data, and
 `MorphContext::pipeline_cache()` offers it. Step 4, the trial on the S23,
 follows in the game. To be released as libmorph 0.2.1 (strictly additive).
+
+## 2026-10-20 00:14 EDT — Persistent pipeline cache: the trial on the S23
+
+Plan: `docs/design/20261016_02_PIPELINE_CACHE_PLAN.md`, step 4.
+
+The tower defense game, on libmorph 0.2.1, builds every pipeline through
+`ctx.pipeline_cache()`. On the owner's Galaxy S23 (Adreno 740, Vulkan),
+unlocked: the second launch logged `pipeline cache: loaded 627724 bytes`,
+and its slowest pipeline (a raymarched render pipeline, on a worker
+thread) was built in 34 ms, from 1247–1309 ms without the cache. The file
+is `files/libmorph/wgpu_pipeline_cache_vulkan_20803_1124403713.bin`.
