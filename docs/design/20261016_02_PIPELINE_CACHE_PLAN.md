@@ -1,7 +1,7 @@
 ---
 title: Persistent pipeline cache
 date: 2026-10-16
-status: In implementation
+status: Implemented
 covers:
   - Requesting `wgpu::Features::PIPELINE_CACHE` when the adapter offers it
     and the app has a data directory (Android)
@@ -205,3 +205,16 @@ in the sources may pass it too.
 
 Implementation has started with step 1, and this document is now
 immutable (Rule 1.5).
+
+## Amendment — 2026-10-20 00:14 EDT: Implemented
+
+Every step is done and its **Done when:** holds:
+
+1. Bring-up and loading: a2b2f60.
+2. Saving: a2b2f60 (Android clippy clean with `--features mobile`).
+3. Docs: a2b2f60 (README), 2d0cda0 (AGENTS.md).
+4. Trial: in the tower defense game on the S23, the second launch logged
+   `pipeline cache: loaded 627724 bytes` and the slowest pipeline's build
+   went from about 1.3 s to 34 ms (CHANGES, this commit's addendum).
+
+Released in libmorph 0.2.1 (tag v0.2.1).
