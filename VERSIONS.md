@@ -36,3 +36,14 @@ name its own hash.
 - `stop_all` stops voices only; sources keep running.
 - On Android, cpal now comes from libmobile 0.1.1 (`libmobile/cpal`); the
   libmobile version is compatible with 0.1.0.
+
+## libmorph 0.2.1 — 2026-10-20 (tag v0.2.1)
+
+Strictly additive (Rule 5.4), plan
+`docs/design/20261016_02_PIPELINE_CACHE_PLAN.md`:
+
+- Added `MorphContext::pipeline_cache() -> Option<&wgpu::PipelineCache>`:
+  on Android with Vulkan, a cache kept in `<data_dir>/libmorph/`, loaded
+  before `init` and saved after `init`, on suspend and on exit; `None`
+  elsewhere. On Android the device is now requested with
+  `Features::PIPELINE_CACHE` where the adapter offers it.
