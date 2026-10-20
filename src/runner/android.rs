@@ -15,6 +15,7 @@ use std::time::Duration;
 use super::shell::{FrameStatus, Shell};
 use crate::gpu::{self, Gpu};
 use crate::input::KeyRouting;
+use crate::pipeline_cache::PipelineCacheStore;
 use crate::{GpuError, Key, KeyStatus, MorphApp, MorphContext, SafeArea, Touch, TouchPhase};
 
 /// Run `A` until the activity is destroyed. Call it from the app's
@@ -96,7 +97,7 @@ impl<A: MorphApp> Adapter<A> {
             let surface = instance
                 .create_surface(target)
                 .map_err(GpuError::CreateSurface)?;
-            let gpu = Gpu::new(instance, Some(&surface), false, A::limits).await?;
+            let gpu = Gpu::new(instance, Some(&surface), false, A::limits, true).await?;
             Ok::<_, GpuError>((gpu, surface))
         };
         let (gpu, surface) = match pollster::block_on(boot) {
@@ -113,6 +114,9 @@ impl<A: MorphApp> Adapter<A> {
         ctx.safe_area = self.safe_area;
         ctx.scale_factor = scale_factor(app);
         ctx.data_dir = app.internal_data_path();
+        ctx.pipeline_cache = ctx.data_dir.as_deref().and_then(|dir| {
+            PipelineCacheStore::open(&ctx.gpu.device, &ctx.gpu.adapter.get_info(), dir)
+        });
         match Shell::start(ctx, surface, size) {
             Ok(shell) => self.shell = Some(shell),
             Err(error) => {

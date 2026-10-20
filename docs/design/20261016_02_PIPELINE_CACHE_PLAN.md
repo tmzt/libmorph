@@ -1,7 +1,7 @@
 ---
 title: Persistent pipeline cache
 date: 2026-10-16
-status: Draft
+status: In implementation
 covers:
   - Requesting `wgpu::Features::PIPELINE_CACHE` when the adapter offers it
     and the app has a data directory (Android)
@@ -185,3 +185,23 @@ an app that builds pipelines on another thread can clone it.
    stays in the file after an app update. Recommended: accept it for now.
    The file is replaced whenever the driver or wgpu version changes. An
    app that needs it smaller can delete `<data_dir>/libmorph/`.
+
+## Amendment — 2026-10-20 00:02 EDT: approved, the open questions answered as recommended
+
+Owner (2026-10-20): "make the change, use the standard plan mechanism".
+The plan is approved as written, with section 8's recommendations:
+
+1. **Opting out:** no switch.
+2. **Desktop Vulkan:** no cache.
+3. **Cache growth:** accepted; an app that needs the file smaller deletes
+   `<data_dir>/libmorph/`.
+
+Step 4's trial is now the game's props pipeline, a render pipeline built
+on a worker thread (about 1.3 s on the S23, unlocked), which clones
+`ctx.pipeline_cache()` as section 6 allows; the compute pipeline named
+in the sources may pass it too.
+
+## Amendment — 2026-10-20 00:02 EDT: implementation has started; the document is now immutable
+
+Implementation has started with step 1, and this document is now
+immutable (Rule 1.5).

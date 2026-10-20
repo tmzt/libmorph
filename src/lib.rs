@@ -19,6 +19,7 @@ mod context;
 mod gpu;
 mod input;
 mod out_dir;
+mod pipeline_cache;
 mod runner;
 pub mod safe_area;
 #[cfg(script_runner)]

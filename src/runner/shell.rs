@@ -81,6 +81,9 @@ impl<A: MorphApp> Shell<A> {
 
     fn with_app(mut ctx: MorphContext, target: Target, fixed_dt: Option<Duration>) -> Self {
         let app = A::init(&mut ctx);
+        // Pipelines built in `init` are kept even if the process is killed
+        // without a clean suspend.
+        ctx.save_pipeline_cache();
         Self {
             ctx,
             app,
@@ -134,6 +137,7 @@ impl<A: MorphApp> Shell<A> {
         if self.lifecycle.suspend() {
             self.app.on_suspend(&mut self.ctx);
         }
+        self.ctx.save_pipeline_cache();
     }
 
     /// Whether the app called [`MorphContext::exit`].
@@ -146,6 +150,7 @@ impl<A: MorphApp> Shell<A> {
     pub fn shutdown(mut self) {
         if self.lifecycle.suspend() {
             self.app.on_suspend(&mut self.ctx);
+            self.ctx.save_pipeline_cache();
         }
         self.target = None;
         drop(self.app);

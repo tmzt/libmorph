@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use libdevice::DeviceSpec;
 
 use crate::gpu::Gpu;
+use crate::pipeline_cache::PipelineCacheStore;
 use crate::{Audio, SafeArea};
 
 /// Shared state for the whole run. The device and queue never change; the
@@ -20,6 +21,7 @@ pub struct MorphContext {
     pub(crate) audio: Audio,
     pub(crate) args: Vec<String>,
     pub(crate) data_dir: Option<PathBuf>,
+    pub(crate) pipeline_cache: Option<PipelineCacheStore>,
     pub(crate) exit_requested: bool,
 }
 
@@ -36,6 +38,7 @@ impl MorphContext {
             audio,
             args,
             data_dir: None,
+            pipeline_cache: None,
             exit_requested: false,
         }
     }
@@ -125,6 +128,24 @@ impl MorphContext {
     #[must_use]
     pub fn data_dir(&self) -> Option<&Path> {
         self.data_dir.as_deref()
+    }
+
+    /// The pipeline cache to pass as `cache` in pipeline descriptors.
+    /// `None` unless the host persists one (Android on Vulkan): libmorph
+    /// loads it from `<data_dir>/libmorph/` before
+    /// [`init`](crate::MorphApp::init) and saves it after `init`, on suspend
+    /// and on exit. It is a cheap clone for pipelines built on another
+    /// thread.
+    #[must_use]
+    pub fn pipeline_cache(&self) -> Option<&wgpu::PipelineCache> {
+        self.pipeline_cache.as_ref().map(PipelineCacheStore::cache)
+    }
+
+    /// Save the pipeline cache's data, if there is a cache and it changed.
+    pub(crate) fn save_pipeline_cache(&mut self) {
+        if let Some(store) = &mut self.pipeline_cache {
+            store.save();
+        }
     }
 }
 

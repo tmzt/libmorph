@@ -139,6 +139,23 @@ cargo build --release --target aarch64-linux-android --lib
 gradle -p target/aarch64-linux-android/release/gradle/<package> assembleDebug
 ```
 
+### Pipeline cache
+
+Android drivers do not keep compiled pipelines between launches. On
+Android with Vulkan, libmorph keeps a `wgpu::PipelineCache` for the app at
+`<data_dir>/libmorph/<key>.bin`: loaded before `init`, saved after `init`,
+on suspend and on exit. Pass it to the pipelines that should be kept:
+
+```rust
+device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+    // ...
+    cache: ctx.pipeline_cache(),
+});
+```
+
+`ctx.pipeline_cache()` is `None` everywhere else (desktop, the web,
+Android on GL), which is what `cache` takes when nothing is cached.
+
 ## Limitations
 
 - No native iOS. iPhone geometry can be emulated on desktop.
@@ -176,4 +193,4 @@ dual licensed as above, without any additional terms or conditions.
 | [App-requested device limits](docs/design/20261014_05_APP_LIMITS_REQUEST_PLAN.md) | 2026-10-14 | Implemented | Apps return a `LimitsRequest` (required and preferred `wgpu::Limits`) from `MorphApp::limits` before bring-up. Required limits the adapter lacks fail with `GpuError::Limits`; `GpuError` becomes `#[non_exhaustive]`. All steps are done. |
 | [Mac trackpad fingers as touches](docs/design/20261015_01_MAC_TRACKPAD_TOUCH_PLAN.md) | 2026-10-15 | Implemented | On macOS, two or more trackpad fingers become `Touch` events with their own ids, read from AppKit's `NSTouch` and mapped at phone scale around the cursor using libdevice's pixel density. One finger stays the mouse. The desktop window is fitted to the display. All steps are done and the owner checked them on a MacBook Pro. |
 | [Audio output device and streaming sources](docs/design/20261016_01_AUDIO_DEVICE_AND_SOURCES_PLAN.md) | 2026-10-16 | Implemented | Apps add streaming sources, callbacks that fill part of each output buffer on the audio thread, mixed with `Sound` voices, plus a master volume. An `audio-cpal` feature re-exports cpal and exposes the output device as `DeviceTrait`. libmobile owns cpal on Android. All steps are done; released in 0.2.0. |
-| [Persistent pipeline cache](docs/design/20261016_02_PIPELINE_CACHE_PLAN.md) | 2026-10-16 | Draft | On Android with Vulkan, libmorph requests `PIPELINE_CACHE`, creates one `wgpu::PipelineCache` from data kept in the app's data directory, offers it as `ctx.pipeline_cache()`, and saves it after `init`, on suspend and on exit. Elsewhere it is `None`. Waiting for the owner's approval. |
+| [Persistent pipeline cache](docs/design/20261016_02_PIPELINE_CACHE_PLAN.md) | 2026-10-16 | In implementation | On Android with Vulkan, libmorph requests `PIPELINE_CACHE`, creates one `wgpu::PipelineCache` from data kept in the app's data directory, offers it as `ctx.pipeline_cache()`, and saves it after `init`, on suspend and on exit. Elsewhere it is `None`. Approved with the recommended answers; being built. |

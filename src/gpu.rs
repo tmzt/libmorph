@@ -140,11 +140,15 @@ impl Gpu {
     /// scripted runs, which have none) and open a device on it with the
     /// limits `limits` asks for (the app's `MorphApp::limits`). A plain `fn`
     /// pointer, so it moves into the web's `spawn_local` future.
+    /// `want_pipeline_cache` asks for `PIPELINE_CACHE` where the adapter
+    /// offers it on Vulkan: `true` only from a runner whose host keeps a data
+    /// directory (Android), which is where the cache's data is kept.
     pub async fn new(
         instance: wgpu::Instance,
         surface: Option<&wgpu::Surface<'_>>,
         force_fallback_adapter: bool,
         limits: fn(&wgpu::Limits) -> LimitsRequest,
+        want_pipeline_cache: bool,
     ) -> Result<Self, GpuError> {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -168,9 +172,18 @@ impl Gpu {
         };
         let base = base.using_resolution(adapter.limits());
         let limits = resolve_limits(&limits(&base), &adapter.limits())?;
+        let required_features = if want_pipeline_cache
+            && wgpu::util::pipeline_cache_key(&info).is_some()
+            && adapter.features().contains(wgpu::Features::PIPELINE_CACHE)
+        {
+            wgpu::Features::PIPELINE_CACHE
+        } else {
+            wgpu::Features::empty()
+        };
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("libmorph"),
+                required_features,
                 required_limits: limits.clone(),
                 memory_hints: wgpu::MemoryHints::Performance,
                 ..Default::default()
