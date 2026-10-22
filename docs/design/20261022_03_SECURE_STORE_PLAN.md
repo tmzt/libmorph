@@ -167,3 +167,21 @@ in core, StrongBox as a default feature".
   visible to apps.
 - **Step 3** logs `AndroidStrongBox` by default, and `AndroidTee` when
   built without `secure-store-strongbox` and with the app's data cleared.
+
+## Amendment — 2026-10-22 18:32 EDT: the StrongBox feature is negative
+
+Owner (2026-10-22): "we should use a negative feature to disable
+strongbox if we don't want it enabled, so that leaving out audio (or
+camera) doesn't disable a security feature". Follows libmobile's
+amendment "StrongBox by default, turned off by a negative feature", and
+replaces the `secure-store-strongbox` default feature and the
+`default-features = false` change in the amendment "the Keychain on the
+Mac, and the StrongBox feature".
+
+- libmorph's `default` stays `["audio"]`, and its libmobile
+  dependencies are unchanged.
+- A passthrough, like the other `mobile-*` ones:
+  `mobile-secure-store-no-strongbox = ["mobile", "libmobile/secure-store-no-strongbox"]`.
+- **Step 3** logs `AndroidStrongBox` by default, and `AndroidTee` when
+  built with `mobile-secure-store-no-strongbox` and with the app's data
+  cleared.
