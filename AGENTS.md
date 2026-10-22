@@ -158,6 +158,22 @@ each versioned on its own: `libmorph` (tags `v<version>`) and
 
 Native iOS is **not supported**. libmobile is Android-only. libdevice does have iOS *device specs*, so desktop can emulate an iPhone's geometry and safe area, but don't write native iOS or Metal-lifecycle code paths.
 
+### Platform Layering (libmobile first)
+
+**libmorph wraps libmobile; it does not reach past it.** Owner's rule
+(2026-10-22): "libmorph is supposed to be a wrapper for libmobile so the
+features we added should have been in libmobile first."
+
+- Any Android capability (NDK or AAudio calls, Kotlin plugins, permissions,
+  intents) is planned and built in libmobile first, with a libmobile example
+  that genuinely uses it, and released. Then libmorph is amended to wrap it.
+- libmorph does not call `libmobile::android::ndk` (or `android_activity`)
+  APIs to implement a feature. It keeps only what a wrapper adds: one API
+  on every host, lifecycle handling (pausing with the app, asking for
+  permissions it needs), fan-out to several consumers, and its own types so
+  signatures do not change with or without `mobile`.
+- Examples ask only for permissions they use.
+
 ### wgpu Ownership
 
 **libmorph is the only crate in the stack that depends on wgpu.** libdevice is data only and has no wgpu dependency or feature. libmobile is also wgpu-free and hands over its window through raw-window-handle 0.6. libmorph:
