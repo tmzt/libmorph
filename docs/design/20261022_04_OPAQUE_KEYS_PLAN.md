@@ -1,7 +1,7 @@
 ---
 title: Opaque keys in the secure store
 date: 2026-10-22
-status: Draft
+status: Superseded (by 20261022_05_KEY_STORE_PLAN.md)
 covers:
   - A `SecretKey` trait that an adapter (a "black box" such as handlr's
     Noise adapter) implements for its own private key type `K`, with a
@@ -485,3 +485,16 @@ steps 4 to 6.
   - a migration test, where a test adapter's v2 accepts v1, loads a v1
     key, and finds it stored as v2 afterwards;
   - `WrongKind` for a kind that is not accepted.
+
+## Amendment — 2026-10-22 19:55 EDT: superseded by the key store plan
+
+Superseded by `docs/design/20261022_05_KEY_STORE_PLAN.md`, on the owner's
+request for a simplified successor built around one small engine file.
+Nothing in this plan was implemented. What moved:
+- `SecretKey`, `SealToken` (by reference), `ZeroizeOnDrop`, kind
+  migration, `DeviceLocked` and `Locked`, and the rename-first step are
+  carried over.
+- `KeyHandle` gives way to `with_key`, which lends the key for one call.
+- `KeyOptions` gives way to a flags byte enforced by the platform.
+- libmorph's own trait and bridge give way to re-exporting the platform
+  crate's engine.
