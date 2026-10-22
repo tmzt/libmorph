@@ -295,3 +295,16 @@ listening to the files.
 No permission prompt appeared: `build.sh` grants `RECORD_AUDIO` with
 `adb shell pm grant`. The owner noted that a real request needs a Kotlin
 plugin in libmobile (2026-10-22).
+
+## 2026-10-22 07:05 EDT — Audio capture: asking for RECORD_AUDIO
+
+Plan: `docs/design/20261022_01_AUDIO_CAPTURE_PLAN.md` (In implementation),
+amended for step 5.
+
+Agreed with the owner: on Android, libmorph asks for `RECORD_AUDIO`
+when the app sets `AudioSetup::capture` and the permission is not
+granted, through libmobile's new runtime permission request (libmobile
+`docs/design/20261022_01_RUNTIME_PERMISSIONS_PLAN.md`, Draft). The
+capture stream then opens after `init`, so a new
+`MorphApp::on_capture_ready` hook says when it is ready, and sinks added
+earlier are kept until then. Waits for libmobile 0.1.2.
