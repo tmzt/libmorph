@@ -765,76 +765,61 @@ mod tests {
     }
 }
 
-/// The Android capture stream, opened with the NDK's AAudio rather than
-/// cpal so the input preset can be set.
+/// The Android capture stream: libmobile's `CaptureStream` (AAudio, with
+/// the input preset cpal cannot set), feeding the same `Capture` state as
+/// cpal does elsewhere.
 #[cfg(all(feature = "audio", target_os = "android"))]
 mod aaudio {
-    use std::cell::{Cell, RefCell};
-    use std::sync::{Arc, Mutex, mpsc};
-    use std::time::Instant;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::mpsc;
 
-    use libmobile::android::ndk::audio::{
-        AudioCallbackResult, AudioDirection, AudioFormat, AudioInputPreset, AudioStream,
-        AudioStreamBuilder,
-    };
+    use libmobile::InputPreset;
+    use libmobile::android::CaptureStream;
 
     use super::capture::{Capture, CaptureCommand};
     use super::cpal::StreamInstant;
     use super::{CaptureFormat, CaptureMode};
 
-    /// What the data callback owns. Only the callback locks it while a
-    /// stream is open; the main thread takes it only between streams.
-    struct State {
-        capture: Capture,
-        commands: mpsc::Receiver<CaptureCommand>,
-        channels: usize,
-        /// `time` counts from here, across reopens.
-        start: Instant,
-    }
-
     pub(crate) struct AaudioInput {
-        stream: RefCell<Option<AudioStream>>,
-        state: Arc<Mutex<State>>,
+        stream: CaptureStream,
         format: CaptureFormat,
-        mode: Cell<CaptureMode>,
-        /// Not paused by the app.
-        running: Cell<bool>,
     }
 
     impl AaudioInput {
+        /// Open with `mode` and start. The callback owns `capture` and its
+        /// commands; libmobile keeps it across `set_mode`.
         pub fn open(
             mode: CaptureMode,
-            capture: Capture,
+            mut capture: Capture,
             commands: mpsc::Receiver<CaptureCommand>,
         ) -> Result<Self, String> {
-            let state = Arc::new(Mutex::new(State {
-                capture,
-                commands,
-                channels: 1,
-                start: Instant::now(),
-            }));
-            let (stream, granted) = open_with_fallback(mode, &state, None)?;
-            let format = CaptureFormat {
-                sample_rate: u32::try_from(stream.sample_rate()).unwrap_or(0),
-                channels: u16::try_from(stream.channel_count()).unwrap_or(1),
-            };
-            {
-                // No callback runs before `request_start`.
-                let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
-                state.channels = usize::from(format.channels).max(1);
-                let channels = state.channels;
-                state.capture.set_channels(channels);
-            }
-            stream
-                .request_start()
-                .map_err(|e| format!("start: {e:?}"))?;
-            log::info!("libmorph: audio capture: asked {mode:?}, got {granted:?}");
+            // Known once the stream is open, before it starts.
+            let channels = Arc::new(AtomicUsize::new(1));
+            let callback_channels = channels.clone();
+            let stream = CaptureStream::open(preset(mode), move |samples, time| {
+                while let Ok(command) = commands.try_recv() {
+                    capture.apply(command);
+                }
+                capture.set_channels(callback_channels.load(Ordering::Relaxed));
+                let at =
+                    StreamInstant::from_nanos(u64::try_from(time.as_nanos()).unwrap_or(u64::MAX));
+                capture.deliver(samples, at);
+            })
+            .map_err(|e| e.to_string())?;
+            let format = stream.format();
+            channels.store(usize::from(format.channels), Ordering::Relaxed);
+            stream.start().map_err(|e| e.to_string())?;
+            log::info!(
+                "libmorph: audio capture: asked {mode:?}, got {:?}",
+                mode_of(stream.preset())
+            );
             Ok(Self {
-                stream: RefCell::new(Some(stream)),
-                state,
-                format,
-                mode: Cell::new(granted),
-                running: Cell::new(true),
+                format: CaptureFormat {
+                    sample_rate: format.sample_rate,
+                    channels: format.channels,
+                },
+                stream,
             })
         }
 
@@ -843,139 +828,51 @@ mod aaudio {
         }
 
         pub fn mode(&self) -> CaptureMode {
-            self.mode.get()
+            mode_of(self.stream.preset())
         }
 
-        /// Close the stream and open another with `mode`. Closing waits for
-        /// the callback to return, so the state is free for the next one.
         pub fn set_mode(&self, mode: CaptureMode) {
-            let mut slot = self.stream.borrow_mut();
-            if let Some(stream) = slot.take() {
-                let _ = stream.request_stop();
-                drop(stream);
-            }
-            match open_with_fallback(mode, &self.state, Some(self.format)) {
-                Ok((stream, granted)) => {
-                    if self.running.get()
-                        && let Err(error) = stream.request_start()
-                    {
-                        log::warn!("libmorph: audio capture: start failed: {error:?}");
-                    }
-                    log::info!("libmorph: audio capture: asked {mode:?}, got {granted:?}");
-                    self.mode.set(granted);
-                    *slot = Some(stream);
-                }
+            match self.stream.set_preset(preset(mode)) {
+                Ok(granted) => log::info!(
+                    "libmorph: audio capture: asked {mode:?}, got {:?}",
+                    mode_of(granted)
+                ),
                 Err(error) => log::warn!("libmorph: audio capture unavailable: {error}"),
             }
         }
 
-        /// AAudio input streams cannot pause; they stop and start again.
         pub fn pause(&self) -> Result<(), String> {
-            self.running.set(false);
-            match &*self.stream.borrow() {
-                Some(stream) => stream.request_stop().map_err(|e| format!("{e:?}")),
-                None => Ok(()),
-            }
+            self.stream.stop().map_err(|e| e.to_string())
         }
 
         pub fn play(&self) -> Result<(), String> {
-            self.running.set(true);
-            match &*self.stream.borrow() {
-                Some(stream) => stream.request_start().map_err(|e| format!("{e:?}")),
-                None => Ok(()),
-            }
+            self.stream.start().map_err(|e| e.to_string())
         }
     }
 
-    /// Open with `mode`, or with [`CaptureMode::Default`] if that fails.
-    fn open_with_fallback(
-        mode: CaptureMode,
-        state: &Arc<Mutex<State>>,
-        format: Option<CaptureFormat>,
-    ) -> Result<(AudioStream, CaptureMode), String> {
-        match build(mode, state, format) {
-            Ok(opened) => Ok(opened),
-            Err(error) if mode != CaptureMode::Default => {
-                log::warn!(
-                    "libmorph: audio capture: {mode:?} unavailable ({error}), using Default"
-                );
-                build(CaptureMode::Default, state, format)
-            }
-            Err(error) => Err(error),
-        }
-    }
-
-    fn build(
-        mode: CaptureMode,
-        state: &Arc<Mutex<State>>,
-        format: Option<CaptureFormat>,
-    ) -> Result<(AudioStream, CaptureMode), String> {
-        let mut builder = AudioStreamBuilder::new()
-            .map_err(|e| format!("{e:?}"))?
-            .direction(AudioDirection::Input)
-            .format(AudioFormat::PCM_Float);
-        if let Some(preset) = preset(mode) {
-            builder = builder.input_preset(AudioInputPreset::from(preset));
-        }
-        if let Some(format) = format {
-            builder = builder
-                .sample_rate(i32::try_from(format.sample_rate).unwrap_or(i32::MAX))
-                .channel_count(i32::from(format.channels));
-        }
-        let callback_state = state.clone();
-        let stream = builder
-            .data_callback(Box::new(move |_stream, data, frames| {
-                let mut state = callback_state.lock().unwrap_or_else(|e| e.into_inner());
-                let state = &mut *state;
-                while let Ok(command) = state.commands.try_recv() {
-                    state.capture.apply(command);
-                }
-                let len = usize::try_from(frames).unwrap_or(0) * state.channels;
-                // SAFETY: an input stream opened as PCM_Float hands its
-                // callback `frames` interleaved frames of `channels` f32
-                // samples at `data`, valid for the length of the call.
-                let samples = unsafe { std::slice::from_raw_parts(data.cast::<f32>(), len) };
-                let at = StreamInstant::from_nanos(
-                    u64::try_from(state.start.elapsed().as_nanos()).unwrap_or(u64::MAX),
-                );
-                state.capture.deliver(samples, at);
-                AudioCallbackResult::Continue
-            }))
-            .error_callback(Box::new(|_stream, error| {
-                log::error!("libmorph: audio capture stream: {error:?}");
-            }))
-            .open_stream()
-            .map_err(|e| format!("{e:?}"))?;
-        if stream.format() != AudioFormat::PCM_Float {
-            return Err(format!("got {:?}, not PCM_Float", stream.format()));
-        }
-        let granted = from_preset(i32::from(stream.input_preset()));
-        Ok((stream, granted))
-    }
-
-    /// AAudio's `AAUDIO_INPUT_PRESET_*` value for `mode`; `None` leaves the
-    /// choice to AAudio. Raw values, so `VoicePerformance` (API 29) needs
-    /// no ndk API-level feature.
-    fn preset(mode: CaptureMode) -> Option<i32> {
+    /// libmobile's preset for `mode`; `None` leaves the choice to AAudio.
+    fn preset(mode: CaptureMode) -> Option<InputPreset> {
         match mode {
             CaptureMode::Default => None,
-            CaptureMode::Generic => Some(1),
-            CaptureMode::Camcorder => Some(5),
-            CaptureMode::VoiceRecognition => Some(6),
-            CaptureMode::VoiceCommunication => Some(7),
-            CaptureMode::Unprocessed => Some(9),
-            CaptureMode::VoicePerformance => Some(10),
+            CaptureMode::Generic => Some(InputPreset::Generic),
+            CaptureMode::Camcorder => Some(InputPreset::Camcorder),
+            CaptureMode::VoiceRecognition => Some(InputPreset::VoiceRecognition),
+            CaptureMode::VoiceCommunication => Some(InputPreset::VoiceCommunication),
+            CaptureMode::Unprocessed => Some(InputPreset::Unprocessed),
+            CaptureMode::VoicePerformance => Some(InputPreset::VoicePerformance),
         }
     }
 
-    fn from_preset(preset: i32) -> CaptureMode {
+    /// The mode for a granted preset; one libmorph does not know reads as
+    /// `Default`.
+    fn mode_of(preset: InputPreset) -> CaptureMode {
         match preset {
-            1 => CaptureMode::Generic,
-            5 => CaptureMode::Camcorder,
-            6 => CaptureMode::VoiceRecognition,
-            7 => CaptureMode::VoiceCommunication,
-            9 => CaptureMode::Unprocessed,
-            10 => CaptureMode::VoicePerformance,
+            InputPreset::Generic => CaptureMode::Generic,
+            InputPreset::Camcorder => CaptureMode::Camcorder,
+            InputPreset::VoiceRecognition => CaptureMode::VoiceRecognition,
+            InputPreset::VoiceCommunication => CaptureMode::VoiceCommunication,
+            InputPreset::Unprocessed => CaptureMode::Unprocessed,
+            InputPreset::VoicePerformance => CaptureMode::VoicePerformance,
             _ => CaptureMode::Default,
         }
     }
