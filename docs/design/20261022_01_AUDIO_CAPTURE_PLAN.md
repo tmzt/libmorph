@@ -259,3 +259,31 @@ is crate-private.
 The owner asked for this to be implemented (2026-10-22), on the
 `audio-capture` branch in its own worktree. Steps 1 and 2 are built in
 this commit.
+
+## Amendment — 2026-10-22 06:58 EDT: the example on Android
+
+Agreed with the owner (2026-10-22, "yes, add it and push to the s23").
+Replaces section 7's first line ("desktop only (it writes files)") and adds
+a step 4.
+
+- `examples/audiocapture.rs` writes to `ctx.data_dir()/audiocapture/`
+  when there is a data directory (Android), and to `out/audiocapture/`
+  otherwise. Its `main` is built on the desktop only.
+- `examples/android/audiocapture/` is a new workspace member,
+  `libmorph-example-audiocapture-android`, a cdylib named
+  `audiocapture_android`. It includes the example's app with
+  `#[path]`, and its `android_main` runs it with `run_android` and
+  `android_logger` (tag `audiocapture`). Its `build.rs` calls
+  `libmorph_build::gradle_project("dev.highbay.libmorph.example.audiocapture")`
+  (libmorph-build by path) with `.permission("android.permission.RECORD_AUDIO")`.
+  On a host it builds as an empty library.
+- `examples/android/build.sh [--install]` builds the `.so` and the
+  generated Gradle project, as libmobile's `examples/build.sh` does. With
+  `--install` it installs the debug APK, grants `RECORD_AUDIO` with
+  `adb shell pm grant` (libmobile has no runtime permission request), and
+  launches the app. Files are fetched with
+  `adb exec-out run-as <package> cat files/audiocapture/<name>`.
+
+4. **On the S23.** **Done when:** the app on the owner's Galaxy S23 logs
+   one `wrote …/audiocapture/<unix ms>.au` line per second, and a file
+   pulled from the device plays with the sound of the room.
