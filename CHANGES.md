@@ -452,3 +452,18 @@ the store. The store is generic over the adapter's private type `K` and
 public type `P`, and seals `K` under names the blob API refuses. A
 token only libmorph can make keeps sealing in the store's hands.
 libmobile is unchanged.
+
+## 2026-10-22 19:08 EDT — Secure store: the desktop backends move to libdevice
+
+Plans: `docs/design/20261022_03_SECURE_STORE_PLAN.md` (In implementation)
+and `docs/design/20261022_04_OPAQUE_KEYS_PLAN.md` (Draft, amendment "a key
+store of its own").
+
+This departs from the secure-store plan, section 3. Its macOS Keychain
+and memory backends, built on libmorph's unpushed `secure-store` branch,
+move to libdevice behind a `secure-store` feature, with the same API as
+libmobile's store. libmorph's `SecureStore` then wraps libdevice on the
+desktop as it wraps libmobile on Android. The owner agreed (2026-10-22)
+that both crates need wrapped implementations with the same API.
+libmorph's public API for the store does not change. The work is a step
+of the opaque keys plan.
