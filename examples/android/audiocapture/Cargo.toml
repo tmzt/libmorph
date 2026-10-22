@@ -1,0 +1,20 @@
+[package]
+name = "libmorph-example-audiocapture-android"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "The audiocapture example on Android, through libmobile's NativeActivity"
+
+[lib]
+name = "audiocapture_android"
+crate-type = ["lib", "cdylib"]
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.14"
+libmorph = { path = "../../..", features = ["mobile"] }
+log = "0.4"
+
+# Generates the Gradle project from libmorph's forwarded libmobile metadata.
+[build-dependencies]
+libmorph-build = { path = "../../../crates/libmorph-build" }

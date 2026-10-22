@@ -12,7 +12,7 @@ links = "libmorph"
 build = "build.rs"
 
 [workspace]
-members = [".", "crates/libmorph-build"]
+members = [".", "crates/libmorph-build", "examples/android/audiocapture"]
 
 [features]
 default = ["audio"]
