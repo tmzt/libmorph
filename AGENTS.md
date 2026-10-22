@@ -219,7 +219,8 @@ Never commit a `path` dependency or a `Cargo.lock` that was resolved with a patc
 - `SurfaceTarget::current(&app)` implements raw-window-handle 0.6, so pass it to wgpu's safe `create_surface`.
 - Runtime permissions: `request_permissions(&app, &[&str]) -> PermissionRequest` (one request at a time, in order), answered by `MobileEvent::Permissions(PermissionsOutcome { request, permissions })`; `permission_granted`, `should_show_rationale`. Each permission must be declared in the manifest.
 - `CaptureStream` (under `cpal`): AAudio capture with an `InputPreset`, which cpal cannot set: `open(preset, callback)`, `format()`, `preset()`, `set_preset` (reopens with the same callback and format), `start`/`stop`. Needs `RECORD_AUDIO`.
-- Cargo features: `google-auth`, `camera`, `cpal` (cpal re-exported as `libmobile::android::cpal`, plus `CaptureStream`; needs API 28). No others exist.
+- `secure_store` (core, plan `20261022_03_SECURE_STORE_PLAN.md`): `get`, `put`, `put_with(PutOptions { unlocked_only })`, `delete`, `security_level`. Named blobs (1 to 64 of `[A-Za-z0-9._-]`, up to 64 KiB) sealed with AES-256-GCM under a non-exportable Keystore key (StrongBox unless `secure-store-no-strongbox`), kept in no-backup storage. Synchronous, any thread. `SecureStoreError::Locked` for an `unlocked_only` blob while the device is locked.
+- Cargo features: `google-auth`, `camera`, `cpal` (cpal re-exported as `libmobile::android::cpal`, plus `CaptureStream`; needs API 28), and the negative `secure-store-no-strongbox`. No others exist.
 - The app's activity must be `dev.highbay.libmobile.MobileNativeActivity` (Gradle wiring comes from `libmobile::gradle`; see Gradle Handoff).
 
 Two crates use the name `Insets`: `libdevice::Insets` (`u32`, top/right/bottom/left) and `libmobile::Insets` (`f32` safe area plus `ime_bottom`). Both convert into libmorph's fractional `SafeArea` (`src/safe_area.rs`) through `From`, field by field, never by position:
@@ -240,6 +241,10 @@ mobile = ["dep:libmobile"]
 # requested without the dependency itself.
 mobile-google-auth = ["mobile", "libmobile/google-auth"]
 mobile-camera = ["mobile", "libmobile/camera"]
+# Negative, so turning off default features cannot turn off StrongBox.
+mobile-secure-store-no-strongbox = ["mobile", "libmobile/secure-store-no-strongbox"]
+# ctx.secure_store(): libmobile's store on Android, the Keychain on macOS.
+secure-store = ["dep:security-framework"]
 web = ["dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:web-sys", "wgpu/webgl"]
 # Scripted headless runs with PNG screenshots; png and crc32fast are
 # desktop-only dependencies, so this enables nothing on Android and the web.
@@ -315,6 +320,7 @@ Expose whatever was granted on `MorphContext` (`ctx.limits()`) so apps can featu
   - `on_key(Key) -> KeyStatus`, on press only. `Key` is `#[non_exhaustive]`: `Character(char)`, `Escape`, `Back`. On Android, the status decides whether the system acts on Back; desktop ignores it.
   - `on_suspend` and `on_resume`: exactly once per transition. Every exit calls `on_suspend` once, unless the app is already suspended, before the surface and the app are dropped.
   - `const SRGB_SURFACE: bool = true`: `false` prefers a non-sRGB surface, for apps that gamma-encode in their own shaders.
+  - `const SECURE_STORE_ID: &str = ""`: the macOS Keychain service is `libmorph.<id>` (empty: the executable's file stem).
   - `fn limits(base: &wgpu::Limits) -> LimitsRequest` (no `self`, called before `init`): the device limits to ask for; see GPU Bring-up.
   - `fn audio_setup(&mut AudioSetup)` (no `self`, called before audio opens; plan `20261022_01_AUDIO_CAPTURE_PLAN.md`): `output` (default `true`), `capture` (default `false`) and `capture_mode: CaptureMode` (Android input preset). `AudioSetup` is `#[non_exhaustive]`.
   - `on_capture_ready`: once, after `init`, when capture has opened: right after `init`, or on Android once the user allows `RECORD_AUDIO`, which libmorph asks for itself when `capture` is set.
@@ -337,6 +343,7 @@ Expose whatever was granted on `MorphContext` (`ctx.limits()`) so apps can featu
     - the streams pause with the app: on Android at `Pause`/`Resume`, on desktop and web in winit's `suspended`/`resumed`. Scripted runs have no streams, so sources and sinks are never called;
   - `exit()`: ask the runner to stop. On desktop and web the window closes; on Android libmorph calls `libmobile::android::finish` and the activity tears down normally;
   - `data_dir() -> Option<&Path>`: Android's internal data path; `None` on desktop and web.
+  - `secure_store() -> Option<&SecureStore>` (feature `secure-store`, plan `20261022_03_SECURE_STORE_PLAN.md`): named secrets with one API on every host, `Clone + Send + Sync`: `get`, `put`, `put_with(name, value, PutOptions)`, `delete`, `protection() -> Result<Protection>`. Android uses libmobile's `secure_store`. macOS uses the login Keychain, one generic password per blob, and `unlocked_only` is not enforced there. Scripted runs use memory, empty for each run. `None` on the web and other desktops;
   - `request_permissions(&[&str]) -> Option<PermissionRequest>`, `permission_granted`, `should_show_rationale`: libmorph's own types over libmobile's, the same on every host. Off Android there are no runtime permissions: `None`, `true` and `false`.
   - `pipeline_cache() -> Option<&wgpu::PipelineCache>` (plan `20261016_02_PIPELINE_CACHE_PLAN.md`): `Some` only on Android with Vulkan when the adapter offers `PIPELINE_CACHE`, which `Gpu::new` then requests (its `want_pipeline_cache`, `true` from the Android runner only). Apps pass it as `cache` in their pipeline descriptors, cloning it for pipelines built on another thread; a pipeline built with `cache: None` is not cached. The data is kept at `<data_dir>/libmorph/<wgpu::util::pipeline_cache_key>.bin`, loaded before `init` (`fallback: true`, so stale data gives an empty cache), and saved through a `.tmp` rename after `init`, after `on_suspend` and on exit, skipped when unchanged (`src/pipeline_cache.rs`).
 - **`libmorph::script`** (plan `20261014_04_SCRIPTED_RUNS_AND_PNG_CAPTURE_PLAN.md`): scripted, headless runs.
