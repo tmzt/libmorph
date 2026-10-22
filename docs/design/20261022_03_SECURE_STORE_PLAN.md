@@ -185,3 +185,20 @@ Mac, and the StrongBox feature".
 - **Step 3** logs `AndroidStrongBox` by default, and `AndroidTee` when
   built with `mobile-secure-store-no-strongbox` and with the app's data
   cleared.
+
+## Amendment — 2026-10-22 18:35 EDT: the unlock-required flag
+
+Follows libmobile's amendment "an unlock-required flag per blob", on the
+owner's question (2026-10-22). Adds to section 2.
+
+- `SecureStore::put_with(name, value, PutOptions)`, with libmorph's own
+  `PutOptions` (`#[non_exhaustive]`, `Default`, `unlocked_only(bool)`),
+  and `SecureStoreError::Locked`.
+- **Android:** passed to libmobile.
+- **macOS:** accepted, but not enforced. Per-item accessibility
+  (`kSecAttrAccessibleWhenUnlocked`) applies only in the data-protection
+  Keychain, which needs a signed app with a keychain-access-groups
+  entitlement. A cargo-built binary uses the login Keychain, whose items
+  are readable whenever the user is logged in. The item is stored the same
+  way, and the rustdoc says so.
+- **Scripted runs:** accepted, with nothing to enforce.
