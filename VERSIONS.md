@@ -84,3 +84,11 @@ libmorph's own changes are additive; the minor bump comes from libmobile
   and the types `PermissionRequest` and `Permissions { request, permissions }`
   (`#[non_exhaustive]`, `granted()`). Off Android there are none: `None`,
   `true` and `false`.
+
+## libmorph-build 0.2.0 — 2026-10-22 (tag libmorph-build-v0.2.0)
+
+No changes of its own; the minor bump comes from its dependency (Rule 5.5).
+
+- **Breaking:** libmobile 0.1.1 → 0.2.0, whose `gradle` module
+  libmorph-build re-exports. `gradle_project` and `LINKS` are unchanged.
+  Generated projects now carry libmobile's `bridge.PermissionPlugin`.
