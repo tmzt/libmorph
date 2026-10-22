@@ -432,3 +432,12 @@ platform features are built in libmobile first, with an example there, and
 libmorph wraps them. It follows the move of libmorph's AAudio capture code
 into libmobile's `CaptureStream`. AGENTS.md gains "Platform Layering
 (libmobile first)", and the README's Android section explains it.
+
+## 2026-10-22 18:19 EDT — Secure store (proposed)
+
+Plan: `docs/design/20261022_03_SECURE_STORE_PLAN.md` (Draft), with
+libmobile's `docs/design/20261022_03_SECURE_STORE_PLAN.md`, which comes
+first. Requested by the handlr session with the owner's approval, for the
+companion app's Noise key and server record. Proposed only. Nothing is
+implemented until the owner approves, and the desktop backend is an
+open question there.
