@@ -27,7 +27,10 @@ mod screenshot;
 pub mod script;
 
 pub use app::{Frame, MorphApp};
-pub use audio::{Audio, OutputFormat, Sound, Source, SourceId, Voice};
+pub use audio::{
+    Audio, AudioSetup, CaptureFormat, Captured, OutputFormat, Sink, SinkId, Sound, Source,
+    SourceId, Voice,
+};
 pub use config::{MORPH_ARGS_HELP, MorphError};
 pub use context::MorphContext;
 pub use gpu::{GpuError, LimitFailure, LimitsRequest};

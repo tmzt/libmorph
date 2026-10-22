@@ -24,3 +24,11 @@ pub use android::run_android;
 pub(crate) use script::run as run_script;
 #[cfg(not(target_os = "android"))]
 pub use winit::run;
+
+/// The app's answer to [`MorphApp::audio_setup`](crate::MorphApp::audio_setup),
+/// asked once per run before audio is opened.
+fn audio_setup<A: crate::MorphApp>() -> crate::AudioSetup {
+    let mut setup = crate::AudioSetup::default();
+    A::audio_setup(&mut setup);
+    setup
+}

@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::{Key, KeyStatus, LimitsRequest, MorphContext, Touch};
+use crate::{AudioSetup, Key, KeyStatus, LimitsRequest, MorphContext, Touch};
 
 /// The surface texture for one frame. libmorph presents it after
 /// [`MorphApp::render`] returns.
@@ -39,6 +39,21 @@ pub trait MorphApp: Sized + 'static {
     /// ```
     fn limits(base: &wgpu::Limits) -> LimitsRequest {
         LimitsRequest::base(base)
+    }
+
+    /// What audio to open, before [`init`](Self::init). `setup` starts with
+    /// output on and capture off; set `setup.capture` to record from the
+    /// default input device, and read it through `ctx.audio()`'s
+    /// [`add_sink`](crate::Audio::add_sink).
+    ///
+    /// ```
+    /// # use libmorph::AudioSetup;
+    /// fn audio_setup(setup: &mut AudioSetup) {
+    ///     setup.capture = true;
+    /// }
+    /// ```
+    fn audio_setup(setup: &mut AudioSetup) {
+        let _ = setup;
     }
 
     /// Build the app once the GPU is up and the first surface is configured,

@@ -1,8 +1,60 @@
-//! In-memory sample playback. With the `audio` feature, sounds are mixed
-//! into a `cpal` output stream; without it [`Audio`] is a zero-sized no-op,
-//! so code calling it compiles either way.
+//! In-memory sample playback and microphone capture. With the `audio`
+//! feature, sounds are mixed into a `cpal` output stream and captured blocks
+//! are handed to sinks; without it [`Audio`] is a zero-sized no-op, so code
+//! calling it compiles either way.
 
 use std::sync::Arc;
+use std::time::Duration;
+
+/// What [`MorphApp::audio_setup`](crate::MorphApp::audio_setup) asks
+/// libmorph to open. Assign the fields on the `&mut` the hook is given.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub struct AudioSetup {
+    /// Open the default output device. `true` by default.
+    pub output: bool,
+    /// Open the default input device. `false` by default: on macOS it asks
+    /// for microphone permission, and Android needs `RECORD_AUDIO`.
+    pub capture: bool,
+}
+
+impl Default for AudioSetup {
+    fn default() -> Self {
+        Self {
+            output: true,
+            capture: false,
+        }
+    }
+}
+
+/// The capture stream's format. Samples handed to a [`Sink`] are always
+/// `f32`, whatever the device delivers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CaptureFormat {
+    pub sample_rate: u32,
+    pub channels: u16,
+}
+
+/// One block from the input device, as handed to a [`Sink`].
+#[derive(Debug)]
+pub struct Captured<'a> {
+    /// Interleaved, at [`CaptureFormat`]'s rate and channel count.
+    pub samples: &'a [f32],
+    /// Frames captured before this block since the stream opened. It does
+    /// not advance while the app is paused.
+    pub frame: u64,
+    /// When this block's first frame was captured, after the first block's,
+    /// by the device's clock. It includes time spent paused.
+    pub time: Duration,
+}
+
+/// A capture sink added with [`Audio::add_sink`], for
+/// [`Audio::remove_sink`]. Stale ids are ignored.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct SinkId(u64);
+
+/// Receives captured blocks on the audio input thread, and must not block.
+pub type Sink = Box<dyn FnMut(&Captured<'_>) + Send>;
 
 /// Interleaved `f32` samples held in memory. Cloning shares the samples.
 #[derive(Clone, Debug)]
@@ -86,14 +138,16 @@ pub use stub::Audio;
 
 #[cfg(not(feature = "audio"))]
 mod stub {
-    use super::{OutputFormat, Sound, Source, SourceId, Voice};
+    use super::{
+        AudioSetup, CaptureFormat, OutputFormat, Sink, SinkId, Sound, Source, SourceId, Voice,
+    };
 
     /// The `audio` feature is off: every call is a no-op.
     #[derive(Debug, Default)]
     pub struct Audio;
 
     impl Audio {
-        pub(crate) fn open() -> Self {
+        pub(crate) fn open(_setup: AudioSetup) -> Self {
             Self
         }
 
@@ -135,6 +189,18 @@ mod stub {
 
         pub fn set_master_volume(&self, _volume: f32) {}
 
+        #[must_use]
+        pub fn capture_format(&self) -> Option<CaptureFormat> {
+            None
+        }
+
+        /// Drops the sink: there is no capture to feed it.
+        pub fn add_sink(&self, _sink: Sink) -> SinkId {
+            SinkId(0)
+        }
+
+        pub fn remove_sink(&self, _id: SinkId) {}
+
         pub(crate) fn pause(&self) {}
 
         pub(crate) fn resume(&self) {}
@@ -151,8 +217,11 @@ mod output {
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
     use cpal::{FromSample, SampleFormat, SizedSample};
 
+    use super::capture::{Capture, CaptureCommand};
     use super::mixer::{Command, Mixer};
-    use super::{OutputFormat, Sound, Source, SourceId, Voice};
+    use super::{
+        AudioSetup, CaptureFormat, OutputFormat, Sink, SinkId, Sound, Source, SourceId, Voice,
+    };
 
     /// The open stream, a channel into its mixer, and one back for the
     /// sources it has removed. The audio callback only ever `try_recv`s and
@@ -169,8 +238,22 @@ mod output {
         sample_format: SampleFormat,
     }
 
+    /// The open input stream and its channels, laid out like [`Output`].
+    struct Input {
+        stream: cpal::Stream,
+        commands: mpsc::Sender<CaptureCommand>,
+        /// Removed sinks, dropped here rather than on the audio thread.
+        removed: mpsc::Receiver<Sink>,
+        #[cfg_attr(not(feature = "audio-cpal"), allow(dead_code))]
+        device: cpal::Device,
+        config: cpal::StreamConfig,
+        #[cfg_attr(not(feature = "audio-cpal"), allow(dead_code))]
+        sample_format: SampleFormat,
+    }
+
     pub struct Audio {
         output: Option<Output>,
+        input: Option<Input>,
         next: Cell<u64>,
     }
 
@@ -179,29 +262,47 @@ mod output {
             f.debug_struct("Audio")
                 .field("available", &self.is_available())
                 .field("format", &self.format())
+                .field("capture_format", &self.capture_format())
                 .finish()
         }
     }
 
     impl Audio {
-        /// Open the default output. Without one, the app still runs and
-        /// every call is a no-op.
-        pub(crate) fn open() -> Self {
-            let output = start()
-                .map_err(|error| log::warn!("libmorph: audio unavailable: {error}"))
-                .ok();
+        /// Open what `setup` asks for. Without a device, the app still runs
+        /// and the calls for it are no-ops.
+        pub(crate) fn open(setup: AudioSetup) -> Self {
+            let output = setup
+                .output
+                .then(|| {
+                    start()
+                        .map_err(|error| log::warn!("libmorph: audio unavailable: {error}"))
+                        .ok()
+                })
+                .flatten();
+            let input = setup
+                .capture
+                .then(|| {
+                    start_capture()
+                        .map_err(|error| {
+                            log::warn!("libmorph: audio capture unavailable: {error}");
+                        })
+                        .ok()
+                })
+                .flatten();
             Self {
                 output,
+                input,
                 next: Cell::new(1),
             }
         }
 
-        /// No output stream, as on a machine without an audio device:
-        /// scripted runs are silent.
+        /// No streams, as on a machine without an audio device: scripted
+        /// runs are silent.
         #[cfg(script_runner)]
         pub(crate) fn silent() -> Self {
             Self {
                 output: None,
+                input: None,
                 next: Cell::new(1),
             }
         }
@@ -289,17 +390,76 @@ mod output {
             self.send(Command::SetMasterVolume(volume.max(0.0)));
         }
 
+        /// The capture stream's format; `None` without one.
+        #[must_use]
+        pub fn capture_format(&self) -> Option<CaptureFormat> {
+            self.input.as_ref().map(|input| CaptureFormat {
+                sample_rate: input.config.sample_rate,
+                channels: input.config.channels,
+            })
+        }
+
+        /// The input device libmorph opened; `None` without one.
+        #[cfg(feature = "audio-cpal")]
+        #[must_use]
+        pub fn capture_device(&self) -> Option<&impl DeviceTrait> {
+            self.input.as_ref().map(|input| &input.device)
+        }
+
+        /// The config the capture stream was built with.
+        #[cfg(feature = "audio-cpal")]
+        #[must_use]
+        pub fn capture_stream_config(&self) -> Option<&cpal::StreamConfig> {
+            self.input.as_ref().map(|input| &input.config)
+        }
+
+        /// The input device's sample type. libmorph converts to `f32`.
+        #[cfg(feature = "audio-cpal")]
+        #[must_use]
+        pub fn capture_sample_format(&self) -> Option<SampleFormat> {
+            self.input.as_ref().map(|input| input.sample_format)
+        }
+
+        /// Hand every captured block to `sink` until it is removed.
+        pub fn add_sink(&self, sink: Sink) -> SinkId {
+            let id = self.id();
+            self.send_capture(CaptureCommand::AddSink(id, sink));
+            SinkId(id)
+        }
+
+        /// The sink is dropped on this thread on a later call, not on the
+        /// audio thread.
+        pub fn remove_sink(&self, id: SinkId) {
+            self.send_capture(CaptureCommand::RemoveSink(id.0));
+        }
+
         fn id(&self) -> u64 {
             let id = self.next.get();
             self.next.set(id + 1);
             id
         }
 
-        fn send(&self, command: Command) {
+        /// Drop what the audio threads have handed back since the last call.
+        fn drain(&self) {
             if let Some(output) = &self.output {
-                // Drop what the mixer has handed back since the last call.
                 while output.removed.try_recv().is_ok() {}
+            }
+            if let Some(input) = &self.input {
+                while input.removed.try_recv().is_ok() {}
+            }
+        }
+
+        fn send(&self, command: Command) {
+            self.drain();
+            if let Some(output) = &self.output {
                 let _ = output.commands.send(command);
+            }
+        }
+
+        fn send_capture(&self, command: CaptureCommand) {
+            self.drain();
+            if let Some(input) = &self.input {
+                let _ = input.commands.send(command);
             }
         }
 
@@ -309,6 +469,11 @@ mod output {
             {
                 log::warn!("libmorph: audio pause failed: {error}");
             }
+            if let Some(input) = &self.input
+                && let Err(error) = input.stream.pause()
+            {
+                log::warn!("libmorph: audio capture pause failed: {error}");
+            }
         }
 
         pub(crate) fn resume(&self) {
@@ -317,7 +482,68 @@ mod output {
             {
                 log::warn!("libmorph: audio resume failed: {error}");
             }
+            if let Some(input) = &self.input
+                && let Err(error) = input.stream.play()
+            {
+                log::warn!("libmorph: audio capture resume failed: {error}");
+            }
         }
+    }
+
+    fn start_capture() -> Result<Input, String> {
+        let device = cpal::default_host()
+            .default_input_device()
+            .ok_or("no input device")?;
+        let supported = device.default_input_config().map_err(|e| e.to_string())?;
+        let sample_format = supported.sample_format();
+        let config = supported.config();
+        let (commands, receiver) = mpsc::channel();
+        let (returns, removed) = mpsc::channel();
+        let capture = Capture::new(usize::from(config.channels), returns);
+        let stream = match sample_format {
+            SampleFormat::F32 => build_input::<f32>(&device, config, capture, receiver),
+            SampleFormat::I16 => build_input::<i16>(&device, config, capture, receiver),
+            SampleFormat::U16 => build_input::<u16>(&device, config, capture, receiver),
+            SampleFormat::I32 => build_input::<i32>(&device, config, capture, receiver),
+            other => return Err(format!("unsupported sample format {other:?}")),
+        }?;
+        stream.play().map_err(|e| e.to_string())?;
+        Ok(Input {
+            stream,
+            commands,
+            removed,
+            device,
+            config,
+            sample_format,
+        })
+    }
+
+    fn build_input<T>(
+        device: &cpal::Device,
+        config: cpal::StreamConfig,
+        mut capture: Capture,
+        commands: mpsc::Receiver<CaptureCommand>,
+    ) -> Result<cpal::Stream, String>
+    where
+        T: SizedSample,
+        f32: FromSample<T>,
+    {
+        let mut scratch = Vec::<f32>::with_capacity(4096);
+        device
+            .build_input_stream(
+                config,
+                move |data: &[T], info: &cpal::InputCallbackInfo| {
+                    while let Ok(command) = commands.try_recv() {
+                        capture.apply(command);
+                    }
+                    scratch.clear();
+                    scratch.extend(data.iter().map(|&sample| sample.to_sample::<f32>()));
+                    capture.deliver(&scratch, info.timestamp().capture);
+                },
+                |error| log::error!("libmorph: audio capture stream: {error}"),
+                None,
+            )
+            .map_err(|e| e.to_string())
     }
 
     fn start() -> Result<Output, String> {
@@ -375,6 +601,153 @@ mod output {
                 None,
             )
             .map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(feature = "audio")]
+mod capture {
+    use std::sync::mpsc;
+
+    use super::cpal::StreamInstant;
+    use super::{Captured, Sink};
+
+    pub(crate) enum CaptureCommand {
+        AddSink(u64, Sink),
+        RemoveSink(u64),
+    }
+
+    /// The input callback's state: the sinks, and where the stream is.
+    pub(crate) struct Capture {
+        channels: usize,
+        sinks: Vec<(u64, Sink)>,
+        /// Frames delivered so far.
+        frame: u64,
+        /// The first block's capture instant, which `time` counts from.
+        first: Option<StreamInstant>,
+        /// Removed sinks go back to the main thread to be dropped.
+        removed: mpsc::Sender<Sink>,
+    }
+
+    impl Capture {
+        pub fn new(channels: usize, removed: mpsc::Sender<Sink>) -> Self {
+            Self {
+                channels: channels.max(1),
+                sinks: Vec::with_capacity(16),
+                frame: 0,
+                first: None,
+                removed,
+            }
+        }
+
+        pub fn apply(&mut self, command: CaptureCommand) {
+            match command {
+                CaptureCommand::AddSink(id, sink) => self.sinks.push((id, sink)),
+                CaptureCommand::RemoveSink(id) => {
+                    if let Some(index) = self.sinks.iter().position(|s| s.0 == id) {
+                        let (_, sink) = self.sinks.remove(index);
+                        // If the main thread is gone, it drops here.
+                        let _ = self.removed.send(sink);
+                    }
+                }
+            }
+        }
+
+        /// Hand one block (interleaved) to every sink.
+        pub fn deliver(&mut self, samples: &[f32], at: StreamInstant) {
+            let first = *self.first.get_or_insert(at);
+            let captured = Captured {
+                samples,
+                frame: self.frame,
+                time: at.duration_since(first),
+            };
+            for (_, sink) in &mut self.sinks {
+                sink(&captured);
+            }
+            self.frame += (samples.len() / self.channels) as u64;
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::sync::mpsc;
+        use std::sync::{Arc, Mutex};
+        use std::time::Duration;
+
+        use super::{Capture, CaptureCommand, StreamInstant};
+        use crate::{AudioSetup, Sink};
+
+        type Log = Arc<Mutex<Vec<(u64, Duration, Vec<f32>)>>>;
+
+        /// A sink that records what it is handed.
+        fn recorder() -> (Sink, Log) {
+            let log = Log::default();
+            let sink_log = log.clone();
+            let sink: Sink = Box::new(move |captured| {
+                sink_log.lock().unwrap().push((
+                    captured.frame,
+                    captured.time,
+                    captured.samples.to_vec(),
+                ));
+            });
+            (sink, log)
+        }
+
+        #[test]
+        fn setup_defaults_to_output_only() {
+            let setup = AudioSetup::default();
+            assert!(setup.output);
+            assert!(!setup.capture);
+        }
+
+        #[test]
+        fn every_sink_gets_each_block_with_frames_and_time() {
+            let mut capture = Capture::new(2, mpsc::channel().0);
+            let (a, log_a) = recorder();
+            let (b, log_b) = recorder();
+            capture.apply(CaptureCommand::AddSink(1, a));
+            capture.apply(CaptureCommand::AddSink(2, b));
+            capture.deliver(&[0.5, -0.5, 0.25, -0.25], StreamInstant::from_millis(1000));
+            capture.deliver(&[0.125, -0.125], StreamInstant::from_millis(1010));
+            let expected = vec![
+                (0, Duration::ZERO, vec![0.5, -0.5, 0.25, -0.25]),
+                (2, Duration::from_millis(10), vec![0.125, -0.125]),
+            ];
+            assert_eq!(*log_a.lock().unwrap(), expected);
+            assert_eq!(*log_b.lock().unwrap(), expected);
+        }
+
+        #[test]
+        fn frames_count_before_a_sink_is_added() {
+            let mut capture = Capture::new(1, mpsc::channel().0);
+            capture.deliver(&[0.0; 3], StreamInstant::from_millis(5));
+            let (sink, log) = recorder();
+            capture.apply(CaptureCommand::AddSink(1, sink));
+            capture.deliver(&[1.0], StreamInstant::from_millis(8));
+            assert_eq!(
+                *log.lock().unwrap(),
+                [(3, Duration::from_millis(3), vec![1.0])]
+            );
+        }
+
+        #[test]
+        fn removed_sink_goes_back_undropped() {
+            let (sender, removed) = mpsc::channel();
+            let mut capture = Capture::new(1, sender);
+            let (sink, log) = recorder();
+            capture.apply(CaptureCommand::AddSink(1, sink));
+            capture.apply(CaptureCommand::RemoveSink(7));
+            assert!(removed.try_recv().is_err());
+            capture.apply(CaptureCommand::RemoveSink(1));
+            capture.deliver(&[0.5], StreamInstant::from_millis(0));
+            assert!(log.lock().unwrap().is_empty());
+            let mut sink = removed.try_recv().expect("returned to the main thread");
+            sink(&crate::Captured {
+                samples: &[0.25],
+                frame: 9,
+                time: Duration::ZERO,
+            });
+            assert_eq!(*log.lock().unwrap(), [(9, Duration::ZERO, vec![0.25])]);
+        }
     }
 }
 

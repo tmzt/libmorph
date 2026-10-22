@@ -1,7 +1,7 @@
 ---
 title: Audio capture and the audio_setup hook
 date: 2026-10-22
-status: Draft
+status: In implementation
 covers:
   - A `MorphApp::audio_setup` hook, called before audio is opened, in
     which the app asks for a capture (input) stream and may turn the
@@ -253,3 +253,9 @@ Android's `Pause`/`Resume`).
 Everything is additive (a defaulted trait method, new types, new
 methods), so it is released as libmorph 0.2.2 (Rule 5.4). `Audio::open`
 is crate-private.
+
+## Amendment — 2026-10-22 06:56 EDT: implementation has started; the document is now immutable
+
+The owner asked for this to be implemented (2026-10-22), on the
+`audio-capture` branch in its own worktree. Steps 1 and 2 are built in
+this commit.

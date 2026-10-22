@@ -25,6 +25,8 @@ pub(crate) fn run<A: MorphApp>(script: &Script, run: ScriptRun) -> Result<Report
     let adapter = gpu.adapter.get_info();
     let spec = run.spec;
     let size = (spec.geometry.width, spec.geometry.height);
+    // Asked as on every host, but scripted runs stay silent.
+    let _ = super::audio_setup::<A>();
     let mut ctx = MorphContext::new(gpu, spec, run.args, Audio::silent());
     ctx.safe_area = SafeArea::from(spec.insets(InsetType::SafeDrawing));
 
