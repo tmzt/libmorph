@@ -195,3 +195,133 @@ the same release as the secure store (libmorph 0.3.1).
 2. **Generation.** `generate` gets no RNG from the store; the adapter uses
    its own (`OsRng`, or snow's). Should the store pass one in, so a
    scripted run could make repeatable keys?
+
+## Amendment — 2026-10-22 19:08 EDT: a key store of its own, built in libmobile and libdevice first
+
+Agreed with the owner (2026-10-22): "libmobile and libdevice will both
+need wrapped implementations with the same API", then "keep the plan in
+libmorph's plan for now, part of it will be writing and implementing the
+individual plans, this is also a little different than just a protected
+symmetric secure store. I also don't think `key.` should be a particular
+meaning, this should be a specific API for this type of operation".
+
+This replaces the `SecureStore` methods in section 2, all of section
+2.1, the libmobile items in 2.2 and the `related` note on libmobile,
+sections 4 and 5, and open question 1, which is settled: both crates get
+it.
+
+### What changes
+
+- **A key store, not blob names.** Keys made by an adapter (asymmetric or
+  any other kind the adapter defines) are not blobs. No blob name has a
+  special meaning, so the reserved `key.` prefix and the 60-byte limit
+  are dropped, and `get`/`put` are unchanged. Keys get their own API,
+  their own storage and their own error type. Names follow the same
+  1-to-64-character rule. A key and a blob can share a name without
+  meeting.
+- **libmorph wraps; libmobile and libdevice implement.** Each of the two
+  crates defines the same API: `SecretKey`, a `SealToken` only it can
+  make, `KeyHandle`, `KeyStore`, `KeyOptions` and `KeyStoreError`.
+  libmobile's runs on Android and libdevice's on the desktop. libmorph has
+  its own `SecretKey` and `SealToken`, the only ones apps implement and
+  see, and bridges them to the backend's trait through a private wrapper
+  type. The wrapper implements the backend's `SecretKey` and calls the
+  adapter's methods with libmorph's own token. So the sealing interface
+  stays private at every level, and no shared crate is needed.
+- **The same API in both crates.** Both plans state the same names,
+  signatures, error variants, name rule, sealed layout (kind length, kind,
+  sealed bytes) and options, and each crate's tests check them.
+
+### The API (each crate; libmorph's wrapper has the same shape)
+
+```rust
+pub struct SealToken(());                  // crate-private constructor
+pub trait SecretKey: Sized + Send + Sync + 'static {
+    type Public: Clone + Send + Sync + 'static;
+    const KIND: &'static str;
+    fn generate(token: SealToken) -> Self;
+    fn seal(&self, token: SealToken) -> Vec<u8>;
+    fn unseal(bytes: &[u8], token: SealToken) -> Result<Self, String>;
+    fn public(&self) -> Self::Public;
+}
+pub struct KeyHandle<K: SecretKey>;        // public() -> &K::Public, key() -> &K; Clone
+#[non_exhaustive] #[derive(Default)]
+pub struct KeyOptions { pub unlocked_only: bool }
+
+#[derive(Clone)]                           // Send + Sync
+pub struct KeyStore;
+impl KeyStore {
+    pub fn generate<K: SecretKey>(&self, name: &str) -> Result<KeyHandle<K>, KeyStoreError>;
+    pub fn generate_with<K: SecretKey>(&self, name: &str, options: KeyOptions)
+        -> Result<KeyHandle<K>, KeyStoreError>;
+    pub fn load<K: SecretKey>(&self, name: &str) -> Result<Option<KeyHandle<K>>, KeyStoreError>;
+    pub fn delete(&self, name: &str) -> Result<bool, KeyStoreError>;
+}
+
+#[non_exhaustive]
+pub enum KeyStoreError {
+    InvalidName,
+    /// Stored as another kind; the stored kind is given.
+    WrongKind(String),
+    /// `unseal` refused the bytes, or they fail to decrypt.
+    Corrupt(String),
+    Locked,
+    Platform(String),
+}
+```
+
+In libmorph: `MorphContext::key_store() -> Option<&KeyStore>`, under
+the `secure-store` feature, `None` where `secure_store()` is.
+
+### Storage, separate from the blob store
+
+- **libmobile:** directory `<noBackupFilesDir>/libmobile-key-store/`,
+  sealed under its own Keystore wrapping keys
+  (`libmobile.key-store.v1`, and `libmobile.key-store.unlocked.v1` for
+  `unlocked_only`). These follow the blob store's StrongBox rule and
+  `secure-store-no-strongbox`. The file layout is the blob store's, with
+  the kind header inside the encrypted part.
+- **libdevice:** the macOS login Keychain, service `<app>.keys` (blobs
+  use `<app>`, where libmorph passes `libmorph.<SECURE_STORE_ID>`), and a
+  memory backend for emulated or scripted runs.
+
+### Moving the desktop store to libdevice
+
+The owner agreed (2026-10-22) that the desktop backends belong in
+libdevice. So libdevice's plan also takes the blob store's Keychain and
+memory backends from libmorph's secure-store plan, and libmorph's
+`SecureStore` wraps libdevice on the desktop as it wraps libmobile on
+Android. That departs from `20261022_03_SECURE_STORE_PLAN.md` (frozen),
+and is recorded in CHANGES.md.
+
+### Steps (replace section 4)
+
+1. **libmobile plan.** Write libmobile's key store plan with the API
+   above, the storage, an example and an S23 check; discuss it with the
+   owner. **Done when:** the owner has agreed to it.
+2. **libdevice plan.** Write libdevice's plan for a `secure-store`
+   feature: the blob store (Keychain and memory, moved from libmorph) and
+   the key store, with the same API as libmobile; discuss it with the
+   owner. **Done when:** the owner has agreed to it.
+3. **libmobile implemented and released**, with the blob store, as 0.2.1.
+   **Done when:** its plan's steps are done and the release is pushed and
+   tagged.
+4. **libdevice implemented and released.** **Done when:** its plan's steps
+   are done and the release is pushed and tagged.
+5. **libmorph wraps both.** `SecretKey`, `SealToken`, `KeyHandle`,
+   `KeyStore` and `ctx.key_store()` bridge to the backends, and
+   `SecureStore`'s desktop backends are replaced by libdevice's. Unit
+   tests with a test key type run on the memory backend: a stored key
+   loads with the same `public()`, loading as another kind gives
+   `WrongKind`, and a doc test fails to compile when calling `seal`
+   without a token. **Done when:** they pass, clippy is clean on every
+   host, and the `securestore` example generates a test key on first
+   launch and logs the same public value after a relaunch, on the S23 and
+   on macOS.
+
+### Release (replaces section 5)
+
+Additive in libmobile (0.2.1, with the blob store). libdevice gets a minor
+bump, since it gains platform code and an optional dependency. libmorph
+takes both and checks Rule 5.5 for the libdevice bump before choosing its
+version.
