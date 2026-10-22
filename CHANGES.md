@@ -275,3 +275,23 @@ libmobile plan. Small departure in section 7: each file's Unix time is
 anchored when the sink receives its first block (wall clock minus that
 block's `time`), not when the sink is added, because `time` counts from
 the stream's first block, which comes before the sink is added.
+
+## 2026-10-22 07:03 EDT — Audio capture: the trial on the S23
+
+Plan: `docs/design/20261022_01_AUDIO_CAPTURE_PLAN.md`, step 4.
+
+`examples/android/build.sh audiocapture --install` on the owner's Galaxy
+S23 Ultra (SM-S918U). The input stream opened at 48000 Hz, 2 channels
+(`dumpsys audio`: source `VOICE_RECOGNITION`, client format float, not
+silenced). It wrote one 1 s file a second to
+`files/audiocapture/<unix ms>.au`, and each name was logged. Of 59
+files pulled to `out/audiocapture/s23/`, those written while the app
+was in front hold sound (peaks 0.008–0.10). Those written while it was
+behind Recents are all zeros: the audio policy moved the recording to
+the background (`setAppState(portId:6828, state:2)`), and Android
+silences the input instead of stopping it. Not yet checked: the owner
+listening to the files.
+
+No permission prompt appeared: `build.sh` grants `RECORD_AUDIO` with
+`adb shell pm grant`. The owner noted that a real request needs a Kotlin
+plugin in libmobile (2026-10-22).
