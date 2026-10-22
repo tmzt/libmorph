@@ -19,6 +19,7 @@ mod context;
 mod gpu;
 mod input;
 mod out_dir;
+mod permission;
 mod pipeline_cache;
 mod runner;
 pub mod safe_area;
@@ -35,6 +36,7 @@ pub use config::{MORPH_ARGS_HELP, MorphError};
 pub use context::MorphContext;
 pub use gpu::{GpuError, LimitFailure, LimitsRequest};
 pub use input::{Key, KeyStatus, Touch, TouchPhase};
+pub use permission::{PermissionRequest, Permissions};
 pub use safe_area::SafeArea;
 
 #[cfg(feature = "audio-cpal")]

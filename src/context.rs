@@ -6,7 +6,7 @@ use libdevice::DeviceSpec;
 
 use crate::gpu::Gpu;
 use crate::pipeline_cache::PipelineCacheStore;
-use crate::{Audio, SafeArea};
+use crate::{Audio, PermissionRequest, SafeArea};
 
 /// Shared state for the whole run. The device and queue never change; the
 /// surface size, format, safe area and scale factor follow the host.
@@ -23,6 +23,9 @@ pub struct MorphContext {
     pub(crate) data_dir: Option<PathBuf>,
     pub(crate) pipeline_cache: Option<PipelineCacheStore>,
     pub(crate) exit_requested: bool,
+    /// For libmobile's calls (permissions); set before `init`.
+    #[cfg(all(target_os = "android", feature = "mobile"))]
+    pub(crate) android: Option<libmobile::android::AndroidApp>,
 }
 
 impl MorphContext {
@@ -40,6 +43,8 @@ impl MorphContext {
             data_dir: None,
             pipeline_cache: None,
             exit_requested: false,
+            #[cfg(all(target_os = "android", feature = "mobile"))]
+            android: None,
         }
     }
 
@@ -139,6 +144,56 @@ impl MorphContext {
     #[must_use]
     pub fn pipeline_cache(&self) -> Option<&wgpu::PipelineCache> {
         self.pipeline_cache.as_ref().map(PipelineCacheStore::cache)
+    }
+
+    /// Ask the user for `permissions` (full names such as
+    /// `"android.permission.CAMERA"`, each declared in the app's manifest).
+    /// The answer arrives in [`MorphApp::on_permissions`](crate::MorphApp::on_permissions);
+    /// requests are made one at a time, in order. `None` where the host has no
+    /// runtime permissions (desktop, web): carry on as if granted.
+    pub fn request_permissions(&mut self, permissions: &[&str]) -> Option<PermissionRequest> {
+        #[cfg(all(target_os = "android", feature = "mobile"))]
+        return self
+            .android
+            .as_ref()
+            .map(|app| libmobile::android::request_permissions(app, permissions).into());
+        #[cfg(not(all(target_os = "android", feature = "mobile")))]
+        {
+            let _ = permissions;
+            None
+        }
+    }
+
+    /// Whether `permission` is granted now. `true` off Android.
+    #[must_use]
+    pub fn permission_granted(&self, permission: &str) -> bool {
+        #[cfg(all(target_os = "android", feature = "mobile"))]
+        return self
+            .android
+            .as_ref()
+            .is_some_and(|app| libmobile::android::permission_granted(app, permission));
+        #[cfg(not(all(target_os = "android", feature = "mobile")))]
+        {
+            let _ = permission;
+            true
+        }
+    }
+
+    /// After a denial: `true` if asking again shows a dialog, `false` if
+    /// Android would deny it without one (the user chose "Don't allow"
+    /// twice: point them to Settings). `false` off Android.
+    #[must_use]
+    pub fn should_show_rationale(&self, permission: &str) -> bool {
+        #[cfg(all(target_os = "android", feature = "mobile"))]
+        return self
+            .android
+            .as_ref()
+            .is_some_and(|app| libmobile::android::should_show_rationale(app, permission));
+        #[cfg(not(all(target_os = "android", feature = "mobile")))]
+        {
+            let _ = permission;
+            false
+        }
     }
 
     /// Save the pipeline cache's data, if there is a cache and it changed.

@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::{AudioSetup, Key, KeyStatus, LimitsRequest, MorphContext, Touch};
+use crate::{AudioSetup, Key, KeyStatus, LimitsRequest, MorphContext, Permissions, Touch};
 
 /// The surface texture for one frame. libmorph presents it after
 /// [`MorphApp::render`] returns.
@@ -96,6 +96,14 @@ pub trait MorphApp: Sized + 'static {
     /// allows `RECORD_AUDIO`. Never called if capture did not open.
     fn on_capture_ready(&mut self, ctx: &mut MorphContext) {
         let _ = ctx;
+    }
+
+    /// The answer to a
+    /// [`ctx.request_permissions`](MorphContext::request_permissions) call,
+    /// once per request the app made. Answers to libmorph's own requests
+    /// (`RECORD_AUDIO` for capture) are not passed here.
+    fn on_permissions(&mut self, ctx: &mut MorphContext, answer: &Permissions) {
+        let _ = (ctx, answer);
     }
 
     /// The surface is gone (app backgrounded). The device, queue and every

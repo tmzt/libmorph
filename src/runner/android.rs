@@ -16,7 +16,10 @@ use super::shell::{FrameStatus, Shell};
 use crate::gpu::{self, Gpu};
 use crate::input::KeyRouting;
 use crate::pipeline_cache::PipelineCacheStore;
-use crate::{GpuError, Key, KeyStatus, MorphApp, MorphContext, SafeArea, Touch, TouchPhase};
+use crate::{
+    GpuError, Key, KeyStatus, MorphApp, MorphContext, PermissionRequest, Permissions, SafeArea,
+    Touch, TouchPhase,
+};
 
 /// Run `A` until the activity is destroyed. Call it from the app's
 /// `android_main`:
@@ -37,7 +40,8 @@ pub fn run_android<A: MorphApp>(app: AndroidApp) {
             safe_area: SafeArea::NONE,
             keys: KeyRouting::default(),
             finishing: false,
-            asking_capture: false,
+            wants_capture: false,
+            capture_request: None,
         },
     );
 }
@@ -63,8 +67,11 @@ struct Adapter<A> {
     keys: KeyRouting,
     /// `exit()` was answered with `finish`; the teardown is under way.
     finishing: bool,
-    /// `RECORD_AUDIO` was requested for capture; the answer opens it.
-    asking_capture: bool,
+    /// `audio_setup` asked for capture.
+    wants_capture: bool,
+    /// libmorph's own `RECORD_AUDIO` request for capture, whose answer is
+    /// not passed to the app.
+    capture_request: Option<PermissionRequest>,
 }
 
 /// What capture needs granted at runtime.
@@ -119,12 +126,14 @@ impl<A: MorphApp> Adapter<A> {
         // Capture without the permission would fail to open: open the rest
         // of audio now, and capture once the user allows it.
         let mut setup = super::audio_setup::<A>();
+        self.wants_capture = setup.capture;
         let ask = setup.capture && !libmobile::android::permission_granted(app, RECORD_AUDIO);
         setup.capture &= !ask;
         let mut ctx = MorphContext::new(gpu, spec, Vec::new(), crate::Audio::open(setup));
         ctx.safe_area = self.safe_area;
         ctx.scale_factor = scale_factor(app);
         ctx.data_dir = app.internal_data_path();
+        ctx.android = Some(app.clone());
         ctx.pipeline_cache = ctx.data_dir.as_deref().and_then(|dir| {
             PipelineCacheStore::open(&ctx.gpu.device, &ctx.gpu.adapter.get_info(), dir)
         });
@@ -132,8 +141,8 @@ impl<A: MorphApp> Adapter<A> {
             Ok(shell) => {
                 self.shell = Some(shell);
                 if ask {
-                    self.asking_capture = true;
-                    libmobile::android::request_permissions(app, &[RECORD_AUDIO]);
+                    self.capture_request =
+                        Some(libmobile::android::request_permissions(app, &[RECORD_AUDIO]).into());
                 }
             }
             Err(error) => {
@@ -143,13 +152,26 @@ impl<A: MorphApp> Adapter<A> {
         }
     }
 
-    /// The user answered the `RECORD_AUDIO` request made at boot.
-    fn capture_answered(&mut self, granted: bool) {
+    /// An answer to a permission request: libmorph's own for capture, or
+    /// the app's. Either way, a grant of `RECORD_AUDIO` opens capture if the
+    /// app asked for it and it is still closed.
+    fn permissions(&mut self, answer: Permissions) {
         let Some(shell) = &mut self.shell else {
+            log::warn!("libmorph: a permission answer before the app exists");
             return;
         };
-        if !granted {
-            log::warn!("libmorph: audio capture: RECORD_AUDIO denied");
+        if self.capture_request == Some(answer.request) {
+            self.capture_request = None;
+            if !answer.granted(RECORD_AUDIO) {
+                log::warn!("libmorph: audio capture: RECORD_AUDIO denied");
+            }
+        } else {
+            shell.app.on_permissions(&mut shell.ctx, &answer);
+        }
+        if !(self.wants_capture
+            && answer.granted(RECORD_AUDIO)
+            && shell.ctx.audio.capture_format().is_none())
+        {
             return;
         }
         if shell.ctx.audio.open_capture() {
@@ -280,10 +302,7 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
                     shell.ctx.safe_area = self.safe_area;
                 }
             }
-            MobileEvent::Permissions(outcome) if self.asking_capture => {
-                self.asking_capture = false;
-                self.capture_answered(outcome.granted(RECORD_AUDIO));
-            }
+            MobileEvent::Permissions(outcome) => self.permissions(outcome.into()),
             MobileEvent::ConfigChanged => {
                 if let Some(shell) = &mut self.shell {
                     shell.ctx.scale_factor = scale_factor(app);

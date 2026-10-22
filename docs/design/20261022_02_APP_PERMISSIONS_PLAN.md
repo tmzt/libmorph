@@ -1,7 +1,7 @@
 ---
 title: Runtime permissions for apps
 date: 2026-10-22
-status: Draft
+status: In implementation
 covers:
   - "`MorphContext::request_permissions`, `permission_granted` and
     `should_show_rationale`, the same on every host"
@@ -160,3 +160,9 @@ Taps after capture is ready still cycle the capture mode.
 
 Additive (new types, methods and a defaulted hook), so it goes in the same
 patch release as audio capture (0.2.2) if released together.
+
+## Amendment — 2026-10-22 07:57 EDT: implementation has started; the document is now immutable
+
+On the owner's instruction (2026-10-22), on the `audio-capture` branch.
+Step 1 is done in libmobile's `runtime-permissions` branch (`74697a2`),
+and steps 2 and 3 are in this commit.
