@@ -396,3 +396,14 @@ direction that code moved to libmobile as `android::CaptureStream`
 now wraps it. Nothing changes for apps. On the owner's S23, libmobile's
 own `audiocapture` example asked for the microphone, recorded at 48 kHz
 stereo once allowed, and switched to `Generic` and `Camcorder` on taps.
+
+## 2026-10-22 08:16 EDT — Audio capture through libmobile on the S23
+
+Plan: `docs/design/20261022_01_AUDIO_CAPTURE_PLAN.md`, step 8.
+
+With capture opened through libmobile's `CaptureStream`, the example on the
+owner's Galaxy S23 Ultra cycled through every mode on taps. Each was
+granted as asked, and `dumpsys audio` showed the matching source: `MIC`,
+`CAMCORDER`, `VOICE_RECOGNITION`, `VOICE_COMMUNICATION`, `UNPROCESSED`,
+`VOICE_PERFORMANCE`. 24 files were written across the switches.
+`src/audio.rs` has no `ndk::audio` and no `unsafe`.
