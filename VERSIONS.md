@@ -47,3 +47,40 @@ Strictly additive (Rule 5.4), plan
   before `init` and saved after `init`, on suspend and on exit; `None`
   elsewhere. On Android the device is now requested with
   `Features::PIPELINE_CACHE` where the adapter offers it.
+
+## libmorph 0.3.0 — 2026-10-22 (tag v0.3.0)
+
+Audio capture (`docs/design/20261022_01_AUDIO_CAPTURE_PLAN.md`) and runtime
+permissions for apps (`docs/design/20261022_02_APP_PERMISSIONS_PLAN.md`).
+libmorph's own changes are additive; the minor bump comes from libmobile
+(Rule 5.5).
+
+- **Breaking:** on Android, libmobile 0.1.1 → 0.2.0 (libmorph re-exports
+  its `AndroidApp` and cpal). Its `cpal` feature, which libmorph's `audio`
+  turns on, now needs Android 9 (API 28).
+- Added `MorphApp::audio_setup(&mut AudioSetup)` (no `self`, before audio
+  opens), with `AudioSetup { output, capture, capture_mode }`
+  (`#[non_exhaustive]`; defaults: output on, capture off, `Default` mode).
+  With `output: false` no output stream opens.
+- Added capture: `Audio::add_sink(Sink) -> SinkId`, `remove_sink`,
+  `capture_format() -> Option<CaptureFormat>`, `capture_mode()` and
+  `set_capture_mode(CaptureMode)`, with the types `Sink`
+  (`Box<dyn FnMut(&Captured) + Send>`), `SinkId`, `Captured { samples,
+  frame, time }`, `CaptureFormat { sample_rate, channels }` and
+  `CaptureMode` (`#[non_exhaustive]`: `Default`, `Generic`, `Camcorder`,
+  `VoiceRecognition`, `VoiceCommunication`, `Unprocessed`,
+  `VoicePerformance`; Android input presets, ignored elsewhere). Without
+  `audio`, they exist and do nothing. Capture pauses with the app.
+- Added `MorphApp::on_capture_ready`, called once after `init` when capture
+  has opened. On Android, with `capture` set, libmorph asks for
+  `RECORD_AUDIO` itself if it is not granted, and opens capture once the
+  user allows it.
+- Added under `audio-cpal`: `Audio::capture_device()`,
+  `capture_stream_config()` and `capture_sample_format()`; `None` on
+  Android, where capture goes through libmobile's `CaptureStream`.
+- Added runtime permissions: `MorphContext::request_permissions(&[&str]) ->
+  Option<PermissionRequest>`, `permission_granted` and
+  `should_show_rationale`, the hook `MorphApp::on_permissions(&Permissions)`,
+  and the types `PermissionRequest` and `Permissions { request, permissions }`
+  (`#[non_exhaustive]`, `granted()`). Off Android there are none: `None`,
+  `true` and `false`.
