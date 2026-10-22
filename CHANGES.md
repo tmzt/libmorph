@@ -424,3 +424,11 @@ Left open in the plans, so neither is Implemented yet: on the S23, an
 explicit "Don't allow" twice (the Settings message), and the owner
 listening to the files; on the desktop, the spectrogram with a live
 microphone.
+
+## 2026-10-22 08:30 EDT — Platform layering: libmobile first
+
+Owner's rule (2026-10-22), recorded here rather than in a plan: Android
+platform features are built in libmobile first, with an example there, and
+libmorph wraps them. It follows the move of libmorph's AAudio capture code
+into libmobile's `CaptureStream`. AGENTS.md gains "Platform Layering
+(libmobile first)", and the README's Android section explains it.
