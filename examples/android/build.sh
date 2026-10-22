@@ -5,9 +5,8 @@
 #
 # Two stages, and no Gradle files in the repo: the example's build.rs writes
 # the whole Gradle project (libmorph-build) while cargo builds the .so, and
-# gradle then packages it. With --install, the APK is installed with adb,
-# its runtime permissions are granted (libmobile cannot request them), and
-# it is launched.
+# gradle then packages it. With --install, the APK is installed with adb and
+# launched; the app asks for its runtime permissions itself.
 #
 # Needs: rustup target aarch64-linux-android, an Android SDK (platform 35)
 # with an NDK, gradle 9.x and a JDK 17/21. Override discovery with
@@ -27,7 +26,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$EXAMPLE" in
-    audiocapture) PERMISSIONS=(android.permission.RECORD_AUDIO) ;;
+    audiocapture) ;;
     *) echo "unknown example: $EXAMPLE" >&2; exit 2 ;;
 esac
 
@@ -75,9 +74,6 @@ echo "==> $APK"
 
 if [[ "$INSTALL" == 1 ]]; then
     adb install -r "$APK"
-    for permission in "${PERMISSIONS[@]}"; do
-        adb shell pm grant "$APP_ID" "$permission"
-    done
     adb shell am start -n "$APP_ID/dev.highbay.libmobile.MobileNativeActivity"
     echo "==> logs: adb logcat -s $EXAMPLE libmobile libmorph"
 fi
