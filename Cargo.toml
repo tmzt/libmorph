@@ -103,3 +103,6 @@ name = "raymarch"
 
 [[example]]
 name = "tone"
+
+[[example]]
+name = "audiocapture"
