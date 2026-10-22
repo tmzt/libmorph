@@ -384,3 +384,15 @@ runtime permission through `MorphContext` and get the answer in a new
 the ids libmobile now returns, so libmorph's own `RECORD_AUDIO` request
 for capture can no longer take an app's answer. Depends on the amended
 libmobile permissions plan. To be released with audio capture as 0.2.2.
+
+## 2026-10-22 08:15 EDT — Audio capture: Android through libmobile
+
+Plan: `docs/design/20261022_01_AUDIO_CAPTURE_PLAN.md` (In implementation),
+amended for step 8.
+
+libmorph's Android capture had opened AAudio streams itself. On the owner's
+direction that code moved to libmobile as `android::CaptureStream`
+(libmobile `docs/design/20261022_02_AUDIO_CAPTURE_PLAN.md`), and libmorph
+now wraps it. Nothing changes for apps. On the owner's S23, libmobile's
+own `audiocapture` example asked for the microphone, recorded at 48 kHz
+stereo once allowed, and switched to `Generic` and `Camcorder` on taps.
