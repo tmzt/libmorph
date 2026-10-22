@@ -28,8 +28,8 @@ pub mod script;
 
 pub use app::{Frame, MorphApp};
 pub use audio::{
-    Audio, AudioSetup, CaptureFormat, Captured, OutputFormat, Sink, SinkId, Sound, Source,
-    SourceId, Voice,
+    Audio, AudioSetup, CaptureFormat, CaptureMode, Captured, OutputFormat, Sink, SinkId, Sound,
+    Source, SourceId, Voice,
 };
 pub use config::{MORPH_ARGS_HELP, MorphError};
 pub use context::MorphContext;

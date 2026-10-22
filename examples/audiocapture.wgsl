@@ -1,12 +1,14 @@
 // The audiocapture example's scrolling spectrogram. The texture is a ring of
 // columns (x) by frequency bands (y, row 0 lowest); `next` is the column the
 // analysis writes next, so `next - 1` is the newest and goes at the right.
+// A band across the top shows the capture mode by colour.
 
 struct Ring {
     next: u32,
     columns: u32,
     rows: u32,
-    _pad: u32,
+    // The capture mode's place in the example's `MODES`.
+    mode: u32,
 }
 
 @group(0) @binding(0) var spectrum: texture_2d<f32>;
@@ -41,8 +43,25 @@ fn ramp(t: f32) -> vec3<f32> {
     return mix(stops[i], stops[i + 1u], x - f32(i));
 }
 
+// One colour per capture mode, in `MODES` order.
+fn mode_colour(mode: u32) -> vec3<f32> {
+    let colours = array<vec3<f32>, 7>(
+        vec3<f32>(0.5, 0.5, 0.5),   // Default
+        vec3<f32>(0.9, 0.9, 0.2),   // Generic
+        vec3<f32>(0.2, 0.8, 0.9),   // Camcorder
+        vec3<f32>(0.3, 0.9, 0.3),   // VoiceRecognition
+        vec3<f32>(0.2, 0.4, 1.0),   // VoiceCommunication
+        vec3<f32>(1.0, 0.3, 0.3),   // Unprocessed
+        vec3<f32>(0.9, 0.4, 0.9),   // VoicePerformance
+    );
+    return colours[min(mode, 6u)];
+}
+
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
+    if in.uv.y < 0.06 {
+        return vec4<f32>(mode_colour(ring.mode), 1.0);
+    }
     // Columns back from the newest at the right edge.
     let back = min(u32((1.0 - in.uv.x) * f32(ring.columns)), ring.columns - 1u);
     let column = (ring.next + ring.columns - 1u - back) % ring.columns;

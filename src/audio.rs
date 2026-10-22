@@ -16,6 +16,9 @@ pub struct AudioSetup {
     /// Open the default input device. `false` by default: on macOS it asks
     /// for microphone permission, and Android needs `RECORD_AUDIO`.
     pub capture: bool,
+    /// The mode capture opens with; change it later with
+    /// [`Audio::set_capture_mode`].
+    pub capture_mode: CaptureMode,
 }
 
 impl Default for AudioSetup {
@@ -23,8 +26,27 @@ impl Default for AudioSetup {
         Self {
             output: true,
             capture: false,
+            capture_mode: CaptureMode::Default,
         }
     }
+}
+
+/// Android's AAudio input preset. The desktop and the web ignore it.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+pub enum CaptureMode {
+    /// AAudio's own choice (VoiceRecognition).
+    #[default]
+    Default,
+    Generic,
+    Camcorder,
+    VoiceRecognition,
+    /// Echo cancellation, noise suppression and gain control.
+    VoiceCommunication,
+    /// The microphone without processing, where the device offers it.
+    Unprocessed,
+    /// Low latency, for live monitoring.
+    VoicePerformance,
 }
 
 /// The capture stream's format. Samples handed to a [`Sink`] are always
@@ -139,7 +161,8 @@ pub use stub::Audio;
 #[cfg(not(feature = "audio"))]
 mod stub {
     use super::{
-        AudioSetup, CaptureFormat, OutputFormat, Sink, SinkId, Sound, Source, SourceId, Voice,
+        AudioSetup, CaptureFormat, CaptureMode, OutputFormat, Sink, SinkId, Sound, Source,
+        SourceId, Voice,
     };
 
     /// The `audio` feature is off: every call is a no-op.
@@ -199,6 +222,15 @@ mod stub {
             None
         }
 
+        #[must_use]
+        pub fn capture_mode(&self) -> Option<CaptureMode> {
+            None
+        }
+
+        pub fn set_capture_mode(&self, _mode: CaptureMode) -> Option<CaptureMode> {
+            None
+        }
+
         /// Drops the sink: there is no capture to feed it.
         pub fn add_sink(&self, _sink: Sink) -> SinkId {
             SinkId(0)
@@ -225,7 +257,8 @@ mod output {
     use super::capture::{Capture, CaptureCommand};
     use super::mixer::{Command, Mixer};
     use super::{
-        AudioSetup, CaptureFormat, OutputFormat, Sink, SinkId, Sound, Source, SourceId, Voice,
+        AudioSetup, CaptureFormat, CaptureMode, OutputFormat, Sink, SinkId, Sound, Source,
+        SourceId, Voice,
     };
 
     /// The open stream, a channel into its mixer, and one back for the
@@ -244,17 +277,29 @@ mod output {
     }
 
     /// The open input stream and its channels, laid out like [`Output`].
+    /// On Android the stream is AAudio's, opened by libmorph to set the
+    /// input preset; elsewhere it is cpal's.
     struct Input {
-        stream: cpal::Stream,
+        stream: InputStream,
         commands: mpsc::Sender<CaptureCommand>,
         /// Removed sinks, dropped here rather than on the audio thread.
         removed: mpsc::Receiver<Sink>,
+        format: CaptureFormat,
+        #[cfg(not(target_os = "android"))]
         #[cfg_attr(not(feature = "audio-cpal"), allow(dead_code))]
         device: cpal::Device,
+        #[cfg(not(target_os = "android"))]
+        #[cfg_attr(not(feature = "audio-cpal"), allow(dead_code))]
         config: cpal::StreamConfig,
+        #[cfg(not(target_os = "android"))]
         #[cfg_attr(not(feature = "audio-cpal"), allow(dead_code))]
         sample_format: SampleFormat,
     }
+
+    #[cfg(not(target_os = "android"))]
+    type InputStream = cpal::Stream;
+    #[cfg(target_os = "android")]
+    type InputStream = super::aaudio::AaudioInput;
 
     pub struct Audio {
         output: Option<Output>,
@@ -262,6 +307,9 @@ mod output {
         /// Sinks added before the capture stream opened, handed to it when
         /// it does.
         pub(super) waiting: RefCell<Vec<(u64, Sink)>>,
+        /// The mode a later [`open_capture`](Self::open_capture) opens with.
+        #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+        capture_mode: CaptureMode,
         next: Cell<u64>,
     }
 
@@ -290,7 +338,7 @@ mod output {
             let input = setup
                 .capture
                 .then(|| {
-                    start_capture()
+                    start_capture(setup.capture_mode)
                         .map_err(|error| {
                             log::warn!("libmorph: audio capture unavailable: {error}");
                         })
@@ -301,6 +349,7 @@ mod output {
                 output,
                 input,
                 waiting: RefCell::default(),
+                capture_mode: setup.capture_mode,
                 next: Cell::new(1),
             }
         }
@@ -311,7 +360,7 @@ mod output {
         #[cfg_attr(not(target_os = "android"), allow(dead_code))]
         pub(crate) fn open_capture(&mut self) -> bool {
             if self.input.is_none() {
-                self.input = start_capture()
+                self.input = start_capture(self.capture_mode)
                     .map_err(|error| log::warn!("libmorph: audio capture unavailable: {error}"))
                     .ok();
             }
@@ -332,6 +381,7 @@ mod output {
                 output: None,
                 input: None,
                 waiting: RefCell::default(),
+                capture_mode: CaptureMode::Default,
                 next: Cell::new(1),
             }
         }
@@ -422,31 +472,65 @@ mod output {
         /// The capture stream's format; `None` without one.
         #[must_use]
         pub fn capture_format(&self) -> Option<CaptureFormat> {
-            self.input.as_ref().map(|input| CaptureFormat {
-                sample_rate: input.config.sample_rate,
-                channels: input.config.channels,
-            })
+            self.input.as_ref().map(|input| input.format)
         }
 
-        /// The input device libmorph opened; `None` without one.
+        /// The mode the capture stream has: on Android, the input preset
+        /// AAudio reports; elsewhere [`CaptureMode::Default`]. `None` without
+        /// capture.
+        #[must_use]
+        pub fn capture_mode(&self) -> Option<CaptureMode> {
+            #[cfg(target_os = "android")]
+            return self.input.as_ref().map(|input| input.stream.mode());
+            #[cfg(not(target_os = "android"))]
+            return self.input.as_ref().map(|_| CaptureMode::Default);
+        }
+
+        /// On Android, reopen the capture stream with `mode`, at the same
+        /// format, keeping its sinks, and return the mode granted (a mode
+        /// that fails to open falls back to [`CaptureMode::Default`]).
+        /// Elsewhere, and without capture, nothing changes and this returns
+        /// [`capture_mode`](Self::capture_mode).
+        pub fn set_capture_mode(&self, mode: CaptureMode) -> Option<CaptureMode> {
+            #[cfg(target_os = "android")]
+            if let Some(input) = &self.input {
+                input.stream.set_mode(mode);
+            }
+            #[cfg(not(target_os = "android"))]
+            let _ = mode;
+            self.capture_mode()
+        }
+
+        /// The input device libmorph opened; `None` without one, and on
+        /// Android, where capture does not go through cpal.
         #[cfg(feature = "audio-cpal")]
         #[must_use]
         pub fn capture_device(&self) -> Option<&impl DeviceTrait> {
-            self.input.as_ref().map(|input| &input.device)
+            #[cfg(target_os = "android")]
+            return None::<&cpal::Device>;
+            #[cfg(not(target_os = "android"))]
+            return self.input.as_ref().map(|input| &input.device);
         }
 
-        /// The config the capture stream was built with.
+        /// The config the capture stream was built with; `None` on Android.
         #[cfg(feature = "audio-cpal")]
         #[must_use]
         pub fn capture_stream_config(&self) -> Option<&cpal::StreamConfig> {
-            self.input.as_ref().map(|input| &input.config)
+            #[cfg(target_os = "android")]
+            return None;
+            #[cfg(not(target_os = "android"))]
+            return self.input.as_ref().map(|input| &input.config);
         }
 
-        /// The input device's sample type. libmorph converts to `f32`.
+        /// The input device's sample type, which libmorph converts to `f32`;
+        /// `None` on Android.
         #[cfg(feature = "audio-cpal")]
         #[must_use]
         pub fn capture_sample_format(&self) -> Option<SampleFormat> {
-            self.input.as_ref().map(|input| input.sample_format)
+            #[cfg(target_os = "android")]
+            return None;
+            #[cfg(not(target_os = "android"))]
+            return self.input.as_ref().map(|input| input.sample_format);
         }
 
         /// Hand every captured block to `sink` until it is removed. Before
@@ -527,7 +611,21 @@ mod output {
         }
     }
 
-    fn start_capture() -> Result<Input, String> {
+    #[cfg(target_os = "android")]
+    fn start_capture(mode: CaptureMode) -> Result<Input, String> {
+        let (commands, receiver) = mpsc::channel();
+        let (returns, removed) = mpsc::channel();
+        let stream = super::aaudio::AaudioInput::open(mode, Capture::new(1, returns), receiver)?;
+        Ok(Input {
+            format: stream.format(),
+            stream,
+            commands,
+            removed,
+        })
+    }
+
+    #[cfg(not(target_os = "android"))]
+    fn start_capture(_mode: CaptureMode) -> Result<Input, String> {
         let device = cpal::default_host()
             .default_input_device()
             .ok_or("no input device")?;
@@ -549,12 +647,17 @@ mod output {
             stream,
             commands,
             removed,
+            format: CaptureFormat {
+                sample_rate: config.sample_rate,
+                channels: config.channels,
+            },
             device,
             config,
             sample_format,
         })
     }
 
+    #[cfg(not(target_os = "android"))]
     fn build_input<T>(
         device: &cpal::Device,
         config: cpal::StreamConfig,
@@ -651,6 +754,7 @@ mod tests {
         let audio = Audio::open(AudioSetup {
             output: false,
             capture: false,
+            ..AudioSetup::default()
         });
         let kept = audio.add_sink(Box::new(|_| {}));
         let removed = audio.add_sink(Box::new(|_| {}));
@@ -658,6 +762,222 @@ mod tests {
         let waiting: Vec<u64> = audio.waiting.borrow().iter().map(|(id, _)| *id).collect();
         assert_eq!(waiting, [kept.0]);
         assert_eq!(audio.capture_format(), None);
+    }
+}
+
+/// The Android capture stream, opened with the NDK's AAudio rather than
+/// cpal so the input preset can be set.
+#[cfg(all(feature = "audio", target_os = "android"))]
+mod aaudio {
+    use std::cell::{Cell, RefCell};
+    use std::sync::{Arc, Mutex, mpsc};
+    use std::time::Instant;
+
+    use libmobile::android::ndk::audio::{
+        AudioCallbackResult, AudioDirection, AudioFormat, AudioInputPreset, AudioStream,
+        AudioStreamBuilder,
+    };
+
+    use super::capture::{Capture, CaptureCommand};
+    use super::cpal::StreamInstant;
+    use super::{CaptureFormat, CaptureMode};
+
+    /// What the data callback owns. Only the callback locks it while a
+    /// stream is open; the main thread takes it only between streams.
+    struct State {
+        capture: Capture,
+        commands: mpsc::Receiver<CaptureCommand>,
+        channels: usize,
+        /// `time` counts from here, across reopens.
+        start: Instant,
+    }
+
+    pub(crate) struct AaudioInput {
+        stream: RefCell<Option<AudioStream>>,
+        state: Arc<Mutex<State>>,
+        format: CaptureFormat,
+        mode: Cell<CaptureMode>,
+        /// Not paused by the app.
+        running: Cell<bool>,
+    }
+
+    impl AaudioInput {
+        pub fn open(
+            mode: CaptureMode,
+            capture: Capture,
+            commands: mpsc::Receiver<CaptureCommand>,
+        ) -> Result<Self, String> {
+            let state = Arc::new(Mutex::new(State {
+                capture,
+                commands,
+                channels: 1,
+                start: Instant::now(),
+            }));
+            let (stream, granted) = open_with_fallback(mode, &state, None)?;
+            let format = CaptureFormat {
+                sample_rate: u32::try_from(stream.sample_rate()).unwrap_or(0),
+                channels: u16::try_from(stream.channel_count()).unwrap_or(1),
+            };
+            {
+                // No callback runs before `request_start`.
+                let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+                state.channels = usize::from(format.channels).max(1);
+                let channels = state.channels;
+                state.capture.set_channels(channels);
+            }
+            stream
+                .request_start()
+                .map_err(|e| format!("start: {e:?}"))?;
+            log::info!("libmorph: audio capture: asked {mode:?}, got {granted:?}");
+            Ok(Self {
+                stream: RefCell::new(Some(stream)),
+                state,
+                format,
+                mode: Cell::new(granted),
+                running: Cell::new(true),
+            })
+        }
+
+        pub fn format(&self) -> CaptureFormat {
+            self.format
+        }
+
+        pub fn mode(&self) -> CaptureMode {
+            self.mode.get()
+        }
+
+        /// Close the stream and open another with `mode`. Closing waits for
+        /// the callback to return, so the state is free for the next one.
+        pub fn set_mode(&self, mode: CaptureMode) {
+            let mut slot = self.stream.borrow_mut();
+            if let Some(stream) = slot.take() {
+                let _ = stream.request_stop();
+                drop(stream);
+            }
+            match open_with_fallback(mode, &self.state, Some(self.format)) {
+                Ok((stream, granted)) => {
+                    if self.running.get()
+                        && let Err(error) = stream.request_start()
+                    {
+                        log::warn!("libmorph: audio capture: start failed: {error:?}");
+                    }
+                    log::info!("libmorph: audio capture: asked {mode:?}, got {granted:?}");
+                    self.mode.set(granted);
+                    *slot = Some(stream);
+                }
+                Err(error) => log::warn!("libmorph: audio capture unavailable: {error}"),
+            }
+        }
+
+        /// AAudio input streams cannot pause; they stop and start again.
+        pub fn pause(&self) -> Result<(), String> {
+            self.running.set(false);
+            match &*self.stream.borrow() {
+                Some(stream) => stream.request_stop().map_err(|e| format!("{e:?}")),
+                None => Ok(()),
+            }
+        }
+
+        pub fn play(&self) -> Result<(), String> {
+            self.running.set(true);
+            match &*self.stream.borrow() {
+                Some(stream) => stream.request_start().map_err(|e| format!("{e:?}")),
+                None => Ok(()),
+            }
+        }
+    }
+
+    /// Open with `mode`, or with [`CaptureMode::Default`] if that fails.
+    fn open_with_fallback(
+        mode: CaptureMode,
+        state: &Arc<Mutex<State>>,
+        format: Option<CaptureFormat>,
+    ) -> Result<(AudioStream, CaptureMode), String> {
+        match build(mode, state, format) {
+            Ok(opened) => Ok(opened),
+            Err(error) if mode != CaptureMode::Default => {
+                log::warn!(
+                    "libmorph: audio capture: {mode:?} unavailable ({error}), using Default"
+                );
+                build(CaptureMode::Default, state, format)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn build(
+        mode: CaptureMode,
+        state: &Arc<Mutex<State>>,
+        format: Option<CaptureFormat>,
+    ) -> Result<(AudioStream, CaptureMode), String> {
+        let mut builder = AudioStreamBuilder::new()
+            .map_err(|e| format!("{e:?}"))?
+            .direction(AudioDirection::Input)
+            .format(AudioFormat::PCM_Float);
+        if let Some(preset) = preset(mode) {
+            builder = builder.input_preset(AudioInputPreset::from(preset));
+        }
+        if let Some(format) = format {
+            builder = builder
+                .sample_rate(i32::try_from(format.sample_rate).unwrap_or(i32::MAX))
+                .channel_count(i32::from(format.channels));
+        }
+        let callback_state = state.clone();
+        let stream = builder
+            .data_callback(Box::new(move |_stream, data, frames| {
+                let mut state = callback_state.lock().unwrap_or_else(|e| e.into_inner());
+                let state = &mut *state;
+                while let Ok(command) = state.commands.try_recv() {
+                    state.capture.apply(command);
+                }
+                let len = usize::try_from(frames).unwrap_or(0) * state.channels;
+                // SAFETY: an input stream opened as PCM_Float hands its
+                // callback `frames` interleaved frames of `channels` f32
+                // samples at `data`, valid for the length of the call.
+                let samples = unsafe { std::slice::from_raw_parts(data.cast::<f32>(), len) };
+                let at = StreamInstant::from_nanos(
+                    u64::try_from(state.start.elapsed().as_nanos()).unwrap_or(u64::MAX),
+                );
+                state.capture.deliver(samples, at);
+                AudioCallbackResult::Continue
+            }))
+            .error_callback(Box::new(|_stream, error| {
+                log::error!("libmorph: audio capture stream: {error:?}");
+            }))
+            .open_stream()
+            .map_err(|e| format!("{e:?}"))?;
+        if stream.format() != AudioFormat::PCM_Float {
+            return Err(format!("got {:?}, not PCM_Float", stream.format()));
+        }
+        let granted = from_preset(i32::from(stream.input_preset()));
+        Ok((stream, granted))
+    }
+
+    /// AAudio's `AAUDIO_INPUT_PRESET_*` value for `mode`; `None` leaves the
+    /// choice to AAudio. Raw values, so `VoicePerformance` (API 29) needs
+    /// no ndk API-level feature.
+    fn preset(mode: CaptureMode) -> Option<i32> {
+        match mode {
+            CaptureMode::Default => None,
+            CaptureMode::Generic => Some(1),
+            CaptureMode::Camcorder => Some(5),
+            CaptureMode::VoiceRecognition => Some(6),
+            CaptureMode::VoiceCommunication => Some(7),
+            CaptureMode::Unprocessed => Some(9),
+            CaptureMode::VoicePerformance => Some(10),
+        }
+    }
+
+    fn from_preset(preset: i32) -> CaptureMode {
+        match preset {
+            1 => CaptureMode::Generic,
+            5 => CaptureMode::Camcorder,
+            6 => CaptureMode::VoiceRecognition,
+            7 => CaptureMode::VoiceCommunication,
+            9 => CaptureMode::Unprocessed,
+            10 => CaptureMode::VoicePerformance,
+            _ => CaptureMode::Default,
+        }
     }
 }
 
@@ -694,6 +1014,13 @@ mod capture {
                 first: None,
                 removed,
             }
+        }
+
+        /// The stream's channel count, once it is known (AAudio chooses it
+        /// when the stream opens).
+        #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+        pub fn set_channels(&mut self, channels: usize) {
+            self.channels = channels.max(1);
         }
 
         pub fn apply(&mut self, command: CaptureCommand) {

@@ -1,9 +1,13 @@
 //! Records the default microphone (`AudioSetup::capture`) into Sun `.au`
 //! files of 16-bit PCM, one per chunk, under `out/audiocapture/` (on
 //! Android, `audiocapture/` in the app's data directory; see
-//! `examples/android/`). Each file
-//! is named by the Unix time in milliseconds of its first frame, and its
-//! name is logged once it is written. The first argument is the chunk
+//! `examples/android/`). Each file is named
+//! `<unix ms>_<capture mode>.au`, by the Unix time in milliseconds of its
+//! first frame, and its name is logged once it is written.
+//!
+//! A tap cycles Android's capture mode (`Audio::set_capture_mode`) through
+//! every `CaptureMode`, and a band across the top shows the mode granted by
+//! colour. The desktop has only `Default`. The first argument is the chunk
 //! length in milliseconds (default 1000).
 //!
 //! The screen is a scrolling spectrogram of the capture, newest at the
@@ -19,11 +23,15 @@
 
 use std::f32::consts::TAU;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{fs, io, mem, thread};
 
-use libmorph::{AudioSetup, CaptureFormat, Captured, Frame, MorphApp, MorphContext, wgpu};
+use libmorph::{
+    AudioSetup, CaptureFormat, CaptureMode, Captured, Frame, MorphApp, MorphContext, Touch,
+    TouchPhase, wgpu,
+};
 
 /// Relative to where the example is run, like the scripted runs' `out/`,
 /// when there is no data directory.
@@ -41,6 +49,22 @@ const LOW_HZ: f32 = 40.0;
 const FLOOR_DB: f32 = -100.0;
 const CEIL_DB: f32 = -20.0;
 
+/// The modes a tap cycles through, in order, with their file-name forms.
+const MODES: [(CaptureMode, &str); 7] = [
+    (CaptureMode::Default, "default"),
+    (CaptureMode::Generic, "generic"),
+    (CaptureMode::Camcorder, "camcorder"),
+    (CaptureMode::VoiceRecognition, "voice_recognition"),
+    (CaptureMode::VoiceCommunication, "voice_communication"),
+    (CaptureMode::Unprocessed, "unprocessed"),
+    (CaptureMode::VoicePerformance, "voice_performance"),
+];
+
+/// `mode`'s place in [`MODES`]; 0 for one this example does not know.
+fn mode_index(mode: CaptureMode) -> usize {
+    MODES.iter().position(|(m, _)| *m == mode).unwrap_or(0)
+}
+
 /// The spectrogram ring, shared by the analysis sink and the renderer.
 /// Row-major `COLUMNS` x `ROWS`, row 0 the lowest band; column
 /// `written % COLUMNS` is the next to be written.
@@ -53,11 +77,15 @@ struct Columns {
 struct Chunk {
     /// Unix time of the first frame.
     unix_ms: u128,
+    /// The granted mode's place in [`MODES`] when the chunk began.
+    mode: usize,
     samples: Vec<f32>,
 }
 
 pub struct AudioCapture {
     chunk_ms: u64,
+    /// The granted mode's place in [`MODES`], shared with the sink.
+    mode: Arc<AtomicUsize>,
     /// `None` until capture is ready.
     columns: Option<Arc<Mutex<Columns>>>,
     view: Spectrogram,
@@ -78,6 +106,7 @@ impl MorphApp for AudioCapture {
             .unwrap_or(1000);
         Self {
             chunk_ms,
+            mode: Arc::default(),
             columns: None,
             view: Spectrogram::new(ctx),
         }
@@ -97,7 +126,10 @@ impl MorphApp for AudioCapture {
             self.chunk_ms,
             dir.display()
         );
-        if let Err(error) = start(ctx, &dir, format, self.chunk_ms) {
+        let granted = ctx.audio().capture_mode().unwrap_or_default();
+        log::info!("mode: {granted:?}");
+        self.mode.store(mode_index(granted), Ordering::Relaxed);
+        if let Err(error) = start(ctx, &dir, format, self.chunk_ms, self.mode.clone()) {
             log::error!("{}: {error}", dir.display());
         }
         let columns = Arc::new(Mutex::new(Columns {
@@ -116,10 +148,22 @@ impl MorphApp for AudioCapture {
         match &self.columns {
             Some(columns) => {
                 self.view.upload(ctx, columns);
-                self.view.draw(ctx, frame);
+                self.view
+                    .draw(ctx, frame, self.mode.load(Ordering::Relaxed));
             }
             None => clear(ctx, frame),
         }
+    }
+
+    /// A tap moves to the next capture mode.
+    fn on_touch(&mut self, ctx: &mut MorphContext, touch: Touch) {
+        if touch.phase != TouchPhase::Started || self.columns.is_none() {
+            return;
+        }
+        let next = MODES[(self.mode.load(Ordering::Relaxed) + 1) % MODES.len()].0;
+        let granted = ctx.audio().set_capture_mode(next).unwrap_or_default();
+        log::info!("mode: asked {next:?}, got {granted:?}");
+        self.mode.store(mode_index(granted), Ordering::Relaxed);
     }
 }
 
@@ -156,6 +200,8 @@ struct Spectrogram {
     format: wgpu::TextureFormat,
     /// `Columns::written` at the last upload.
     uploaded: u64,
+    /// The column the analysis writes next, as of the last upload.
+    next: u32,
 }
 
 impl Spectrogram {
@@ -256,6 +302,7 @@ impl Spectrogram {
             bind_group,
             format,
             uploaded: u64::MAX,
+            next: 0,
         }
     }
 
@@ -282,19 +329,20 @@ impl Spectrogram {
             },
             self.texture.size(),
         );
-        let next = (columns.written % COLUMNS as u64) as u32;
-        let bytes: Vec<u8> = [next, COLUMNS as u32, ROWS as u32, 0]
-            .iter()
-            .flat_map(|value| value.to_ne_bytes())
-            .collect();
-        ctx.queue().write_buffer(&self.uniforms, 0, &bytes);
+        self.next = (columns.written % COLUMNS as u64) as u32;
     }
 
-    fn draw(&mut self, ctx: &MorphContext, frame: &Frame<'_>) {
+    /// `mode` is the granted mode's place in [`MODES`], for the band.
+    fn draw(&mut self, ctx: &MorphContext, frame: &Frame<'_>, mode: usize) {
         if frame.format != self.format {
             *self = Self::new(ctx);
             return;
         }
+        let bytes: Vec<u8> = [self.next, COLUMNS as u32, ROWS as u32, mode as u32]
+            .iter()
+            .flat_map(|value| value.to_ne_bytes())
+            .collect();
+        ctx.queue().write_buffer(&self.uniforms, 0, &bytes);
         let mut encoder = ctx.device().create_command_encoder(&Default::default());
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -466,7 +514,13 @@ impl Fft {
 
 /// Add a sink that cuts the capture into chunks, and a thread that writes
 /// them. The audio thread only copies samples and swaps buffers.
-fn start(ctx: &MorphContext, dir: &Path, format: CaptureFormat, chunk_ms: u64) -> io::Result<()> {
+fn start(
+    ctx: &MorphContext,
+    dir: &Path,
+    format: CaptureFormat,
+    chunk_ms: u64,
+    mode: Arc<AtomicUsize>,
+) -> io::Result<()> {
     fs::create_dir_all(dir)?;
     let dir = dir.to_path_buf();
     let channels = usize::from(format.channels);
@@ -478,7 +532,7 @@ fn start(ctx: &MorphContext, dir: &Path, format: CaptureFormat, chunk_ms: u64) -
     thread::spawn(move || {
         // Ends when the sink, and with it `full`, is dropped at exit.
         for mut chunk in chunks {
-            let path = dir.join(format!("{}.au", chunk.unix_ms));
+            let path = dir.join(format!("{}_{}.au", chunk.unix_ms, MODES[chunk.mode].1));
             match fs::write(&path, au(&chunk.samples, format)) {
                 Ok(()) => log::info!(
                     "wrote {} ({} frames, {} ch, {} Hz)",
@@ -499,6 +553,7 @@ fn start(ctx: &MorphContext, dir: &Path, format: CaptureFormat, chunk_ms: u64) -
     // Unix time of the stream's first block, and of the chunk being filled.
     let mut origin_ms = None;
     let mut chunk_unix_ms = 0;
+    let mut chunk_mode = 0;
     ctx.audio()
         .add_sink(Box::new(move |captured: &Captured<'_>| {
             let origin = *origin_ms.get_or_insert_with(|| unix_ms() - captured.time.as_millis());
@@ -507,6 +562,7 @@ fn start(ctx: &MorphContext, dir: &Path, format: CaptureFormat, chunk_ms: u64) -
             while !samples.is_empty() {
                 if buffer.is_empty() {
                     chunk_unix_ms = origin + time.as_millis();
+                    chunk_mode = mode.load(Ordering::Relaxed);
                 }
                 let take = (len - buffer.len()).min(samples.len());
                 buffer.extend_from_slice(&samples[..take]);
@@ -520,6 +576,7 @@ fn start(ctx: &MorphContext, dir: &Path, format: CaptureFormat, chunk_ms: u64) -
                     let samples = mem::replace(&mut buffer, next);
                     let _ = full.send(Chunk {
                         unix_ms: chunk_unix_ms,
+                        mode: chunk_mode,
                         samples,
                     });
                 }
