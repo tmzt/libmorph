@@ -467,3 +467,19 @@ desktop as it wraps libmobile on Android. The owner agreed (2026-10-22)
 that both crates need wrapped implementations with the same API.
 libmorph's public API for the store does not change. The work is a step
 of the opaque keys plan.
+
+## 2026-10-22 19:55 EDT — Key store for keying material (proposed); opaque keys plan superseded
+
+Plan: `docs/design/20261022_05_KEY_STORE_PLAN.md` (Draft), superseding
+`20261022_04_OPAQUE_KEYS_PLAN.md`, libmobile's key store plan and the key
+half of libdevice's plan. Based on the owner's engine sketch and the review
+of it:
+- one engine file, identical in libmobile and libdevice, over a per-platform
+  `Vault`;
+- `with_key` lends the key for one call, without holding the lock;
+- the flags are enforced by the platform, and the app-unlock flag is
+  refused until it exists;
+- libmorph re-exports the platform's engine instead of bridging.
+
+handlr's Noise adapter does its static DH inside `with_key`, so snow never
+holds the private key.
