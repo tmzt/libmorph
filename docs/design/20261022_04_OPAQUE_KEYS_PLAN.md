@@ -325,3 +325,106 @@ Additive in libmobile (0.2.1, with the blob store). libdevice gets a minor
 bump, since it gains platform code and an optional dependency. libmorph
 takes both and checks Rule 5.5 for the libdevice bump before choosing its
 version.
+
+## Amendment — 2026-10-22 19:16 EDT: the plan as it now stands
+
+On the owner's instruction (2026-10-22, "write the updated plan"). This
+states the whole plan in one place. Where it disagrees with the text or
+amendments above, this wins. It includes what was settled after the
+amendment "a key store of its own".
+
+### Layering
+
+libmorph only wraps; it does not implement platform services (AGENTS.md,
+"Platform Layering (libmobile and libdevice first)"). libmobile provides
+both stores on Android and libdevice on the desktop, with the same API.
+libmorph keeps only what a wrapper adds: one API on every host, its own
+`SecretKey` and `SealToken` bridged to each backend, `ctx.secure_store()`
+and `ctx.key_store()`, and memory stores for scripted runs (taken from
+libdevice's memory backend).
+
+### The two stores (same API in libmobile and libdevice)
+
+- **Blob store `SecureStore`**: `get`, `put`, `put_with(PutOptions {
+  unlocked_only })`, `delete`, `security_level`. Names are 1 to 64 of
+  `[A-Za-z0-9._-]`, not starting with `.`; values are at most 64 KiB.
+  libmobile gains an `android::SecureStore` struct
+  (`SecureStore::new(&app)`) next to its functions, so its shape matches
+  libdevice's (`SecureStore::keychain(service)` on macOS,
+  `SecureStore::memory()`). `SecurityLevel`'s variants are per platform.
+- **Key store `KeyStore`**: `generate`, `generate_with(KeyOptions {
+  unlocked_only })`, `load`, `delete`, over an adapter's `K:
+  SecretKey` (`Public` is `P`, `KIND`, `generate`, `seal` and
+  `unseal` taking the crate's `SealToken`, and `public`). It hands out
+  `KeyHandle<K>` with `public()` and `key()`. Its storage is its own:
+  - libmobile: `libmobile-key-store/` and its own Keystore wrapping keys;
+  - libdevice: Keychain service `<service>.keys`, or memory.
+
+  The sealed form is `[kind length][kind][sealed bytes]`, encrypted as a
+  whole, with `WrongKind` for another kind. `generate` takes no RNG.
+- **Errors.**
+  - `SecureStoreError`: `InvalidName`, `TooLarge`, `Keystore`,
+    `DeviceLocked`, `Io`, `Corrupt`, `Platform`.
+  - `KeyStoreError`: `InvalidName`, `WrongKind`, `Corrupt`,
+    `DeviceLocked`, `Locked`, `Platform`.
+  - `DeviceLocked` means the device's screen is locked and the item was
+    stored `unlocked_only`.
+  - `Locked` is reserved for keys that must be unlocked before use, as
+    ConnectBot does. Its unlock flow (passphrase or platform
+    authentication, how long a key stays unlocked) is a later plan, and
+    nothing returns it yet.
+  - libmobile's `Jni` becomes `Platform`. Nothing is released, so no
+    existing error is renamed.
+- **StrongBox** stays the default on Android, with the negative
+  `secure-store-no-strongbox` (libmorph: `mobile-secure-store-no-strongbox`).
+  `unlocked_only` is enforced on Android only. On macOS the login Keychain
+  accepts it without enforcing it.
+
+### Steps (replace every earlier list)
+
+1. **Rename first.** In each repository, before anything else in its
+   implementation, the error variant `Locked` becomes `DeviceLocked` (and
+   the Kotlin error kind `locked:` becomes `device-locked:`), in its own
+   commit. In libmobile and libmorph this is on the `secure-store`
+   branches. In libdevice it is in the plan's types from the start.
+   **Done when:** each repository's tests and clippy pass after the rename.
+2. **libmobile key store plan** (`20261022_04_KEY_STORE_PLAN.md`) agreed
+   with the owner. **Done when:** agreed.
+3. **libdevice plan** (`20261022_01_SECURE_STORE_AND_KEY_STORE_PLAN.md`)
+   agreed with the owner. **Done when:** agreed.
+4. **libmobile implemented**: `Jni` to `Platform`, the
+   `android::SecureStore` struct, then the key store plan's steps. It is
+   released with the blob store as 0.2.1, merged, tagged and pushed on the
+   owner's word. **Done when:** that plan's steps are done and the release
+   is pushed.
+5. **libdevice implemented**: that plan's steps. It is released as 0.1.1
+   (its first release under the critical rules, with the first
+   `VERSIONS.md` entry), tagged `v0.1.1`, and pushed on the owner's word.
+   **Done when:** that plan's steps are done and the release is pushed.
+6. **libmorph wraps both**, on its `secure-store` branch:
+   - `SecureStore` wraps libmobile on Android and libdevice on the
+     desktop, and libmorph's own Keychain code is removed;
+   - `KeyStore`, `ctx.key_store()`, libmorph's `SecretKey` and
+     `SealToken`, and the private bridge type.
+
+   Unit tests with a test key on the memory store check the public value
+   round-trip and `WrongKind`, and a `compile_fail` doc test checks
+   `seal` without a token. The `securestore` example generates a key on
+   first launch and logs the same public value after a relaunch.
+   **Done when:** tests and clippy pass on every host, and the example
+   works on the owner's S23 and from a Terminal on macOS.
+7. **Release.** libmorph and libmorph-build take libmobile 0.2.1 and
+   libdevice 0.1.1, both semver-compatible. libmorph's public changes are
+   additive (nothing in the store has been released), so it is 0.3.1, and
+   libmorph-build 0.2.1. **Done when:** merged, tagged and pushed on the
+   owner's word, and the handlr session has the revision to pin.
+
+### For handlr
+
+handlr's Noise adapter implements libmorph's `SecretKey` for its
+X25519 static key (kind "handlr.noise.x25519.v1", `Public` the 32-byte
+public key). It is generated and loaded through `ctx.key_store()` without
+`unlocked_only`, so background reconnects work while the phone is locked.
+The adapter gives snow the raw bytes inside its own crate, through its own
+`CryptoResolver`. The server record stays a blob. `Corrupt` and
+`WrongKind` mean "re-pair needed".
