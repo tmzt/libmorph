@@ -196,12 +196,14 @@ Never commit a `path` dependency or a `Cargo.lock` that was resolved with a patc
 - CLI: `DeviceSpec::extract_args(args) -> (DeviceSpec, Vec<String>)` takes out `--device*` options (see CLI Overrides).
 
 **`libmobile`** (Android-only runtime; its platform-free types build on any host):
-- Entry point: `libmobile::android::run(app: AndroidApp, handler: impl MobileApp)`. It owns the `android-activity` poll loop and is the only thing that drains the Kotlin bridges (insets, intents, IME text, auth, camera). Those bridge modules are private, so **winit must not run the loop on Android**.
+- Entry point: `libmobile::android::run(app: AndroidApp, handler: impl MobileApp)`. It owns the `android-activity` poll loop and is the only thing that drains the Kotlin bridges (insets, intents, IME text, auth, camera, permissions). Those bridge modules are private, so **winit must not run the loop on Android**.
 - `MobileApp` hooks: `event(&AndroidApp, MobileEvent)`, `input(&AndroidApp, &InputEvent) -> InputStatus`, `tick(&AndroidApp)`, `poll_timeout()`.
 - `MobileEvent::WindowDestroyed` arrives **synchronously inside the poll callback**. Drop the `wgpu::Surface` before returning from the handler.
 - `MobileEvent::Insets(Insets { safe_area: SafeArea, ime_bottom })` uses `f32` physical pixels, fields `left, top, right, bottom`. Only the newest report is delivered per tick. `safe_area` corresponds to libdevice's `InsetType::SafeDrawing`.
 - `SurfaceTarget::current(&app)` implements raw-window-handle 0.6, so pass it to wgpu's safe `create_surface`.
-- Cargo features: `google-auth`, `camera`. No others exist.
+- Runtime permissions: `request_permissions(&app, &[&str]) -> PermissionRequest` (one request at a time, in order), answered by `MobileEvent::Permissions(PermissionsOutcome { request, permissions })`; `permission_granted`, `should_show_rationale`. Each permission must be declared in the manifest.
+- `CaptureStream` (under `cpal`): AAudio capture with an `InputPreset`, which cpal cannot set: `open(preset, callback)`, `format()`, `preset()`, `set_preset` (reopens with the same callback and format), `start`/`stop`. Needs `RECORD_AUDIO`.
+- Cargo features: `google-auth`, `camera`, `cpal` (cpal re-exported as `libmobile::android::cpal`, plus `CaptureStream`; needs API 28). No others exist.
 - The app's activity must be `dev.highbay.libmobile.MobileNativeActivity` (Gradle wiring comes from `libmobile::gradle`; see Gradle Handoff).
 
 Two crates use the name `Insets`: `libdevice::Insets` (`u32`, top/right/bottom/left) and `libmobile::Insets` (`f32` safe area plus `ime_bottom`). Both convert into libmorph's fractional `SafeArea` (`src/safe_area.rs`) through `From`, field by field, never by position:
@@ -298,6 +300,9 @@ Expose whatever was granted on `MorphContext` (`ctx.limits()`) so apps can featu
   - `on_suspend` and `on_resume`: exactly once per transition. Every exit calls `on_suspend` once, unless the app is already suspended, before the surface and the app are dropped.
   - `const SRGB_SURFACE: bool = true`: `false` prefers a non-sRGB surface, for apps that gamma-encode in their own shaders.
   - `fn limits(base: &wgpu::Limits) -> LimitsRequest` (no `self`, called before `init`): the device limits to ask for; see GPU Bring-up.
+  - `fn audio_setup(&mut AudioSetup)` (no `self`, called before audio opens; plan `20261022_01_AUDIO_CAPTURE_PLAN.md`): `output` (default `true`), `capture` (default `false`) and `capture_mode: CaptureMode` (Android input preset). `AudioSetup` is `#[non_exhaustive]`.
+  - `on_capture_ready`: once, after `init`, when capture has opened: right after `init`, or on Android once the user allows `RECORD_AUDIO`, which libmorph asks for itself when `capture` is set.
+  - `on_permissions(&Permissions)`: the answer to each `ctx.request_permissions` call (plan `20261022_02_APP_PERMISSIONS_PLAN.md`); libmorph's own requests are not passed on.
 - **`MorphContext`**: passed to every hook. It provides:
   - `wgpu::Device` / `wgpu::Queue`, plus the granted `wgpu::Limits`;
   - `device() -> &libdevice::DeviceSpec`: the emulated spec on desktop. On Android and web, it is the closest data available: the CLI or default spec, with geometry updated from the real surface;
@@ -312,9 +317,11 @@ Expose whatever was granted on `MorphContext` (`ctx.limits()`) so apps can featu
     - `add_source(Source) -> SourceId` and `remove_source`: a `Box<dyn FnMut(&mut [f32]) + Send>` called on the audio thread with a zeroed, interleaved buffer at `format()`'s rate and channel count, mixed with the voices. Removed sources are sent back and dropped on the main thread;
     - `set_master_volume(f32)` scales the whole mix before clipping to -1..1; `format() -> Option<OutputFormat { sample_rate, channels }>`;
     - under `audio-cpal`: `device() -> Option<&impl DeviceTrait>` (the concrete `cpal::Device` is not exposed), `stream_config()`, `sample_format()`. The stream itself is never exposed;
-    - the stream pauses with the app: on Android at `Pause`/`Resume`, on desktop and web in winit's `suspended`/`resumed`. Scripted runs have no stream, so sources are never called;
+    - capture (`AudioSetup::capture`): `add_sink(Sink) -> SinkId` and `remove_sink`; a `Box<dyn FnMut(&Captured) + Send>` called on the audio input thread with `Captured { samples, frame, time }` (interleaved `f32` at `capture_format()`). Sinks added before capture opens are kept for it; removed ones are dropped on the main thread. `capture_mode()` and `set_capture_mode(CaptureMode)` (Android: reopens with the preset, keeping the sinks; elsewhere `Default`). On Android capture goes through libmobile's `CaptureStream`, so the `audio-cpal` capture accessors (`capture_device()`, `capture_stream_config()`, `capture_sample_format()`) are `None` there;
+    - the streams pause with the app: on Android at `Pause`/`Resume`, on desktop and web in winit's `suspended`/`resumed`. Scripted runs have no streams, so sources and sinks are never called;
   - `exit()`: ask the runner to stop. On desktop and web the window closes; on Android libmorph calls `libmobile::android::finish` and the activity tears down normally;
   - `data_dir() -> Option<&Path>`: Android's internal data path; `None` on desktop and web.
+  - `request_permissions(&[&str]) -> Option<PermissionRequest>`, `permission_granted`, `should_show_rationale`: libmorph's own types over libmobile's, the same on every host. Off Android there are no runtime permissions: `None`, `true` and `false`.
   - `pipeline_cache() -> Option<&wgpu::PipelineCache>` (plan `20261016_02_PIPELINE_CACHE_PLAN.md`): `Some` only on Android with Vulkan when the adapter offers `PIPELINE_CACHE`, which `Gpu::new` then requests (its `want_pipeline_cache`, `true` from the Android runner only). Apps pass it as `cache` in their pipeline descriptors, cloning it for pipelines built on another thread; a pipeline built with `cache: None` is not cached. The data is kept at `<data_dir>/libmorph/<wgpu::util::pipeline_cache_key>.bin`, loaded before `init` (`fallback: true`, so stale data gives an empty cache), and saved through a `.tmp` rename after `init`, after `on_suspend` and on exit, skipped when unchanged (`src/pipeline_cache.rs`).
 - **`libmorph::script`** (plan `20261014_04_SCRIPTED_RUNS_AND_PNG_CAPTURE_PLAN.md`): scripted, headless runs.
   - `Script::parse` / `load` / `from_commands` build a checked script from plain text: one English command per line, space-separated operands, `#` comments. Commands: `fps`, `frames`, `touch <id> <start|move|end|cancel> <x> <y> [<pressure>]`, `tap`, `drag`, `hover`, `key <escape|back|space|char|U+XXXX>`, `screenshot [<name>]`, `suspend`, `resume`, `exit`. Ordering mistakes (touch not down, screenshot before a frame or while suspended, duplicate names) are rejected with the line number before any GPU work. The parser builds without the feature.
