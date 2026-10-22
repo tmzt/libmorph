@@ -335,3 +335,16 @@ A hazard found on the way, for libmobile: when the libmobile copy changes
 staged Kotlin source root move, and Gradle's incremental Kotlin compile
 then fails with "Unresolved reference 'WindowInsetsPlugin'" until
 `gradle clean`.
+
+## 2026-10-22 07:24 EDT — Audio capture: modes on Android
+
+Plan: `docs/design/20261022_01_AUDIO_CAPTURE_PLAN.md` (In implementation),
+amended for step 7.
+
+Agreed with the owner: `AudioSetup::capture_mode` and
+`Audio::set_capture_mode` choose Android's AAudio input preset (generic,
+camcorder, voice recognition, voice communication, unprocessed, voice
+performance). cpal cannot set one, so on Android libmorph opens the
+capture stream itself through the NDK's AAudio, which libmobile already
+links; output stays on cpal. A first step towards the owner's eventual
+full-duplex speech-to-text and text-to-speech, which is not in this plan.
