@@ -407,3 +407,20 @@ granted as asked, and `dumpsys audio` showed the matching source: `MIC`,
 `CAMCORDER`, `VOICE_RECOGNITION`, `VOICE_COMMUNICATION`, `UNPROCESSED`,
 `VOICE_PERFORMANCE`. 24 files were written across the switches.
 `src/audio.rs` has no `ndk::audio` and no `unsafe`.
+
+## 2026-10-22 08:28 EDT — Released: libmorph 0.3.0 and libmorph-build 0.2.0
+
+Plans: `docs/design/20261022_01_AUDIO_CAPTURE_PLAN.md` and
+`docs/design/20261022_02_APP_PERMISSIONS_PLAN.md` (both In implementation).
+
+The owner asked for the work to be merged with proper versioning. The plans
+and earlier entries said 0.2.2, but libmobile was released as 0.2.0, not
+0.1.2: its `cpal` feature now needs Android 9. By Rule 5.5 that makes
+libmorph 0.3.0 (tag `v0.3.0`) and libmorph-build 0.2.0 (tag
+`libmorph-build-v0.2.0`), both resolving libmobile `d7ab0c1` (tag
+`v0.2.0`) from GitHub. libmorph's own changes are additive.
+
+Left open in the plans, so neither is Implemented yet: on the S23, an
+explicit "Don't allow" twice (the Settings message), and the owner
+listening to the files; on the desktop, the spectrogram with a live
+microphone.
