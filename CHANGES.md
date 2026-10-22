@@ -308,3 +308,30 @@ granted, through libmobile's new runtime permission request (libmobile
 capture stream then opens after `init`, so a new
 `MorphApp::on_capture_ready` hook says when it is ready, and sinks added
 earlier are kept until then. Waits for libmobile 0.1.2.
+
+## 2026-10-22 07:18 EDT — Audio capture: asking for RECORD_AUDIO and the spectrogram on the S23
+
+Plan: `docs/design/20261022_01_AUDIO_CAPTURE_PLAN.md`, steps 5 and 6.
+
+Built against libmobile's `runtime-permissions` branch through a local
+patch; libmorph's `Cargo.lock` still names libmobile 0.1.1 from GitHub, so
+the branch builds only with the patch until libmobile is pushed.
+
+On the owner's Galaxy S23 Ultra, with `RECORD_AUDIO` revoked, launching
+the example showed "Allow libmorph audiocapture to record audio?". A
+reinstall while the dialog was up interrupted the request, which arrived
+as denied: libmorph logged `audio capture: RECORD_AUDIO denied` and the
+screen stayed red. On the next launch the owner allowed it (07:15:48), the
+capture stream opened 266 ms later, `on_capture_ready` added the sinks,
+and one file a second followed. The owner saw the spectrogram and was
+satisfied ("this looks good"). The owner also decided against the
+plasma view ("we don't need it").
+
+Not yet checked: an explicit "Don't allow" in this app, the spectrogram
+on the desktop, and the owner listening to the files (steps 4 and 6).
+
+A hazard found on the way, for libmobile: when the libmobile copy changes
+(here the patched one replaced the git one), its `OUT_DIR` and so the
+staged Kotlin source root move, and Gradle's incremental Kotlin compile
+then fails with "Unresolved reference 'WindowInsetsPlugin'" until
+`gradle clean`.
