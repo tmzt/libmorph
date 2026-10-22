@@ -80,7 +80,10 @@ impl<A: MorphApp> Shell<A> {
     }
 
     fn with_app(mut ctx: MorphContext, target: Target, fixed_dt: Option<Duration>) -> Self {
-        let app = A::init(&mut ctx);
+        let mut app = A::init(&mut ctx);
+        if ctx.audio.capture_format().is_some() {
+            app.on_capture_ready(&mut ctx);
+        }
         // Pipelines built in `init` are kept even if the process is killed
         // without a clean suspend.
         ctx.save_pipeline_cache();

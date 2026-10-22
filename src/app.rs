@@ -44,7 +44,10 @@ pub trait MorphApp: Sized + 'static {
     /// What audio to open, before [`init`](Self::init). `setup` starts with
     /// output on and capture off; set `setup.capture` to record from the
     /// default input device, and read it through `ctx.audio()`'s
-    /// [`add_sink`](crate::Audio::add_sink).
+    /// [`add_sink`](crate::Audio::add_sink). On Android, libmorph asks for
+    /// `RECORD_AUDIO` after `init` if it is not granted yet (the app's
+    /// manifest must declare it); see
+    /// [`on_capture_ready`](Self::on_capture_ready).
     ///
     /// ```
     /// # use libmorph::AudioSetup;
@@ -84,6 +87,15 @@ pub trait MorphApp: Sized + 'static {
     fn on_key(&mut self, ctx: &mut MorphContext, key: Key) -> KeyStatus {
         let _ = (ctx, key);
         KeyStatus::Unhandled
+    }
+
+    /// The capture stream asked for in [`audio_setup`](Self::audio_setup)
+    /// has opened, and `ctx.audio().capture_format()` is `Some` from now on.
+    /// Called once per run, after [`init`](Self::init): right after it when
+    /// capture opened with the rest of audio, or on Android once the user
+    /// allows `RECORD_AUDIO`. Never called if capture did not open.
+    fn on_capture_ready(&mut self, ctx: &mut MorphContext) {
+        let _ = ctx;
     }
 
     /// The surface is gone (app backgrounded). The device, queue and every

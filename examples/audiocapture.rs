@@ -5,7 +5,8 @@
 //! is named by the Unix time in milliseconds of its first frame, and its
 //! name is logged once it is written. The first argument is the chunk
 //! length in milliseconds (default 1000). The screen brightens with the
-//! last chunk's peak level, and is dark red without a microphone.
+//! last chunk's peak level, and is dark red until capture is ready (on
+//! Android, until the user allows the microphone).
 //!
 //! ```text
 //! cargo run --example audiocapture -- 500
@@ -47,8 +48,9 @@ struct Chunk {
 }
 
 pub struct AudioCapture {
-    /// The last chunk's peak level; `None` without a microphone.
+    /// The last chunk's peak level; `None` until capture is ready.
     peak: Option<Shared>,
+    chunk_ms: u64,
 }
 
 impl MorphApp for AudioCapture {
@@ -58,30 +60,36 @@ impl MorphApp for AudioCapture {
     }
 
     fn init(ctx: &mut MorphContext) -> Self {
-        let Some(format) = ctx.audio().capture_format() else {
-            log::warn!("no audio capture");
-            return Self { peak: None };
-        };
         let chunk_ms = ctx
             .args()
             .get(1)
             .and_then(|arg| arg.parse::<u64>().ok())
             .filter(|&ms| ms > 0)
             .unwrap_or(1000);
+        Self {
+            peak: None,
+            chunk_ms,
+        }
+    }
+
+    /// Right after `init` on the desktop; on Android, once the user allows
+    /// the microphone. Until then the screen stays dark red.
+    fn on_capture_ready(&mut self, ctx: &mut MorphContext) {
+        let Some(format) = ctx.audio().capture_format() else {
+            return;
+        };
         let dir = ctx
             .data_dir()
             .map_or_else(|| PathBuf::from(DIR), |data| data.join("audiocapture"));
         log::info!(
-            "capture: {format:?}, {chunk_ms} ms per file in {}",
+            "capture: {format:?}, {} ms per file in {}",
+            self.chunk_ms,
             dir.display()
         );
         let peak = Shared::default();
-        match start(ctx, &dir, format, chunk_ms, peak.clone()) {
-            Ok(()) => Self { peak: Some(peak) },
-            Err(error) => {
-                log::error!("{}: {error}", dir.display());
-                Self { peak: None }
-            }
+        match start(ctx, &dir, format, self.chunk_ms, peak.clone()) {
+            Ok(()) => self.peak = Some(peak),
+            Err(error) => log::error!("{}: {error}", dir.display()),
         }
     }
 

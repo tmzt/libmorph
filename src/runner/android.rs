@@ -37,6 +37,7 @@ pub fn run_android<A: MorphApp>(app: AndroidApp) {
             safe_area: SafeArea::NONE,
             keys: KeyRouting::default(),
             finishing: false,
+            asking_capture: false,
         },
     );
 }
@@ -62,7 +63,12 @@ struct Adapter<A> {
     keys: KeyRouting,
     /// `exit()` was answered with `finish`; the teardown is under way.
     finishing: bool,
+    /// `RECORD_AUDIO` was requested for capture; the answer opens it.
+    asking_capture: bool,
 }
+
+/// What capture needs granted at runtime.
+const RECORD_AUDIO: &str = "android.permission.RECORD_AUDIO";
 
 fn scale_factor(app: &AndroidApp) -> f32 {
     app.config().density().map_or(1.0, |dpi| dpi as f32 / 160.0)
@@ -110,12 +116,12 @@ impl<A: MorphApp> Adapter<A> {
         };
         let mut spec = libdevice::DEFAULT_DEVICE;
         (spec.geometry.width, spec.geometry.height) = size;
-        let mut ctx = MorphContext::new(
-            gpu,
-            spec,
-            Vec::new(),
-            crate::Audio::open(super::audio_setup::<A>()),
-        );
+        // Capture without the permission would fail to open: open the rest
+        // of audio now, and capture once the user allows it.
+        let mut setup = super::audio_setup::<A>();
+        let ask = setup.capture && !libmobile::android::permission_granted(app, RECORD_AUDIO);
+        setup.capture &= !ask;
+        let mut ctx = MorphContext::new(gpu, spec, Vec::new(), crate::Audio::open(setup));
         ctx.safe_area = self.safe_area;
         ctx.scale_factor = scale_factor(app);
         ctx.data_dir = app.internal_data_path();
@@ -123,11 +129,34 @@ impl<A: MorphApp> Adapter<A> {
             PipelineCacheStore::open(&ctx.gpu.device, &ctx.gpu.adapter.get_info(), dir)
         });
         match Shell::start(ctx, surface, size) {
-            Ok(shell) => self.shell = Some(shell),
+            Ok(shell) => {
+                self.shell = Some(shell);
+                if ask {
+                    self.asking_capture = true;
+                    libmobile::android::request_permissions(app, &[RECORD_AUDIO]);
+                }
+            }
             Err(error) => {
                 log::error!("libmorph: {error}");
                 self.failed = true;
             }
+        }
+    }
+
+    /// The user answered the `RECORD_AUDIO` request made at boot.
+    fn capture_answered(&mut self, granted: bool) {
+        let Some(shell) = &mut self.shell else {
+            return;
+        };
+        if !granted {
+            log::warn!("libmorph: audio capture: RECORD_AUDIO denied");
+            return;
+        }
+        if shell.ctx.audio.open_capture() {
+            if !self.resumed {
+                shell.ctx.audio.pause();
+            }
+            shell.app.on_capture_ready(&mut shell.ctx);
         }
     }
 
@@ -250,6 +279,10 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
                 if let Some(shell) = &mut self.shell {
                     shell.ctx.safe_area = self.safe_area;
                 }
+            }
+            MobileEvent::Permissions(outcome) if self.asking_capture => {
+                self.asking_capture = false;
+                self.capture_answered(outcome.granted(RECORD_AUDIO));
             }
             MobileEvent::ConfigChanged => {
                 if let Some(shell) = &mut self.shell {

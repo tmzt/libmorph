@@ -151,6 +151,11 @@ mod stub {
             Self
         }
 
+        #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+        pub(crate) fn open_capture(&mut self) -> bool {
+            false
+        }
+
         #[cfg(script_runner)]
         pub(crate) fn silent() -> Self {
             Self
@@ -209,7 +214,7 @@ mod stub {
 
 #[cfg(feature = "audio")]
 mod output {
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
     use std::fmt;
     use std::sync::mpsc;
 
@@ -254,6 +259,9 @@ mod output {
     pub struct Audio {
         output: Option<Output>,
         input: Option<Input>,
+        /// Sinks added before the capture stream opened, handed to it when
+        /// it does.
+        pub(super) waiting: RefCell<Vec<(u64, Sink)>>,
         next: Cell<u64>,
     }
 
@@ -292,8 +300,28 @@ mod output {
             Self {
                 output,
                 input,
+                waiting: RefCell::default(),
                 next: Cell::new(1),
             }
+        }
+
+        /// Open the capture stream after [`open`](Self::open) left it closed
+        /// (Android, once `RECORD_AUDIO` is granted), and hand it the sinks
+        /// added so far. True if it is open.
+        #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+        pub(crate) fn open_capture(&mut self) -> bool {
+            if self.input.is_none() {
+                self.input = start_capture()
+                    .map_err(|error| log::warn!("libmorph: audio capture unavailable: {error}"))
+                    .ok();
+            }
+            let Some(input) = &self.input else {
+                return false;
+            };
+            for (id, sink) in self.waiting.get_mut().drain(..) {
+                let _ = input.commands.send(CaptureCommand::AddSink(id, sink));
+            }
+            true
         }
 
         /// No streams, as on a machine without an audio device: scripted
@@ -303,6 +331,7 @@ mod output {
             Self {
                 output: None,
                 input: None,
+                waiting: RefCell::default(),
                 next: Cell::new(1),
             }
         }
@@ -420,16 +449,24 @@ mod output {
             self.input.as_ref().map(|input| input.sample_format)
         }
 
-        /// Hand every captured block to `sink` until it is removed.
+        /// Hand every captured block to `sink` until it is removed. Before
+        /// the capture stream opens, the sink is kept for it.
         pub fn add_sink(&self, sink: Sink) -> SinkId {
             let id = self.id();
-            self.send_capture(CaptureCommand::AddSink(id, sink));
+            if self.input.is_some() {
+                self.send_capture(CaptureCommand::AddSink(id, sink));
+            } else {
+                self.waiting.borrow_mut().push((id, sink));
+            }
             SinkId(id)
         }
 
         /// The sink is dropped on this thread on a later call, not on the
         /// audio thread.
         pub fn remove_sink(&self, id: SinkId) {
+            self.waiting
+                .borrow_mut()
+                .retain(|(waiting, _)| *waiting != id.0);
             self.send_capture(CaptureCommand::RemoveSink(id.0));
         }
 
@@ -601,6 +638,26 @@ mod output {
                 None,
             )
             .map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(all(test, feature = "audio"))]
+mod tests {
+    use crate::{Audio, AudioSetup};
+
+    #[test]
+    fn sinks_wait_for_the_capture_stream() {
+        // Opens nothing, so no device is touched.
+        let audio = Audio::open(AudioSetup {
+            output: false,
+            capture: false,
+        });
+        let kept = audio.add_sink(Box::new(|_| {}));
+        let removed = audio.add_sink(Box::new(|_| {}));
+        audio.remove_sink(removed);
+        let waiting: Vec<u64> = audio.waiting.borrow().iter().map(|(id, _)| *id).collect();
+        assert_eq!(waiting, [kept.0]);
+        assert_eq!(audio.capture_format(), None);
     }
 }
 
