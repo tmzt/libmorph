@@ -86,6 +86,9 @@ pub struct AudioCapture {
     chunk_ms: u64,
     /// The granted mode's place in [`MODES`], shared with the sink.
     mode: Arc<AtomicUsize>,
+    /// The last mode asked for, which a tap moves on from. It can differ
+    /// from the granted one (`Default` is granted as `VoiceRecognition`).
+    asked: usize,
     /// `None` until capture is ready.
     columns: Option<Arc<Mutex<Columns>>>,
     view: Spectrogram,
@@ -107,6 +110,7 @@ impl MorphApp for AudioCapture {
         Self {
             chunk_ms,
             mode: Arc::default(),
+            asked: 0,
             columns: None,
             view: Spectrogram::new(ctx),
         }
@@ -160,7 +164,8 @@ impl MorphApp for AudioCapture {
         if touch.phase != TouchPhase::Started || self.columns.is_none() {
             return;
         }
-        let next = MODES[(self.mode.load(Ordering::Relaxed) + 1) % MODES.len()].0;
+        self.asked = (self.asked + 1) % MODES.len();
+        let next = MODES[self.asked].0;
         let granted = ctx.audio().set_capture_mode(next).unwrap_or_default();
         log::info!("mode: asked {next:?}, got {granted:?}");
         self.mode.store(mode_index(granted), Ordering::Relaxed);
