@@ -246,3 +246,17 @@ unlocked: the second launch logged `pipeline cache: loaded 627724 bytes`,
 and its slowest pipeline (a raymarched render pipeline, on a worker
 thread) was built in 34 ms, from 1247–1309 ms without the cache. The file
 is `files/libmorph/wgpu_pipeline_cache_vulkan_20803_1124403713.bin`.
+
+## 2026-10-22 06:50 EDT — Audio capture and the audio_setup hook
+
+Plan: `docs/design/20261022_01_AUDIO_CAPTURE_PLAN.md` (Draft).
+
+Requested by the owner, with the instruction to implement it in a
+worktree. A new `MorphApp::audio_setup` hook, called before audio is
+opened, asks for a capture stream on the default input device and can
+turn the output off. Captured blocks are handed to sinks
+(`Audio::add_sink`) on the audio input thread, with a frame count and a
+capture time, and the input stream pauses with the app. An
+`audiocapture` example writes one `.au` file per second, named by
+Unix milliseconds, and logs each name. Built on the `audio-capture`
+branch; to be released as libmorph 0.2.2 (strictly additive).
