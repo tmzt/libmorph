@@ -367,3 +367,81 @@ changes; libmorph's API does not.
    **Done when:** on the desktop and on the owner's S23, speech and
    whistling show as moving bands, and silence (as when Android silences
    the app behind Recents) shows black.
+
+## Amendment — 2026-10-22 07:24 EDT: capture modes on Android
+
+Agreed with the owner (2026-10-22). Asked "can we support the different
+capture modes on android via the audio_setup hook?", the owner agreed to
+AAudio driven from Rust ("that's how libmobile/libmorph is designed, small
+kotlin plugins that expose functionality not available in ndk"), to
+presets only for now ("the eventual goal is full-duplex stt/tts but
+that's beyond this example, I just want to demonstrate it will work"),
+and to switching at runtime ("that's fine, audio_setup is mostly for
+format setup"). Adds to sections 2, 4, 5, 6 and 7, and a step 7.
+Replaces section 4's statement that the `audio-cpal` capture accessors
+mirror the output ones on every host.
+
+- **Mode.** In `src/audio.rs`, exported from the crate root:
+
+  ```rust
+  /// Android's AAudio input preset. The desktop and the web ignore it.
+  #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+  #[non_exhaustive]
+  pub enum CaptureMode {
+      /// AAudio's own choice (VoiceRecognition).
+      #[default]
+      Default,
+      Generic,
+      Camcorder,
+      VoiceRecognition,
+      /// Echo cancellation, noise suppression and gain control.
+      VoiceCommunication,
+      /// The microphone without processing, where the device offers it.
+      Unprocessed,
+      /// Low latency, for live monitoring.
+      VoicePerformance,
+  }
+  ```
+
+  `AudioSetup` gains `pub capture_mode: CaptureMode` (`Default`), the
+  mode capture opens with.
+- **Methods.** `Audio::capture_mode() -> Option<CaptureMode>`: the mode
+  the open stream has (on Android, the preset AAudio reports; elsewhere
+  `Default`), `None` without capture. `Audio::set_capture_mode(&self,
+  mode) -> Option<CaptureMode>`: on Android, close the capture stream and
+  open it again with `mode`, at the same sample rate and channel count,
+  keeping the sinks, the frame count and the time base, and paused if it
+  was paused; it returns the mode granted. Elsewhere, and without
+  capture, it does nothing and returns `capture_mode()`. The stub has
+  both, returning `None`.
+- **Android input.** cpal 0.18.2 cannot set an input preset, so on
+  Android libmorph opens the capture stream itself with
+  `ndk::audio::AudioStreamBuilder` (through `libmobile::android::ndk`):
+  input, `PCM_Float`, `input_preset` from the mode (raw values 1, 5, 6,
+  7, 9, 10, so `VoicePerformance` needs no API-level feature; `Default`
+  sets none). It keeps the rate and channel count AAudio chooses, and the
+  same ones on a reopen. If a mode fails to open, libmorph logs
+  `libmorph: audio capture: <mode> unavailable (<error>), using Default`
+  and opens with `Default`. The callback hands its `f32` frames to the
+  same `Capture` state as on cpal, kept in an `Arc<Mutex<_>>` that only
+  the callback locks while the stream is open, so a reopen can take the
+  sinks back. `time` comes from a monotonic clock started when capture
+  first opened. Pausing uses `request_stop`, since AAudio input streams
+  have no pause. Output stays on cpal.
+- **cpal accessors.** Under `audio-cpal`, `capture_device()`,
+  `capture_stream_config()` and `capture_sample_format()` are `None`
+  on Android, where no cpal device is involved.
+- **libmobile.** Its `cpal` feature enables `ndk/audio` itself rather
+  than through cpal's own dependency (libmobile `CHANGES.md`, released in
+  0.1.2).
+- **Example.** A tap cycles the mode through `set_capture_mode` in the
+  order above, logging `mode: asked <mode>, got <mode>`. A band across
+  the top of the screen shows the granted mode by colour, and each file
+  is named `<unix ms>_<mode>.au`, the mode in snake case.
+
+7. **Capture modes.** As above.
+   **Done when:** on the owner's Galaxy S23, tapping through the modes
+   logs each one granted, `dumpsys audio` shows the matching source
+   (`CAMCORDER`, `VOICE_RECOGNITION`, `VOICE_COMMUNICATION`,
+   `UNPROCESSED`, `VOICE_PERFORMANCE`, or `MIC` for `Generic`), and
+   files keep coming across the switches.
