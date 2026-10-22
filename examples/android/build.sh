@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build (and optionally install and launch) a libmorph example APK.
 #
-#   examples/android/build.sh audiocapture [--install] [-- <extra cargo args>]
+#   examples/android/build.sh audiocapture|securestore [--install] [-- <extra cargo args>]
 #
 # Two stages, and no Gradle files in the repo: the example's build.rs writes
 # the whole Gradle project (libmorph-build) while cargo builds the .so, and
@@ -13,7 +13,7 @@
 # ANDROID_HOME, ANDROID_NDK_ROOT and JAVA_HOME.
 set -euo pipefail
 
-EXAMPLE="${1:?usage: examples/android/build.sh audiocapture [--install] [-- cargo args]}"
+EXAMPLE="${1:?usage: examples/android/build.sh audiocapture|securestore [--install] [-- cargo args]}"
 shift
 INSTALL=0
 CARGO_EXTRA=()
@@ -26,7 +26,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$EXAMPLE" in
-    audiocapture) ;;
+    audiocapture|securestore) ;;
     *) echo "unknown example: $EXAMPLE" >&2; exit 2 ;;
 esac
 
