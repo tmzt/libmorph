@@ -428,3 +428,60 @@ public key). It is generated and loaded through `ctx.key_store()` without
 The adapter gives snow the raw bytes inside its own crate, through its own
 `CryptoResolver`. The server record stays a blob. `Corrupt` and
 `WrongKind` mean "re-pair needed".
+
+## Amendment — 2026-10-22 19:28 EDT: token by reference, zeroization, kind migration
+
+Agreed with the owner (2026-10-22) after a review of the plan the owner
+relayed. Replaces the `SecretKey` and `SealToken` definitions in every
+earlier section and amendment. Adds to "the plan as it now stands":
+these apply to libmobile, libdevice and libmorph alike, and the tests join
+steps 4 to 6.
+
+- **`SealToken` is passed by reference** and implements neither `Clone`,
+  `Copy` nor `Default`. The trait's methods take `token: &SealToken`, so a
+  token cannot outlive the call: no adapter can keep one or hand it to
+  other code. Non-`Clone` alone would still let a token be moved into a
+  static.
+- **Zeroization.** `SecretKey` requires `zeroize::ZeroizeOnDrop`, which
+  adapters get with `#[derive(ZeroizeOnDrop)]` on a type whose fields are
+  zeroizable. It is a marker trait: it states the requirement in the type
+  system, but a hand-written impl could still skip clearing. The store
+  holds its own copies of sealed and decrypted bytes in
+  `Zeroizing<Vec<u8>>`. `zeroize` becomes a dependency of libmobile,
+  libdevice and libmorph.
+- **Migrating a kind.** The trait becomes:
+
+  ```rust
+  pub trait SecretKey: zeroize::ZeroizeOnDrop + Sized + Send + Sync + 'static {
+      type Public: Clone + Send + Sync + 'static;
+      const KIND: &'static str;
+      /// Kinds `unseal` can read: `KIND` and any older encodings.
+      fn accepts(kind: &str) -> bool { kind == Self::KIND }
+      fn generate(token: &SealToken) -> Self;
+      fn seal(&self, token: &SealToken) -> Vec<u8>;
+      /// `kind` is the stored kind, which may be an older one `accepts` allows.
+      fn unseal(kind: &str, bytes: &[u8], token: &SealToken) -> Result<Self, String>;
+      fn public(&self) -> Self::Public;
+  }
+  ```
+
+  `load` gives `WrongKind` for a kind `accepts` refuses. When it loads an
+  older accepted kind, it seals the key again under `KIND` with the same
+  options and atomic write, before returning it. If that rewrite fails,
+  the key is still returned, and the failure is logged, so a read never
+  fails because of an upgrade.
+- **Memory stores** are per instance, empty when made, with no globals.
+  This restates the plans: libmorph makes a new one per scripted run, and
+  parallel tests cannot share state. libdevice adds a test that two
+  memory stores do not see each other's names.
+- **Keychain prompts after rebuilds.** libdevice's example documents an
+  optional developer setup: sign the built binary with a stable local
+  identity (`codesign -s "<identity>" <binary>` after each build). A
+  stable signature keeps the Keychain's access list valid across
+  rebuilds, so it stops asking. The code does not change.
+- **Tests added:**
+  - a `compile_fail` doc test that a `SealToken` cannot be stored in a
+    `static`, or returned from `seal`;
+  - a migration test, where a test adapter's v2 accepts v1, loads a v1
+    key, and finds it stored as v2 afterwards;
+  - `WrongKind` for a kind that is not accepted.
