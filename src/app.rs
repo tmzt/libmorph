@@ -22,6 +22,12 @@ pub trait MorphApp: Sized + 'static {
     /// offers it.
     const SRGB_SURFACE: bool = true;
 
+    /// On macOS, the Keychain service of
+    /// [`MorphContext::secure_store`](crate::MorphContext::secure_store) is
+    /// `libmorph.<SECURE_STORE_ID>`; empty (the default) uses the
+    /// executable's file stem. Unused elsewhere.
+    const SECURE_STORE_ID: &'static str = "";
+
     /// The device limits to ask for, before [`init`](Self::init). `base` is
     /// what libmorph asks for by default: the downlevel defaults (WebGL2
     /// defaults on a GL adapter) with texture sizes raised to the adapter's.

@@ -1,7 +1,7 @@
 ---
 title: Secure store on every host
 date: 2026-10-22
-status: Draft
+status: In implementation
 covers:
   - A `secure-store` Cargo feature and `libmorph::SecureStore`: named
     byte blobs, encrypted at rest, with one API on every host
@@ -202,3 +202,32 @@ owner's question (2026-10-22). Adds to section 2.
   are readable whenever the user is logged in. The item is stored the same
   way, and the rustdoc says so.
 - **Scripted runs:** accepted, with nothing to enforce.
+
+## Amendment — 2026-10-22 18:47 EDT: implementation has started; the document is now immutable
+
+The owner asked for this to be implemented (2026-10-22, "implement it"),
+on the `secure-store` branch in its own worktree, against libmobile's
+`secure-store` branch through the local, uncommitted patch. Steps 1 to 3
+are built in this commit. `Cargo.lock` waits for libmobile's release.
+
+One change from section 2: `protection()` returns
+`Result<Protection, SecureStoreError>`. On Android it asks Keystore,
+which creates the key if needed and can fail, and the store is made
+without asking, so an app that never uses it never creates a key.
+
+Checked so far:
+- `cargo test -p libmorph --features secure-store,script` passes,
+  including `tests/secure_store.rs` (two scripted runs, each starting
+  empty, `Protection::Memory`).
+- Clippy is clean on the host with and without `secure-store`, on Android
+  with `mobile` and `mobile,secure-store`, and on wasm with
+  `web,secure-store`.
+- On the owner's Galaxy S23 Ultra, the Android `securestore` example logs
+  `AndroidStrongBox`, and the count goes from launch 1 to launch 2 across
+  a force-stop.
+
+Not yet checked: the macOS Keychain (step 2). From the agent's shell,
+desktop windows never open and the Keychain refuses writes with
+`errSecInteractionNotAllowed` (-25308), so the owner runs
+`cargo run --example securestore --features secure-store` and the
+ignored `keychain_round_trip` test from a Terminal.

@@ -268,6 +268,10 @@ impl<A: MorphApp> Handler<A> {
             crate::Audio::open(super::audio_setup::<A>()),
         );
         place(&mut ctx, &window, size);
+        #[cfg(all(target_os = "macos", feature = "secure-store"))]
+        {
+            ctx.secure_store = Some(crate::SecureStore::keychain(A::SECURE_STORE_ID));
+        }
 
         match Shell::<A>::start(ctx, surface, size) {
             Ok(shell) => {

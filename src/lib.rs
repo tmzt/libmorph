@@ -26,6 +26,7 @@ pub mod safe_area;
 #[cfg(script_runner)]
 mod screenshot;
 pub mod script;
+mod secure_store;
 
 pub use app::{Frame, MorphApp};
 pub use audio::{
@@ -38,6 +39,9 @@ pub use gpu::{GpuError, LimitFailure, LimitsRequest};
 pub use input::{Key, KeyStatus, Touch, TouchPhase};
 pub use permission::{PermissionRequest, Permissions};
 pub use safe_area::SafeArea;
+pub use secure_store::{
+    MAX_NAME_LEN, MAX_VALUE_LEN, Protection, PutOptions, SecureStore, SecureStoreError,
+};
 
 #[cfg(feature = "audio-cpal")]
 pub use audio::cpal;

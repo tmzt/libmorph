@@ -26,6 +26,9 @@ mobile = ["dep:libmobile"]
 # requested without the dependency itself.
 mobile-google-auth = ["mobile", "libmobile/google-auth"]
 mobile-camera = ["mobile", "libmobile/camera"]
+# The secure store's Keystore key in the TEE only, never StrongBox. Negative,
+# so turning off default features cannot turn off StrongBox; apps only.
+mobile-secure-store-no-strongbox = ["mobile", "libmobile/secure-store-no-strongbox"]
 web = [
     "dep:wasm-bindgen",
     "dep:wasm-bindgen-futures",
@@ -33,6 +36,9 @@ web = [
     "wgpu/webgl",
     "cpal?/wasm-bindgen",
 ]
+# Named secrets, encrypted at rest (`ctx.secure_store()`): libmobile's
+# Keystore store on Android, the login Keychain on macOS.
+secure-store = ["dep:security-framework"]
 # Scripted headless runs with PNG screenshots (desktop only; enables
 # nothing on Android and the web).
 script = ["dep:png", "dep:crc32fast"]
@@ -76,6 +82,7 @@ objc2-app-kit = { version = "0.2.2", features = [
     "NSView",
 ] }
 block2 = "0.5.1"
+security-framework = { version = "3", optional = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 raw-window-handle = "0.6"
@@ -106,3 +113,7 @@ name = "tone"
 
 [[example]]
 name = "audiocapture"
+
+[[example]]
+name = "securestore"
+required-features = ["secure-store"]

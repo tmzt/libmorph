@@ -6,7 +6,7 @@ use libdevice::DeviceSpec;
 
 use crate::gpu::Gpu;
 use crate::pipeline_cache::PipelineCacheStore;
-use crate::{Audio, PermissionRequest, SafeArea};
+use crate::{Audio, PermissionRequest, SafeArea, SecureStore};
 
 /// Shared state for the whole run. The device and queue never change; the
 /// surface size, format, safe area and scale factor follow the host.
@@ -23,6 +23,8 @@ pub struct MorphContext {
     pub(crate) data_dir: Option<PathBuf>,
     pub(crate) pipeline_cache: Option<PipelineCacheStore>,
     pub(crate) exit_requested: bool,
+    /// Set by the runner where the host has one (feature `secure-store`).
+    pub(crate) secure_store: Option<SecureStore>,
     /// For libmobile's calls (permissions); set before `init`.
     #[cfg(all(target_os = "android", feature = "mobile"))]
     pub(crate) android: Option<libmobile::android::AndroidApp>,
@@ -43,6 +45,7 @@ impl MorphContext {
             data_dir: None,
             pipeline_cache: None,
             exit_requested: false,
+            secure_store: None,
             #[cfg(all(target_os = "android", feature = "mobile"))]
             android: None,
         }
@@ -144,6 +147,15 @@ impl MorphContext {
     #[must_use]
     pub fn pipeline_cache(&self) -> Option<&wgpu::PipelineCache> {
         self.pipeline_cache.as_ref().map(PipelineCacheStore::cache)
+    }
+
+    /// Named secrets, encrypted at rest (feature `secure-store`): Android
+    /// Keystore through libmobile, the login Keychain on macOS, memory in
+    /// scripted runs. `None` without the feature, on the web and on other
+    /// desktops. Clone it to keep it in the app's own types or threads.
+    #[must_use]
+    pub fn secure_store(&self) -> Option<&SecureStore> {
+        self.secure_store.as_ref()
     }
 
     /// Ask the user for `permissions` (full names such as
