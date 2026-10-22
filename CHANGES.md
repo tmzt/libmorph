@@ -373,3 +373,14 @@ modes it asked for, not the granted ones; otherwise `Default`, granted as
 reinstall in this trial showed the permission dialog again, as an earlier
 grant had not survived it. After "While using the app", it survived
 `adb install -r`.
+
+## 2026-10-22 07:53 EDT — Runtime permissions for apps
+
+Plan: `docs/design/20261022_02_APP_PERMISSIONS_PLAN.md` (Draft).
+
+On the owner's instruction, to be implemented now. Apps can ask for any
+runtime permission through `MorphContext` and get the answer in a new
+`on_permissions` hook. The Android runner matches answers to requests by
+the ids libmobile now returns, so libmorph's own `RECORD_AUDIO` request
+for capture can no longer take an app's answer. Depends on the amended
+libmobile permissions plan. To be released with audio capture as 0.2.2.
