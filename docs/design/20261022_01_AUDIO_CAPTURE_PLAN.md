@@ -445,3 +445,31 @@ mirror the output ones on every host.
    (`CAMCORDER`, `VOICE_RECOGNITION`, `VOICE_COMMUNICATION`,
    `UNPROCESSED`, `VOICE_PERFORMANCE`, or `MIC` for `Generic`), and
    files keep coming across the switches.
+
+## Amendment — 2026-10-22 08:15 EDT: Android capture through libmobile's CaptureStream
+
+Agreed with the owner (2026-10-22). The owner pointed out that libmorph
+wraps libmobile, so features belong in libmobile first ("libmorph is
+supposed to be a wrapper for libmobile so the features we added should
+have been in libmobile first"), agreed to the order ("yes, go ahead in
+that order"), and kept the stream under libmobile's `cpal` feature ("keep
+it under cpal (audio-cpal), go ahead with libmorph"). Replaces the
+"Android input" item of the amendment "capture modes on Android".
+
+- On Android, libmorph opens capture with `libmobile::android::CaptureStream`
+  (libmobile `docs/design/20261022_02_AUDIO_CAPTURE_PLAN.md`) and has no
+  AAudio code of its own. `CaptureMode::Default` maps to no preset and the
+  other modes to libmobile's `InputPreset`, one to one. The granted
+  preset maps back; one libmorph does not know reads as `Default`.
+- libmobile keeps the callback across `set_preset`, falls back to the
+  default preset, and stops instead of pausing. libmorph's callback owns
+  the `Capture` state and its command channel, and turns libmobile's
+  `Duration` into the `StreamInstant` that `Capture` takes.
+- Nothing apps see changes: `CaptureMode`, `capture_mode`,
+  `set_capture_mode`, the cpal accessors (`None` on Android), pausing with
+  the app, and the fallback.
+
+8. **Through libmobile.** As above.
+   **Done when:** `cargo clippy -p libmorph` for Android has no `ndk::audio`
+   and no `unsafe` in `src/audio.rs`, and step 7's check holds again on
+   the S23.
