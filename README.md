@@ -112,6 +112,13 @@ host and handles the app's lifecycle around it. For example, audio capture
 with input presets is libmobile's `CaptureStream`, and libmorph's
 `CaptureMode` maps onto it.
 
+The desktop follows the same rule with [libdevice](https://github.com/tmzt/libdevice):
+desktop platform services, such as the macOS Keychain behind the secure
+store, are built there first. Where both crates provide a service, they
+expose the same API, and libmorph wraps them. libmorph's own code is what
+it exists for: wgpu, the window and event loop, device emulation and input,
+audio through cpal off Android, and scripted runs.
+
 The app crate is a `cdylib`, and `build.rs` generates its Gradle project:
 
 ```toml
