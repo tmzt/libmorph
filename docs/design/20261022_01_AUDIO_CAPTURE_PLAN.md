@@ -336,3 +336,34 @@ day.
 Release: additive (a defaulted hook, crate-private opening), so it stays
 in libmorph 0.2.2 if released together, or 0.2.3 after. Moving libmobile
 from 0.1.1 to 0.1.2 is semver-compatible.
+
+## Amendment — 2026-10-22 07:13 EDT: a scrolling spectrogram in the example
+
+Agreed with the owner (2026-10-22: "yes, add it. it's more useful than
+voice reactive plasma"). Replaces section 7's "The screen shows the last
+chunk's peak level as brightness", and adds a step 6. Only the example
+changes; libmorph's API does not.
+
+- A second sink, added in `on_capture_ready` next to the file writer's,
+  analyses the capture on the audio thread with no allocation after
+  setup: the channels are averaged to mono, and every 512 frames the
+  last 1024 go through a Hann window and a 1024-point radix-2 FFT
+  written in the example (no new dependency). That is 93.75 columns a
+  second at 48 kHz.
+- Each column has 256 rows, log-spaced in frequency from 40 Hz to the
+  Nyquist frequency. Each row is the strongest FFT bin it covers, in
+  dBFS mapped from -100..-20 to 0..255.
+- Columns go into a ring of 512 shared with the main thread under a
+  `Mutex` that the audio thread only `try_lock`s. A column that meets
+  a held lock is dropped. Each frame the main thread copies the ring
+  into an `R8Unorm` texture (512 x 256) when it has changed.
+- `examples/audiocapture.wgsl` draws it full screen, scrolling right to
+  left with the newest column at the right edge and low frequencies at
+  the bottom, through a black, blue, magenta, orange, white colour ramp.
+  The dark red screen until capture is ready is kept.
+
+6. **Spectrogram.** As above, with unit tests of the FFT (a sine's peak
+   bin) and the row mapping.
+   **Done when:** on the desktop and on the owner's S23, speech and
+   whistling show as moving bands, and silence (as when Android silences
+   the app behind Recents) shows black.
