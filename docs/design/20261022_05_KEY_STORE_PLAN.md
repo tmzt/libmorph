@@ -291,3 +291,67 @@ record stays a blob.
 Everything here is new and unreleased, so the key store is additive in
 all three crates. `zeroize` becomes a dependency of libmobile, and of
 libdevice and libmorph under `secure-store`.
+
+## Amendment — 2026-10-22 19:57 EDT: the vault is a thin handle; the engine is free functions
+
+Agreed with the owner (2026-10-22): "can we drop Clone and &self or are
+they required? ... it doesn't have to be &self itself?", "the Vault being a
+handle/string?", and "Vault isn't the secret store itself ... it only does
+what the OS APIs allow it to do". Replaces `KeyStore` and the `Vault`
+trait in section 2, the lock paragraph of 2.1, the constructors in section
+3, and `ctx.key_store()` in section 4.
+
+- **No `KeyStore` struct.** The engine is four free functions over a
+  vault:
+
+  ```rust
+  pub fn generate<K: SecretKey>(vault: &Vault, name: &str, flags: u8) -> Result<K::Public, KeyStoreError>;
+  pub fn public<K: SecretKey>(vault: &Vault, name: &str) -> Result<K::Public, KeyStoreError>;
+  pub fn with_key<K: SecretKey, R>(vault: &Vault, name: &str, f: impl FnOnce(&K) -> R) -> Result<R, KeyStoreError>;
+  pub fn delete(vault: &Vault, name: &str) -> Result<bool, KeyStoreError>;
+  ```
+
+  Their behaviour is section 2.1's. One process-wide `static Mutex<()>`
+  serializes vault calls and the migration write. It is never held while
+  adapter code runs, and it is recovered if poisoned.
+- **`Vault` is a thin handle over the OS.** It is `Clone`, cheap and
+  `'static`, so it can live in snow's `Box<dyn Dh>`. It is not a
+  security boundary. The OS protects the keys (Keystore's non-exportable
+  wrapping keys and their unlock rule, the Keychain's access list), and
+  the engine adds the token, the kind check and `with_key`'s scope.
+  - **Android (libmobile):** `Vault::named(namespace)`, a namespace
+    string. libmobile keeps the running `AndroidApp` in a process-wide
+    slot, which `run()` sets and replaces each time `android_main` runs.
+    A call with no app running gives `Platform`. The namespace is a
+    directory under `libmobile-key-store/`. Namespaces share the key
+    space's wrapping keys. Each envelope's associated data includes the
+    namespace and name, so items cannot be moved between namespaces.
+  - **macOS (libdevice):** `Vault::named(namespace)`, the Keychain service
+    `<namespace>.keys`.
+  - **Memory (both):** `Vault::memory()`, holding an `Arc` to its own map
+    and its simulated-lock switch (`set_device_locked`). It is the one
+    vault that is not a string, so that runs never share a global map.
+
+  Namespaces follow the name rule (1 to 64 of `[A-Za-z0-9._-]`, not
+  starting with `.`).
+- **The platform layer:** each crate implements the vault's private
+  operations (`supported_flags`, `get`, `put`, `flags`, `delete`)
+  inside `Vault`, for its own platform and the memory variant. The engine
+  file stays identical in both crates (2.2). The platform half lives in a
+  second file, `src/key_store/vault.rs`, which differs.
+- **libmorph:** `MorphContext::key_store() -> Option<&Vault>`:
+  - Android: `Vault::named("libmorph.<SECURE_STORE_ID>")`, with the id
+    defaulting to the package name;
+  - macOS: the same namespace, with the id defaulting to the executable's
+    file stem;
+  - scripted runs: `Vault::memory()`, new for each run;
+  - otherwise `None`.
+
+  Apps can also make their own with `Vault::named`, for example one per
+  paired server.
+- **handlr:** its `Dh` owns a `Vault` clone and calls
+  `key_store::with_key::<NoiseStatic, _>(&vault, "noise.static", ..)`.
+- **Open, not part of this amendment:** whether libmobile's blob store
+  also drops its `&AndroidApp` argument in favour of the process-wide
+  slot. That would depart from the frozen blob store plan, and is the
+  owner's call.
