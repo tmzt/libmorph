@@ -348,3 +348,28 @@ performance). cpal cannot set one, so on Android libmorph opens the
 capture stream itself through the NDK's AAudio, which libmobile already
 links; output stays on cpal. A first step towards the owner's eventual
 full-duplex speech-to-text and text-to-speech, which is not in this plan.
+
+## 2026-10-22 07:32 EDT — Audio capture: modes on the S23
+
+Plan: `docs/design/20261022_01_AUDIO_CAPTURE_PLAN.md`, step 7.
+
+Built against libmobile's `runtime-permissions` branch, whose `cpal`
+feature also enables `ndk/api-level-28`: ndk 0.9 gates input presets
+behind it (libmobile `CHANGES.md`).
+
+On the owner's Galaxy S23 Ultra, a tap cycled the example through every
+mode. Each was granted as asked, and `Default` was granted as
+`VoiceRecognition`. `dumpsys audio` showed the matching source each
+time: `MIC` (Generic), `CAMCORDER`, `VOICE_RECOGNITION`,
+`VOICE_COMMUNICATION`, `UNPROCESSED` and `VOICE_PERFORMANCE`. Files
+kept arriving across every switch, named `<unix ms>_<mode>.au`. In a
+quiet room, one file per mode measured from -66.6 dBFS RMS (Unprocessed)
+to -45.1 dBFS (Camcorder). The files were taken seconds apart, so this
+only suggests the processing differs.
+
+Departure from the amendment's wording: the example cycles through the
+modes it asked for, not the granted ones; otherwise `Default`, granted as
+`VoiceRecognition`, skipped `Generic` and `Camcorder`. The first
+reinstall in this trial showed the permission dialog again, as an earlier
+grant had not survived it. After "While using the app", it survived
+`adb install -r`.
