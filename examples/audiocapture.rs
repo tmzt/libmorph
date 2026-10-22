@@ -5,7 +5,12 @@
 //! `<unix ms>_<capture mode>.au`, by the Unix time in milliseconds of its
 //! first frame, and its name is logged once it is written.
 //!
-//! A tap cycles Android's capture mode (`Audio::set_capture_mode`) through
+//! Until capture is ready the screen is dark red. On Android, if the user
+//! denied the microphone, a tap asks again (`ctx.request_permissions`), and
+//! the answer is logged with whether asking again would still show a dialog
+//! (`ctx.should_show_rationale`).
+//!
+//! Once capture is ready, a tap cycles Android's capture mode (`Audio::set_capture_mode`) through
 //! every `CaptureMode`, and a band across the top shows the mode granted by
 //! colour. The desktop has only `Default`. The first argument is the chunk
 //! length in milliseconds (default 1000).
@@ -29,9 +34,12 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{fs, io, mem, thread};
 
 use libmorph::{
-    AudioSetup, CaptureFormat, CaptureMode, Captured, Frame, MorphApp, MorphContext, Touch,
-    TouchPhase, wgpu,
+    AudioSetup, CaptureFormat, CaptureMode, Captured, Frame, MorphApp, MorphContext, Permissions,
+    Touch, TouchPhase, wgpu,
 };
+
+/// What capture needs on Android, declared in `examples/android/`'s manifest.
+const RECORD_AUDIO: &str = "android.permission.RECORD_AUDIO";
 
 /// Relative to where the example is run, like the scripted runs' `out/`,
 /// when there is no data directory.
@@ -116,6 +124,19 @@ impl MorphApp for AudioCapture {
         }
     }
 
+    /// The answer to a request made by a tap. If it grants the microphone,
+    /// libmorph opens capture and `on_capture_ready` follows.
+    fn on_permissions(&mut self, ctx: &mut MorphContext, answer: &Permissions) {
+        log::info!("permission: {:?} {:?}", answer.request, answer.permissions);
+        if !answer.granted(RECORD_AUDIO) {
+            if ctx.should_show_rationale(RECORD_AUDIO) {
+                log::info!("permission: denied; a tap asks again");
+            } else {
+                log::info!("permission: denied for good; allow the microphone in Settings");
+            }
+        }
+    }
+
     /// Right after `init` on the desktop; on Android, once the user allows
     /// the microphone. Until then the screen stays dark red.
     fn on_capture_ready(&mut self, ctx: &mut MorphContext) {
@@ -159,9 +180,17 @@ impl MorphApp for AudioCapture {
         }
     }
 
-    /// A tap moves to the next capture mode.
+    /// Before capture is ready, a tap asks for the microphone again; after,
+    /// it moves to the next capture mode.
     fn on_touch(&mut self, ctx: &mut MorphContext, touch: Touch) {
-        if touch.phase != TouchPhase::Started || self.columns.is_none() {
+        if touch.phase != TouchPhase::Started {
+            return;
+        }
+        if self.columns.is_none() {
+            match ctx.request_permissions(&[RECORD_AUDIO]) {
+                Some(request) => log::info!("permission: asked again ({request:?})"),
+                None => log::info!("permission: this host has none to ask for"),
+            }
             return;
         }
         self.asked = (self.asked + 1) % MODES.len();
