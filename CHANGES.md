@@ -260,3 +260,18 @@ capture time, and the input stream pauses with the app. An
 `audiocapture` example writes one `.au` file per second, named by
 Unix milliseconds, and logs each name. Built on the `audio-capture`
 branch; to be released as libmorph 0.2.2 (strictly additive).
+
+## 2026-10-22 06:58 EDT — Audio capture: the example on Android
+
+Plan: `docs/design/20261022_01_AUDIO_CAPTURE_PLAN.md` (In implementation),
+amended for step 4.
+
+The owner asked for the `audiocapture` example on the Galaxy S23. libmorph
+had no Android example, so a cdylib crate under `examples/android/` wraps
+it, with a build script in the manner of libmobile's. libmobile only puts
+permissions in the manifest and cannot request one at runtime, so the
+script grants `RECORD_AUDIO` with `adb`; a runtime request belongs in a
+libmobile plan. Small departure in section 7: each file's Unix time is
+anchored when the sink receives its first block (wall clock minus that
+block's `time`), not when the sink is added, because `time` counts from
+the stream's first block, which comes before the sink is added.
