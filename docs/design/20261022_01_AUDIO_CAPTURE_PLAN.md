@@ -287,3 +287,52 @@ a step 4.
 4. **On the S23.** **Done when:** the app on the owner's Galaxy S23 logs
    one `wrote …/audiocapture/<unix ms>.au` line per second, and a file
    pulled from the device plays with the sound of the room.
+
+## Amendment — 2026-10-22 07:05 EDT: asking for RECORD_AUDIO, and on_capture_ready
+
+Agreed with the owner (2026-10-22: "that's fine", and "hook" for a hook
+rather than holding back `init` until the user answers). Replaces
+section 6's Android item, and adds to sections 2, 4 and 7 and a step 5.
+It depends on libmobile's
+`docs/design/20261022_01_RUNTIME_PERMISSIONS_PLAN.md`, written the same
+day.
+
+- **Hook.** `MorphApp` gains
+  `fn on_capture_ready(&mut self, ctx: &mut MorphContext)`, with an
+  empty default. It is called once per run, after `init`, when the
+  capture stream has opened: right after `init` when it opened with the
+  rest of audio (desktop, or Android with the permission already
+  granted), or later on Android, once the user allows the request. It is
+  never called if capture was not asked for or did not open.
+  `ctx.audio().capture_format()` is `Some` from then on.
+- **Sinks before the stream.** `Audio::add_sink` keeps sinks added
+  before the capture stream opens, and hands them to it when it does, so
+  an app may add them in `init`. `remove_sink` removes a kept one. If
+  capture never opens they are dropped with `Audio`.
+- **Android.** With `AudioSetup::capture`, the runner checks
+  `libmobile::android::permission_granted(app, "android.permission.RECORD_AUDIO")`
+  before opening audio. If it is granted, capture opens as before. If
+  not, audio opens without capture, and right after `init` the runner
+  calls `request_permissions` for it. On `MobileEvent::Permissions`
+  with `RECORD_AUDIO` granted, it opens the capture stream
+  (`Audio::open_capture`, crate-private), starts it paused if the app is
+  paused, and calls `on_capture_ready`. A denial logs
+  `libmorph: audio capture: RECORD_AUDIO denied`, and capture stays
+  closed for the run. The app still declares the permission in its
+  manifest.
+- **Example.** `audiocapture` adds its sink in `on_capture_ready`
+  instead of `init`, and shows the dark red screen until then.
+  `examples/android/build.sh` no longer grants permissions with
+  `adb`, so installing shows the system dialog.
+
+5. **Asking on Android.** The hook, kept sinks, the Android request and
+   the example changes, on libmobile 0.1.2.
+   **Done when:** on the owner's Galaxy S23, after
+   `adb shell pm revoke dev.highbay.libmorph.example.audiocapture
+   android.permission.RECORD_AUDIO`, launching the example shows the
+   system dialog. Allowing it starts the `wrote …` lines, and denying it
+   logs the denial and keeps the red screen.
+
+Release: additive (a defaulted hook, crate-private opening), so it stays
+in libmorph 0.2.2 if released together, or 0.2.3 after. Moving libmobile
+from 0.1.1 to 0.1.2 is semver-compatible.
