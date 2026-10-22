@@ -104,6 +104,14 @@ From Rust, including tests: `libmorph::script::run::<App>(&script, run)`.
 
 ## Android
 
+On Android, libmorph is a wrapper around [libmobile](https://github.com/tmzt/libmobile).
+Everything that touches the platform (the NDK, AAudio, Kotlin plugins,
+runtime permissions) is built in libmobile first, with an example there
+that uses it. libmorph then wraps it in an API that is the same on every
+host and handles the app's lifecycle around it. For example, audio capture
+with input presets is libmobile's `CaptureStream`, and libmorph's
+`CaptureMode` maps onto it.
+
 The app crate is a `cdylib`, and `build.rs` generates its Gradle project:
 
 ```toml
