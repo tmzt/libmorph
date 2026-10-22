@@ -144,3 +144,26 @@ with libmobile 0.2.1, a compatible bump.
 2. **Where the desktop code lives.** libmobile is Android-only, so the
    Keychain backend is libmorph's own. The alternative is a separate
    small crate both could use.
+
+## Amendment — 2026-10-22 18:28 EDT: the Keychain on the Mac, and the StrongBox feature
+
+Agreed with the owner (2026-10-22). Settles section 7 and adds to
+section 4 and step 3, following libmobile's amendment "secure preferences
+in core, StrongBox as a default feature".
+
+- **Desktop backend: the Keychain** (section 3, unchanged). Owner:
+  "companion-tty rebuild requiring approval is fine, it shouldn't be that
+  often after implemented and stable, Keychain is the right place on
+  Mac." The Keychain backend stays in libmorph, not in a separate crate.
+- **Features.** `secure-store` stays off by default, so apps that do not
+  use it never get `security-framework` on macOS. Its Android half no
+  longer needs a libmobile feature, since libmobile's store is core:
+  `secure-store = ["dep:security-framework"]`. libmorph adds
+  `secure-store-strongbox = ["libmobile?/secure-store-strongbox"]` to its
+  `default` list, and depends on libmobile with
+  `default-features = false` (on both the normal and the build
+  dependency), so an app can turn StrongBox off by turning off libmorph's
+  defaults. Today libmobile has no default features, so the change is not
+  visible to apps.
+- **Step 3** logs `AndroidStrongBox` by default, and `AndroidTee` when
+  built without `secure-store-strongbox` and with the app's data cleared.
