@@ -36,7 +36,7 @@ pub struct SecureStore {
 #[derive(Clone)]
 enum Backend {
     #[cfg(all(target_os = "android", feature = "mobile", feature = "secure-store"))]
-    Android(libmobile::android::AndroidApp),
+    Android,
     #[cfg(all(target_os = "macos", feature = "secure-store"))]
     Keychain { service: Arc<str> },
     /// Scripted runs.
@@ -48,7 +48,7 @@ impl fmt::Debug for SecureStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let backend = match &self.backend {
             #[cfg(all(target_os = "android", feature = "mobile", feature = "secure-store"))]
-            Backend::Android(_) => "Android",
+            Backend::Android => "Android",
             #[cfg(all(target_os = "macos", feature = "secure-store"))]
             Backend::Keychain { .. } => "Keychain",
             Backend::Memory(_) => "Memory",
@@ -154,9 +154,9 @@ impl From<libmobile::SecureStoreError> for SecureStoreError {
 
 impl SecureStore {
     #[cfg(all(target_os = "android", feature = "mobile", feature = "secure-store"))]
-    pub(crate) fn android(app: libmobile::android::AndroidApp) -> Self {
+    pub(crate) fn android() -> Self {
         Self {
-            backend: Backend::Android(app),
+            backend: Backend::Android,
         }
     }
 
@@ -191,7 +191,7 @@ impl SecureStore {
         check_name(name)?;
         match &self.backend {
             #[cfg(all(target_os = "android", feature = "mobile", feature = "secure-store"))]
-            Backend::Android(app) => Ok(libmobile::android::secure_store::get(app, name)?),
+            Backend::Android => Ok(libmobile::android::secure_store::get(name)?),
             #[cfg(all(target_os = "macos", feature = "secure-store"))]
             Backend::Keychain { service } => keychain::get(service, name),
             Backend::Memory(map) => Ok(lock(map).get(name).cloned()),
@@ -214,10 +214,10 @@ impl SecureStore {
         check_value(value)?;
         match &self.backend {
             #[cfg(all(target_os = "android", feature = "mobile", feature = "secure-store"))]
-            Backend::Android(app) => {
+            Backend::Android => {
                 let options = libmobile::PutOptions::default().unlocked_only(options.unlocked_only);
                 Ok(libmobile::android::secure_store::put_with(
-                    app, name, value, options,
+                    name, value, options,
                 )?)
             }
             #[cfg(all(target_os = "macos", feature = "secure-store"))]
@@ -238,7 +238,7 @@ impl SecureStore {
         check_name(name)?;
         match &self.backend {
             #[cfg(all(target_os = "android", feature = "mobile", feature = "secure-store"))]
-            Backend::Android(app) => Ok(libmobile::android::secure_store::delete(app, name)?),
+            Backend::Android => Ok(libmobile::android::secure_store::delete(name)?),
             #[cfg(all(target_os = "macos", feature = "secure-store"))]
             Backend::Keychain { service } => keychain::delete(service, name),
             Backend::Memory(map) => Ok(lock(map).remove(name).is_some()),
@@ -250,15 +250,13 @@ impl SecureStore {
     pub fn protection(&self) -> Result<Protection, SecureStoreError> {
         match &self.backend {
             #[cfg(all(target_os = "android", feature = "mobile", feature = "secure-store"))]
-            Backend::Android(app) => {
+            Backend::Android => {
                 use libmobile::SecurityLevel;
-                Ok(
-                    match libmobile::android::secure_store::security_level(app)? {
-                        SecurityLevel::StrongBox => Protection::AndroidStrongBox,
-                        SecurityLevel::TrustedEnvironment => Protection::AndroidTee,
-                        _ => Protection::AndroidSoftware,
-                    },
-                )
+                Ok(match libmobile::android::secure_store::security_level()? {
+                    SecurityLevel::StrongBox => Protection::AndroidStrongBox,
+                    SecurityLevel::TrustedEnvironment => Protection::AndroidTee,
+                    _ => Protection::AndroidSoftware,
+                })
             }
             #[cfg(all(target_os = "macos", feature = "secure-store"))]
             Backend::Keychain { .. } => Ok(Protection::MacKeychain),
