@@ -92,3 +92,27 @@ No changes of its own; the minor bump comes from its dependency (Rule 5.5).
 - **Breaking:** libmobile 0.1.1 → 0.2.0, whose `gradle` module
   libmorph-build re-exports. `gradle_project` and `LINKS` are unchanged.
   Generated projects now carry libmobile's `bridge.PermissionPlugin`.
+
+## libmorph 0.3.1 — 2026-10-22 (tag v0.3.1)
+
+The secure store (`docs/design/20261022_03_SECURE_STORE_PLAN.md`) and the
+key store (`docs/design/20261022_06_KEY_STORE_PLAN.md`). All additions.
+
+- **Feature `secure-store`** (off by default):
+  - `MorphContext::secure_store() -> Option<&SecureStore>`: `get`,
+    `put`, `put_with`, `delete` and `protection()`, with `PutOptions`,
+    `Protection`, `SecureStoreError`, `MAX_NAME_LEN` and
+    `MAX_VALUE_LEN`.
+  - `MorphContext::key_store() -> Option<&Vault>`, and `libmorph::key_store`,
+    which is libmobile's engine on Android and libdevice's elsewhere. At the
+    root: `SecretKey`, `SealToken`, `Vault`, `KeyStoreError`,
+    `FLAG_DEVICE_UNLOCK_REQUIRED` and `FLAG_APP_UNLOCK_REQUIRED`.
+  - It turns on libdevice's `secure-store`.
+- **Feature `mobile-secure-store-no-strongbox`:** the passthrough to
+  libmobile's `secure-store-no-strongbox`.
+- `MorphApp::SECURE_STORE_ID`, a defaulted associated const: the
+  namespace `libmorph.<id>`.
+- The `script` feature also turns on libdevice's `test-vault`, so
+  scripted runs get memory stores.
+- **Dependencies:** libmobile 0.2.0 → 0.2.1 and libdevice 0.1.0 → 0.1.1,
+  both compatible.
