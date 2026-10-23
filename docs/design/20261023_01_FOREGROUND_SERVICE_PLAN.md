@@ -393,3 +393,21 @@ sections 4, 5 and 7.
 - **Tests:** the queue tests run with no features, and the `tokio`
   tests (`--features tokio`, with Tokio's `rt` and `macros` as
   dev-dependencies) check order and delivery from a non-runtime thread.
+
+## Amendment — 2026-10-23 01:29 EDT: async features are named after their crates
+
+The owner's refinement, relayed by the handlr session (2026-10-23): each
+feature is named after the crate it brings in. This replaces the naming in
+the amendment "one feature per async runtime, none by default" (its
+`-compat` variants, such as `tokio-compat`). Everything else in that
+amendment stands.
+
+- Each async feature is the optional dependency's own name, so that
+  `dep:` and the feature match: `tokio = ["dep:tokio", "system-events"]`.
+- The names are `tokio` (built now), and later, each with its own
+  amendment, `smol`, `async-compat` (an integration through the
+  `async-compat` crate), and `futures-core` if a bare `Stream` impl is
+  ever offered.
+- libmobile and libmorph use the same names, off by default, with
+  libmorph forwarding (`tokio = ["libmobile?/tokio", "dep:tokio"]`, the
+  second for its own desktop stream).
