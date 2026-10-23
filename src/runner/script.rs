@@ -111,6 +111,7 @@ fn play<A: MorphApp>(
             }
             Action::Suspend => shell.detach(),
             Action::Resume => shell.attach_offscreen(),
+            Action::Open(url) => shell.open_url(url),
             Action::Exit => {
                 manifest.exit_by = ExitBy::Script;
                 manifest.exit_line = Some(line);

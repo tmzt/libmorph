@@ -14,7 +14,8 @@
 //! ```
 //!
 //! One command per line, operands separated by spaces or tabs, `#` to the end
-//! of the line is a comment. Coordinates are physical pixels of the surface.
+//! of the line is a comment, except on an `open` line, where `#` belongs to
+//! the URL's fragment. Coordinates are physical pixels of the surface.
 //! The whole script is checked when it is parsed, before any GPU work.
 
 use std::collections::HashSet;
@@ -114,6 +115,11 @@ pub enum Command {
     Resume,
     /// `exit`: end the run here.
     Exit,
+    /// `open <url>`: the app is opened with a link
+    /// ([`MorphApp::on_open_url`](crate::MorphApp::on_open_url)). The URL has
+    /// no whitespace, and the line has no comment. While suspended, it is
+    /// delivered after the resume.
+    Open(String),
 }
 
 /// Why a script could not be loaded, checked or run.
@@ -166,7 +172,12 @@ impl Script {
         let mut steps = Vec::new();
         for (index, text) in source.lines().enumerate() {
             let line = u32::try_from(index + 1).unwrap_or(u32::MAX);
-            let text = text.split_once('#').map_or(text, |(code, _)| code);
+            // On an `open` line, `#` starts the URL's fragment.
+            let text = if text.split_whitespace().next() == Some("open") {
+                text
+            } else {
+                text.split_once('#').map_or(text, |(code, _)| code)
+            };
             let words: Vec<&str> = text.split_whitespace().collect();
             if words.is_empty() {
                 continue;
@@ -261,6 +272,7 @@ pub(crate) enum Action {
     Suspend,
     Resume,
     Exit,
+    Open(String),
 }
 
 /// The static checks of the plan, section 3, with the expansion.
@@ -394,6 +406,12 @@ impl Planner {
                 self.push(line, Action::Resume);
             }
             Command::Exit => self.push(line, Action::Exit),
+            Command::Open(url) => {
+                if url.is_empty() || url.contains(char::is_whitespace) {
+                    return Err("`open` takes one URL, without whitespace".into());
+                }
+                self.push(line, Action::Open(url.clone()));
+            }
         }
         Ok(())
     }
@@ -554,6 +572,10 @@ fn parse_command(words: &[&str]) -> Result<Command, String> {
             arity(&[0], "exit")?;
             Command::Exit
         }
+        "open" => {
+            arity(&[1], "open <url>")?;
+            Command::Open(args[0].to_owned())
+        }
         other => return Err(format!("unknown command `{other}`")),
     };
     Ok(command)
@@ -605,6 +627,30 @@ mod tests {
             .into_iter()
             .map(|(_, action)| action)
             .collect()
+    }
+
+    #[test]
+    fn open_keeps_the_fragment_and_works_while_suspended() {
+        assert_eq!(
+            actions("open handlr://h.ts.net:7347/pair#handlr1abc\nsuspend\nopen a://b?c=d\nresume"),
+            [
+                Action::Open("handlr://h.ts.net:7347/pair#handlr1abc".into()),
+                Action::Suspend,
+                Action::Open("a://b?c=d".into()),
+                Action::Resume,
+            ]
+        );
+    }
+
+    #[test]
+    fn open_takes_one_url() {
+        for source in ["open", "open a://b c", "open a://b # a comment"] {
+            let (line, message) = rejected(source);
+            assert_eq!(line, 1, "{source}");
+            assert!(message.contains("usage: open <url>"), "{source}: {message}");
+        }
+        let blank = Script::from_commands(vec![Command::Open("a b".into())]);
+        assert!(matches!(blank, Err(ScriptError::Parse { line: 1, .. })));
     }
 
     /// The line and message of a rejected script.

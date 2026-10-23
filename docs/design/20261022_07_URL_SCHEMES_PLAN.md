@@ -1,7 +1,7 @@
 ---
 title: Opening the app from a URL scheme
 date: 2026-10-22
-status: Draft
+status: In implementation
 covers:
   - "Declaring custom URL schemes for a generated Android project
     (`gradle::Project::url_scheme`), through libmorph-build"
@@ -256,3 +256,9 @@ libmorph only wraps it (steps 4 to 6):
 libmorph-build adds no code: `gradle_project` already returns
 libmobile's `Project`, so `url_scheme` reaches app build scripts
 through it. Step 4 does not start until libmobile 0.2.2 is released.
+
+## Amendment — 2026-10-23 18:04 EDT: implementation has started; the document is now immutable
+
+Step 4 starts with this commit, against libmobile 0.2.2 (`eccea7c`, tag
+`v0.2.2`), which completed steps 1 to 3 under libmobile's plan. The
+document now changes only on the owner's explicit instruction.

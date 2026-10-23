@@ -112,6 +112,17 @@ pub trait MorphApp: Sized + 'static {
         let _ = (ctx, answer);
     }
 
+    /// The app was opened with `url`, a link with one of the URL schemes its
+    /// build script declared (`gradle_project(id).url_scheme("myapp")`), at
+    /// launch or while running. Called after [`init`](Self::init), in the
+    /// order the links arrived; links that arrive while the app is suspended
+    /// come after [`on_resume`](Self::on_resume). Android only, and scripted
+    /// runs (`open <url>`). The URL is untrusted input: validate it, and do
+    /// not log it past its path, since a query or fragment may be a secret.
+    fn on_open_url(&mut self, ctx: &mut MorphContext, url: &str) {
+        let _ = (ctx, url);
+    }
+
     /// The surface is gone (app backgrounded). The device, queue and every
     /// resource built on them stay valid.
     fn on_suspend(&mut self, ctx: &mut MorphContext) {

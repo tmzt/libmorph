@@ -42,6 +42,7 @@ pub fn run_android<A: MorphApp>(app: AndroidApp) {
             finishing: false,
             wants_capture: false,
             capture_request: None,
+            urls: Vec::new(),
         },
     );
 }
@@ -72,7 +73,13 @@ struct Adapter<A> {
     /// libmorph's own `RECORD_AUDIO` request for capture, whose answer is
     /// not passed to the app.
     capture_request: Option<PermissionRequest>,
+    /// Links that arrived before the app existed (a link that cold-started
+    /// it), delivered right after `init`.
+    urls: Vec<String>,
 }
+
+/// The action of an intent that opens a link.
+const ACTION_VIEW: &str = "android.intent.action.VIEW";
 
 /// What capture needs granted at runtime.
 const RECORD_AUDIO: &str = "android.permission.RECORD_AUDIO";
@@ -144,7 +151,10 @@ impl<A: MorphApp> Adapter<A> {
             PipelineCacheStore::open(&ctx.gpu.device, &ctx.gpu.adapter.get_info(), dir)
         });
         match Shell::start(ctx, surface, size) {
-            Ok(shell) => {
+            Ok(mut shell) => {
+                for url in std::mem::take(&mut self.urls) {
+                    shell.open_url(url);
+                }
                 self.shell = Some(shell);
                 if ask {
                     self.capture_request =
@@ -309,6 +319,16 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
                 }
             }
             MobileEvent::Permissions(outcome) => self.permissions(outcome.into()),
+            // A link with one of the app's schemes. Intents without data,
+            // such as the launcher's, are not links.
+            MobileEvent::Intent(intent) if intent.action.as_deref() == Some(ACTION_VIEW) => {
+                if let Some(url) = intent.data {
+                    match &mut self.shell {
+                        Some(shell) => shell.open_url(url),
+                        None => self.urls.push(url),
+                    }
+                }
+            }
             MobileEvent::ConfigChanged => {
                 if let Some(shell) = &mut self.shell {
                     shell.ctx.scale_factor = scale_factor(app);

@@ -28,6 +28,8 @@ pub(crate) enum FrameStatus {
 #[derive(Debug, Default)]
 struct Lifecycle {
     suspended: bool,
+    /// Links that arrived while suspended, delivered after `on_resume`.
+    urls: Vec<String>,
 }
 
 impl Lifecycle {
@@ -39,6 +41,26 @@ impl Lifecycle {
     /// Becoming resumed: whether the app must hear `on_resume`.
     fn resume(&mut self) -> bool {
         std::mem::replace(&mut self.suspended, false)
+    }
+
+    /// A link: `Some` to deliver it now, `None` if it waits for a resume.
+    #[cfg(any(test, script_runner, target_os = "android"))]
+    fn open_url(&mut self, url: String) -> Option<String> {
+        if self.suspended {
+            self.urls.push(url);
+            None
+        } else {
+            Some(url)
+        }
+    }
+
+    /// The links that waited, in order, once resumed.
+    fn take_urls(&mut self) -> Vec<String> {
+        if self.suspended {
+            Vec::new()
+        } else {
+            std::mem::take(&mut self.urls)
+        }
     }
 }
 
@@ -130,6 +152,18 @@ impl<A: MorphApp> Shell<A> {
         self.last_frame = Instant::now();
         if self.lifecycle.resume() {
             self.app.on_resume(&mut self.ctx);
+        }
+        for url in self.lifecycle.take_urls() {
+            self.app.on_open_url(&mut self.ctx, &url);
+        }
+    }
+
+    /// A link the app was opened with: now, or after `on_resume` if the app
+    /// is suspended.
+    #[cfg(any(script_runner, target_os = "android"))]
+    pub fn open_url(&mut self, url: String) {
+        if let Some(url) = self.lifecycle.open_url(url) {
+            self.app.on_open_url(&mut self.ctx, &url);
         }
     }
 
@@ -320,6 +354,20 @@ mod tests {
         assert!(!life.suspend(), "already suspended");
         assert!(life.resume());
         assert!(!life.resume());
+    }
+
+    #[test]
+    fn links_wait_while_suspended() {
+        let mut life = Lifecycle::default();
+        assert_eq!(life.open_url("a".into()), Some("a".into()));
+        life.suspend();
+        assert_eq!(life.open_url("b".into()), None);
+        assert_eq!(life.open_url("c".into()), None);
+        assert!(life.take_urls().is_empty(), "still suspended");
+        assert!(life.resume());
+        assert_eq!(life.take_urls(), ["b", "c"]);
+        assert!(life.take_urls().is_empty(), "delivered once");
+        assert_eq!(life.open_url("d".into()), Some("d".into()));
     }
 
     #[test]
