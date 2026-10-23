@@ -507,3 +507,18 @@ an `AndroidApp` clone. libmobile's blob store now uses the Application
 from `ndk-context` and takes no app, so libmorph's backend holds nothing.
 On the S23 Ultra, the Android `securestore` example reports
 `AndroidStrongBox` and counts launch 3 after the earlier two.
+
+## 2026-10-22 20:52 EDT — Secure store: desktop backends from libdevice
+
+Plans: `docs/design/20261022_03_SECURE_STORE_PLAN.md` (In implementation),
+and `docs/design/20261022_06_KEY_STORE_PLAN.md`, step 7.
+
+As recorded earlier (the desktop backends move to libdevice), libmorph's
+`SecureStore` now wraps libdevice's `secure_store` for the macOS
+Keychain and the scripted runs' memory store. libmorph no longer depends
+on `security-framework`.
+
+The key store is in: `libmorph::key_store` and `ctx.key_store()`. On the
+owner's S23 Ultra, the Android `securestore` example generated key
+`device` in namespace `libmorph.securestore`, and loaded the same
+fingerprint after a force-stop.
