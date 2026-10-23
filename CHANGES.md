@@ -623,3 +623,11 @@ example:
 
 Waiting on the owner: scanning a QR code of a `libmorph-urlopen://` URL
 with the Samsung camera.
+
+## 2026-10-23 18:13 EDT — URL schemes: the camera check passed on the owner's word
+
+Plan: `docs/design/20261022_07_URL_SCHEMES_PLAN.md`, step 5. Scanning a
+QR code of `libmorph-urlopen://camera-scan/qr#secret` with the camera
+app (Google Lens) on the S23 started no intent. The owner: "it should work
+if the scheme is registered. let's just pass as is, I'll test it with
+handlr". Step 5 is passed as is; the camera check moves to handlr.
