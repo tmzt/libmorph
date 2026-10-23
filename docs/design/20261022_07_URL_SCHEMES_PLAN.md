@@ -234,3 +234,25 @@ Section 7 stands as follows:
    background link creates a second activity.
 2. A Cargo feature: none, as section 3 proposes.
 3. macOS: not answered; this plan does not depend on it.
+
+## Amendment — 2026-10-22 23:30 EDT: implemented in libmobile, wrapped here
+
+On the owner's instruction. This replaces section 2 and steps 1 to 3, and
+the approval amendment's sentence saying they "are now built from it".
+
+The implementation of URL schemes moved to libmobile, under its plan
+`docs/design/20261022_05_URL_SCHEMES_PLAN.md`: `Project::url_scheme`,
+the intent filters, `redact_url` and the redacted intent log, its
+example, its S23 check and its 0.2.2 release. Section 2 here is no longer
+a specification; libmobile's plan is, and where they differ it wins.
+
+libmorph only wraps it (steps 4 to 6):
+- `MorphApp::on_open_url`, fed from libmobile's `MobileEvent::Intent`
+  by the Android runner's queue, as section 3 describes;
+- the `open <url>` script command;
+- the `urlopen` example and its S23 check;
+- the release taking libmobile 0.2.2.
+
+libmorph-build adds no code: `gradle_project` already returns
+libmobile's `Project`, so `url_scheme` reaches app build scripts
+through it. Step 4 does not start until libmobile 0.2.2 is released.
