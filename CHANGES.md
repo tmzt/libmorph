@@ -605,3 +605,21 @@ end of a line is a comment, which would cut a URL's fragment, and
 pairing links carry their secret there. On a line whose first word is
 `open`, `#` is part of the URL, and the line has no comment. Other
 lines are unchanged.
+
+## 2026-10-23 18:10 EDT — URL schemes on the S23 (libmorph)
+
+Plan: `docs/design/20261022_07_URL_SCHEMES_PLAN.md`, step 5
+(`228d2df`, `801ae00`), on the owner's S23 Ultra with the `urlopen`
+example:
+- `am start -a android.intent.action.VIEW -d 'libmorph-urlopen://a/b#secret'`
+  cold-started it (`LaunchState: COLD`). The app logged `waiting for a
+  link` from `init` and then, once, `opened with
+  libmorph-urlopen://a/b<redacted>`;
+- a link sent while the app was in front, and one sent after Home, were
+  each logged once (`is_new=true`), with one activity in one task
+  (`t5017`);
+- `secret` appeared in logcat only in adbd's and the system's records of
+  the command, never from the app.
+
+Waiting on the owner: scanning a QR code of a `libmorph-urlopen://` URL
+with the Samsung camera.
