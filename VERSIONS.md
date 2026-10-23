@@ -116,3 +116,11 @@ key store (`docs/design/20261022_06_KEY_STORE_PLAN.md`). All additions.
   scripted runs get memory stores.
 - **Dependencies:** libmobile 0.2.0 → 0.2.1 and libdevice 0.1.0 → 0.1.1,
   both compatible.
+
+## libmorph-build 0.2.1 — 2026-10-22 (tag libmorph-build-v0.2.1)
+
+No changes of its own.
+
+- libmobile 0.2.0 → 0.2.1 (compatible), whose `gradle` module it
+  re-exports, unchanged. Generated projects now carry libmobile's core
+  `store.SecureStorePlugin` and `GeneratedPlugins.SECURE_STORE_STRONGBOX`.
