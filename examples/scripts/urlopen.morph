@@ -1,0 +1,11 @@
+# The urlopen example, scripted:
+#   cargo run --example urlopen --features script -- --morph-script examples/scripts/urlopen.morph
+# Grey until a link arrives, then a hue from its scheme and host.
+frames 1
+screenshot waiting
+open libmorph-urlopen://a/b#secret
+frames 1
+screenshot opened
+open libmorph-urlopen://other-host/x?k=v
+frames 1
+screenshot other

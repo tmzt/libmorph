@@ -118,5 +118,8 @@ name = "tone"
 name = "audiocapture"
 
 [[example]]
+name = "urlopen"
+
+[[example]]
 name = "securestore"
 required-features = ["secure-store"]
