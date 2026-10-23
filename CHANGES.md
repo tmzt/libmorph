@@ -639,3 +639,12 @@ the owner's word ("build next release"): libmorph 0.3.2 (`1b3d7d8`, tag
 `v0.3.2`) with `on_open_url` and `open <url>`, and libmorph-build
 0.2.2 (tag `libmorph-build-v0.2.2`), both taking libmobile 0.2.2.
 `Cargo.lock` was resolved with the local patch moved aside.
+
+## 2026-10-23 18:18 EDT — Foreground service approved, built in libmobile first
+
+Plan: `docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md` (Draft,
+approved). The owner approved it with libmobile's
+`docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md`, which now carries
+the service, its Termux-style notification controls and the system
+events. libmorph only wraps them, after libmobile 0.2.3. No background
+microphone: Android stops input when the app is hidden.
