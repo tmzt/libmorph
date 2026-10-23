@@ -575,3 +575,11 @@ Plan: `docs/design/20261022_07_URL_SCHEMES_PLAN.md` (Draft, approved).
 The owner approved it with its libmobile part, which is now libmobile's
 `docs/design/20261022_05_URL_SCHEMES_PLAN.md`. No Cargo feature. The
 launch mode question waits for the S23 check; macOS stays open.
+
+## 2026-10-22 23:30 EDT — URL schemes: implemented in libmobile, wrapped here
+
+Plan: `docs/design/20261022_07_URL_SCHEMES_PLAN.md`. On the owner's
+instruction, an amendment records that the schemes and the log redaction
+are implemented in libmobile (its `docs/design/20261022_05_URL_SCHEMES_PLAN.md`),
+and libmorph only wraps them with `on_open_url`, the `open` script
+command and the `urlopen` example.
