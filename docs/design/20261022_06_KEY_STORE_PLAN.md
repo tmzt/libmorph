@@ -1,7 +1,7 @@
 ---
 title: Key store for keying material
 date: 2026-10-22
-status: Draft
+status: In implementation
 covers:
   - One small key store engine (`src/key_store.rs`), the same file in
     libmobile and libdevice, as free functions over a per-platform `Vault`
@@ -373,3 +373,10 @@ mean "re-pair needed". The server record stays a blob.
 Everything here is unreleased, so the key store is additive in all three
 crates: patch bumps. `zeroize`, `log` and (libmobile) `ndk-context` are
 new dependencies as in section 2.
+
+## Amendment — 2026-10-22 20:32 EDT: implementation has started; the document is now immutable
+
+The owner said it is ready to build (2026-10-22). The work is on the
+`secure-store` branches of libmobile and libmorph, in their worktrees.
+Step 1 is done in both: libmobile `b02c823` and this commit. libdevice has
+no store yet, so its types start with `DeviceLocked` (step 6).

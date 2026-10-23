@@ -106,7 +106,7 @@ pub enum SecureStoreError {
     Keystore(String),
     /// The blob was stored with [`PutOptions::unlocked_only`] and the
     /// device is locked. Try again once it is unlocked.
-    Locked,
+    DeviceLocked,
     /// Reading or writing the blob failed.
     Io(String),
     /// The blob is malformed or fails to decrypt. Not treated as absent:
@@ -125,7 +125,7 @@ impl fmt::Display for SecureStoreError {
             ),
             Self::TooLarge => write!(f, "secure store: blobs are at most {MAX_VALUE_LEN} bytes"),
             Self::Keystore(detail) => write!(f, "secure store: keystore: {detail}"),
-            Self::Locked => write!(f, "secure store: the device is locked"),
+            Self::DeviceLocked => write!(f, "secure store: the device is locked"),
             Self::Io(detail) => write!(f, "secure store: io: {detail}"),
             Self::Corrupt(detail) => write!(f, "secure store: corrupt: {detail}"),
             Self::Platform(detail) => write!(f, "secure store: {detail}"),
@@ -143,10 +143,10 @@ impl From<libmobile::SecureStoreError> for SecureStoreError {
             E::InvalidName => Self::InvalidName,
             E::TooLarge => Self::TooLarge,
             E::Keystore(detail) => Self::Keystore(detail),
-            E::Locked => Self::Locked,
+            E::DeviceLocked => Self::DeviceLocked,
             E::Io(detail) => Self::Io(detail),
             E::Corrupt(detail) => Self::Corrupt(detail),
-            E::Jni(detail) => Self::Platform(detail),
+            E::Platform(detail) => Self::Platform(detail),
             other => Self::Platform(other.to_string()),
         }
     }

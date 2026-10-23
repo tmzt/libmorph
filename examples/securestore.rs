@@ -8,7 +8,7 @@
 //!   one.
 //! * It writes blob `unlocked-only` with `PutOptions::unlocked_only` if there
 //!   is none, and reads it at start and on every resume: on Android it gives
-//!   `Locked` while the device is locked; macOS does not enforce it.
+//!   `DeviceLocked` while the device is locked; macOS does not enforce it.
 //! * A tap deletes `counter`, so the next launch counts from 1 again.
 //!
 //! The screen is green with the key in StrongBox, blue elsewhere, and grey
