@@ -483,3 +483,16 @@ of it:
 
 handlr's Noise adapter does its static DH inside `with_key`, so snow never
 holds the private key.
+
+## 2026-10-22 20:31 EDT — Key store plan consolidated; implementation next
+
+Plan: `docs/design/20261022_06_KEY_STORE_PLAN.md` (Draft), superseding
+`20261022_05_KEY_STORE_PLAN.md`. It is one document drafted from plan 05
+and its amendments, reviewed, and adjusted:
+- `Public` keeps its bounds;
+- the engine and memory vault build on every host;
+- the concurrent-migration test is runnable.
+
+The owner said it is ready to build. The Android blob store moves to the
+Application context with it, because the two stores share
+`SecureStorePlugin`.
