@@ -561,3 +561,42 @@ pub fn update_text(text: &str) -> Result<(), ServiceError>;               // a c
   visibility setting.
 - handlr's text and buttons (its connection state, a disconnect button,
   approval counts) are its own content, built on these.
+
+## Amendment — 2026-10-23 18:18 EDT: approved; implemented in libmobile, wrapped here
+
+The owner approved this plan on 2026-10-23 ("approve plans in both
+repos"). Its libmobile half is now libmobile's own plan,
+`docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md` (approved, with its
+amendment "no background microphone"). That plan replaces sections 2, 3
+and 4 and steps 1 to 4 here, together with every amendment's libmobile
+parts; where the two differ, libmobile's plan wins. It adds what the
+owner asked for since this plan's last amendment: Termux-style
+notification controls set at start (`Controls { ongoing, exit,
+wake_lock_toggle, labels }`: a notification that comes back when swiped
+away, an Exit button that stops the service and closes the app, and a
+wake-lock toggle), `ServiceEvent::Exited`, `WakeLock(bool)` and
+`TaskRemoved`, and `MobileEvent::Service`.
+
+libmorph only wraps it (sections 5 and steps 5 and 6, as amended):
+- the passthroughs `mobile-foreground-service`, `mobile-system-events`
+  and `tokio`;
+- `libmorph::service` (with `Controls`, `NotificationContent` and
+  `battery`) and `libmorph::system_events`, the same on every host,
+  `Unsupported` or lifecycle-only off Android;
+- `MobileEvent::Service` passed to the app through a defaulted hook,
+  named in step 5's wrapper with the owner's agreement if it is a new
+  `MorphApp` hook;
+- the `background` example and its S23 check;
+- the release taking libmobile 0.2.3.
+
+Section 8 and open question 5 stand as follows:
+1. Service type: `specialUse` only (the amendment "review: …").
+2. Wake lock: the user's, from the notification's toggle; it starts
+   released.
+3. `futures-core`: none (the async-feature amendments).
+4. Desktop network and sleep events: not answered; lifecycle-only for now.
+5. Swiping the app away stops the service by default, with an opt-out.
+
+No microphone in the background: Android stops input when the app is
+hidden. The status stays `Draft` until step 5's first commit, after
+libmobile 0.2.3 is released.
