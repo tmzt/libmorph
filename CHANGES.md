@@ -441,3 +441,58 @@ first. Requested by the handlr session with the owner's approval, for the
 companion app's Noise key and server record. Proposed only. Nothing is
 implemented until the owner approves, and the desktop backend is an
 open question there.
+
+## 2026-10-22 19:04 EDT — Opaque keys in the secure store (proposed)
+
+Plan: `docs/design/20261022_04_OPAQUE_KEYS_PLAN.md` (Draft), which builds
+on `20261022_03_SECURE_STORE_PLAN.md`. The owner asked for keys that can
+be generated and validated without being read: the key logic stays in
+an adapter (a black box such as handlr's Noise adapter) that is passed to
+the store. The store is generic over the adapter's private type `K` and
+public type `P`, and seals `K` under names the blob API refuses. A
+token only libmorph can make keeps sealing in the store's hands.
+libmobile is unchanged.
+
+## 2026-10-22 19:08 EDT — Secure store: the desktop backends move to libdevice
+
+Plans: `docs/design/20261022_03_SECURE_STORE_PLAN.md` (In implementation)
+and `docs/design/20261022_04_OPAQUE_KEYS_PLAN.md` (Draft, amendment "a key
+store of its own").
+
+This departs from the secure-store plan, section 3. Its macOS Keychain
+and memory backends, built on libmorph's unpushed `secure-store` branch,
+move to libdevice behind a `secure-store` feature, with the same API as
+libmobile's store. libmorph's `SecureStore` then wraps libdevice on the
+desktop as it wraps libmobile on Android. The owner agreed (2026-10-22)
+that both crates need wrapped implementations with the same API.
+libmorph's public API for the store does not change. The work is a step
+of the opaque keys plan.
+
+## 2026-10-22 19:55 EDT — Key store for keying material (proposed); opaque keys plan superseded
+
+Plan: `docs/design/20261022_05_KEY_STORE_PLAN.md` (Draft), superseding
+`20261022_04_OPAQUE_KEYS_PLAN.md`, libmobile's key store plan and the key
+half of libdevice's plan. Based on the owner's engine sketch and the review
+of it:
+- one engine file, identical in libmobile and libdevice, over a per-platform
+  `Vault`;
+- `with_key` lends the key for one call, without holding the lock;
+- the flags are enforced by the platform, and the app-unlock flag is
+  refused until it exists;
+- libmorph re-exports the platform's engine instead of bridging.
+
+handlr's Noise adapter does its static DH inside `with_key`, so snow never
+holds the private key.
+
+## 2026-10-22 20:31 EDT — Key store plan consolidated; implementation next
+
+Plan: `docs/design/20261022_06_KEY_STORE_PLAN.md` (Draft), superseding
+`20261022_05_KEY_STORE_PLAN.md`. It is one document drafted from plan 05
+and its amendments, reviewed, and adjusted:
+- `Public` keeps its bounds;
+- the engine and memory vault build on every host;
+- the concurrent-migration test is runnable.
+
+The owner said it is ready to build. The Android blob store moves to the
+Application context with it, because the two stores share
+`SecureStorePlugin`.

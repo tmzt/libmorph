@@ -112,6 +112,13 @@ host and handles the app's lifecycle around it. For example, audio capture
 with input presets is libmobile's `CaptureStream`, and libmorph's
 `CaptureMode` maps onto it.
 
+The desktop follows the same rule with [libdevice](https://github.com/tmzt/libdevice):
+desktop platform services, such as the macOS Keychain behind the secure
+store, are built there first. Where both crates provide a service, they
+expose the same API, and libmorph wraps them. libmorph's own code is what
+it exists for: wgpu, the window and event loop, device emulation and input,
+audio through cpal off Android, and scripted runs.
+
 The app crate is a `cdylib`, and `build.rs` generates its Gradle project:
 
 ```toml
@@ -205,3 +212,6 @@ dual licensed as above, without any additional terms or conditions.
 | [Audio capture and the audio_setup hook](docs/design/20261022_01_AUDIO_CAPTURE_PLAN.md) | 2026-10-22 | In implementation | A `MorphApp::audio_setup` hook, called before audio opens, asks for a capture stream (and can turn output off). Captured blocks go to sinks on the audio input thread as `f32` with a frame count and capture time. An `audiocapture` example writes `.au` files named by millisecond timestamps. Requested and being built by the owner's instruction. |
 | [Runtime permissions for apps](docs/design/20261022_02_APP_PERMISSIONS_PLAN.md) | 2026-10-22 | In implementation | Apps ask for any runtime permission with `ctx.request_permissions`, get answers in `MorphApp::on_permissions`, and check `permission_granted` and `should_show_rationale`; off Android there are none to ask for. The Android runner routes answers by request id, replacing the capture code's flag. Being built on the owner's instruction. |
 | [Secure store on every host](docs/design/20261022_03_SECURE_STORE_PLAN.md) | 2026-10-22 | In implementation | A `secure-store` feature gives `ctx.secure_store()`, named byte blobs encrypted at rest: Android through libmobile's Keystore store, the macOS Keychain on the desktop, memory in scripted runs. Requested by handlr for its Noise key; being built on the owner's instruction. |
+| [Opaque keys in the secure store](docs/design/20261022_04_OPAQUE_KEYS_PLAN.md) | 2026-10-22 | Superseded (by [Key store for keying material](docs/design/20261022_05_KEY_STORE_PLAN.md)) | Adapter keys sealed in the secure store, with handles and a libmorph bridge. Replaced, before implementation, by the simpler key store plan. |
+| [Key store for keying material](docs/design/20261022_05_KEY_STORE_PLAN.md) | 2026-10-22 | Superseded (by [Key store for keying material](docs/design/20261022_06_KEY_STORE_PLAN.md)) | The first form of the simplified key store, with three amendments. Restated as one document before implementation. |
+| [Key store for keying material](docs/design/20261022_06_KEY_STORE_PLAN.md) | 2026-10-22 | Draft | One small engine file, identical in libmobile and libdevice, as free functions over a thin per-platform `Vault`. The store generates and seals an adapter's key, returns its public value, and lends the key for one call (`with_key`). Flags are enforced by the platform and refused when not enforced. The Android blob store moves to the Application context with it. libmorph re-exports the active engine. Ready to build on the owner's word. |
