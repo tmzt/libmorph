@@ -1,7 +1,7 @@
 ---
 title: Opening the app from a URL scheme
 date: 2026-10-22
-status: In implementation
+status: Implemented
 covers:
   - "Declaring custom URL schemes for a generated Android project
     (`gradle::Project::url_scheme`), through libmorph-build"
@@ -262,3 +262,18 @@ through it. Step 4 does not start until libmobile 0.2.2 is released.
 Step 4 starts with this commit, against libmobile 0.2.2 (`eccea7c`, tag
 `v0.2.2`), which completed steps 1 to 3 under libmobile's plan. The
 document now changes only on the owner's explicit instruction.
+
+## Amendment — 2026-10-23 18:14 EDT: implemented
+
+Every step is done:
+1. to 3. In libmobile, under its plan `docs/design/20261022_05_URL_SCHEMES_PLAN.md`:
+   `1d9efda`, `5b37af0` (step 1), `4e7dc4b` (step 2, the S23), and
+   libmobile 0.2.2, `eccea7c`, tag `v0.2.2` (step 3).
+4. `319e16c` (`on_open_url`, the Android queue, `open <url>`), with
+   `7071c78` (CHANGES: `#` on an `open` line) and `caa30e1` (AGENTS.md).
+5. `228d2df`, `801ae00` (the `urlopen` example), `69e829a` (CHANGES:
+   the S23). The camera scan started no intent on the S23; the owner
+   passed the step as is and moved that check to handlr (CHANGES).
+6. libmorph 0.3.2 (`1b3d7d8`, tag `v0.3.2`) and libmorph-build 0.2.2
+   (tag `libmorph-build-v0.2.2`), taking libmobile 0.2.2. handlr gets the
+   revision after the push.
