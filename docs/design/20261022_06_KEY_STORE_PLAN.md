@@ -1,7 +1,7 @@
 ---
 title: Key store for keying material
 date: 2026-10-22
-status: In implementation
+status: Implemented
 covers:
   - One small key store engine (`src/key_store.rs`), the same file in
     libmobile and libdevice, as free functions over a per-platform `Vault`
@@ -380,3 +380,30 @@ The owner said it is ready to build (2026-10-22). The work is on the
 `secure-store` branches of libmobile and libmorph, in their worktrees.
 Step 1 is done in both: libmobile `b02c823` and this commit. libdevice has
 no store yet, so its types start with `DeviceLocked` (step 6).
+
+## Amendment — 2026-10-22 21:13 EDT: implemented
+
+Every step is done and its **Done when:** holds. Commits:
+1. **Rename:** libmobile `b02c823`, libmorph `4883aaf`.
+2. **Application context and the blob store without `&app`:** libmobile
+   `97a3657` and `372006b`, libmorph `9c4f4b2`.
+3. **Engine:** libmobile `083c03b`, with `Debug` for `Vault` in
+   `722546c`.
+4. **`Vault::named` on Android:** libmobile `083c03b` and `748136e`.
+5. **libmobile 0.2.1:** `b3bf43e`, tag `v0.2.1`.
+6. **libdevice:** `264dbdb`, `b52e486` and `0ec6127`; 0.1.1 is
+   `b46963b`, tag `v0.1.1`.
+7. **libmorph:** `82265cd` and `31f672d`, with `Cargo.lock` in
+   `fb829f0`.
+8. **Release:** libmorph 0.3.1 and libmorph-build 0.2.1, tagged in the
+   commits that follow this one.
+
+Checked:
+- **S23 Ultra:** see libmobile's CHANGES.md, including
+  `DeviceLocked` when the device is locked and the unlocked reads.
+- **macOS, from a Terminal:** the Keychain tests, libdevice's example and
+  libmorph's example (libdevice's and libmorph's CHANGES.md).
+- **Host:** tests and clippy, including the engine-equality test.
+
+Not exercised on a device: moving a key file between namespaces. It is
+covered by the same associated data as renaming, which was checked.

@@ -1,7 +1,7 @@
 ---
 title: Secure store on every host
 date: 2026-10-22
-status: In implementation
+status: Implemented
 covers:
   - A `secure-store` Cargo feature and `libmorph::SecureStore`: named
     byte blobs, encrypted at rest, with one API on every host
@@ -231,3 +231,18 @@ desktop windows never open and the Keychain refuses writes with
 `errSecInteractionNotAllowed` (-25308), so the owner runs
 `cargo run --example securestore --features secure-store` and the
 ignored `keychain_round_trip` test from a Terminal.
+
+## Amendment — 2026-10-22 21:13 EDT: implemented
+
+Every step is done and its **Done when:** holds. It is released in
+libmorph 0.3.1. Commits:
+- Step 1 (types and the scripted backend): `2236b46`.
+- Step 2 (macOS Keychain): `2236b46` at first. The backend then moved to
+  libdevice (CHANGES.md, "the desktop backends move to libdevice"), and
+  libmorph wraps it since `31f672d`.
+- Step 3 (Android): `2236b46`, `5b39349` and `7f2238a`, then
+  `4883aaf` (`DeviceLocked`) and `9c4f4b2` (no app clone).
+
+On the owner's S23 Ultra and Mac mini, the `securestore` example counts
+launches across restarts. It reports `AndroidStrongBox` and
+`MacKeychain`.
