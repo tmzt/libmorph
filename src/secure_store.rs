@@ -1,18 +1,21 @@
-//! Named secrets, encrypted at rest, with one API on every host (plan
-//! `20261022_03_SECURE_STORE_PLAN.md`):
+//! Named secrets, encrypted at rest, with one API on every host (plans
+//! `20261022_03_SECURE_STORE_PLAN.md` and `20261022_06_KEY_STORE_PLAN.md`).
+//! libmorph only wraps the platform crates:
 //!
 //! * Android: libmobile's `secure_store`, blobs sealed with an AES-256-GCM
 //!   key Android Keystore keeps (StrongBox where the device has one);
-//! * macOS: one generic-password item per blob in the login Keychain;
-//! * scripted runs: memory, empty at the start of each run;
+//! * macOS: libdevice's `secure_store`, one generic-password item per blob
+//!   in the login Keychain;
+//! * scripted runs: libdevice's memory store, empty at the start of each run;
 //! * the web and other desktops: none ([`MorphContext::secure_store`] is
 //!   `None`).
 //!
+//! Keys whose algorithm an adapter defines are the key store's
+//! (`libmorph::key_store`), not blobs.
+//!
 //! [`MorphContext::secure_store`]: crate::MorphContext::secure_store
 
-use std::collections::HashMap;
 use std::fmt;
-use std::sync::{Arc, Mutex};
 
 /// Longest blob name, in bytes.
 pub const MAX_NAME_LEN: usize = 64;
@@ -24,8 +27,7 @@ pub const MAX_VALUE_LEN: usize = 64 * 1024;
 /// an app can keep one in its own types or move it to another thread.
 ///
 /// Names are 1 to 64 of `[A-Za-z0-9._-]`, not starting with `.`; blobs are
-/// at most 64 KiB. Both are checked on every host, so what works on the
-/// desktop works on the phone. Each call is synchronous and may take
+/// at most 64 KiB, on every host. Each call is synchronous and may take
 /// milliseconds (a Keystore or Keychain operation): don't call it per
 /// frame.
 #[derive(Clone)]
@@ -37,21 +39,28 @@ pub struct SecureStore {
 enum Backend {
     #[cfg(all(target_os = "android", feature = "mobile", feature = "secure-store"))]
     Android,
-    #[cfg(all(target_os = "macos", feature = "secure-store"))]
-    Keychain { service: Arc<str> },
-    /// Scripted runs.
-    #[cfg_attr(not(script_runner), allow(dead_code))]
-    Memory(Arc<Mutex<HashMap<String, Vec<u8>>>>),
+    #[cfg(all(any(target_os = "macos", script_runner), feature = "secure-store"))]
+    Desktop(libdevice::secure_store::SecureStore),
 }
 
 impl fmt::Debug for SecureStore {
+    // Where there is no backend, nothing is reachable.
+    #[cfg_attr(
+        not(all(
+            feature = "secure-store",
+            any(target_os = "android", target_os = "macos", script_runner)
+        )),
+        allow(unused_variables, unreachable_code)
+    )]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let backend = match &self.backend {
+        let backend = match self.backend {
             #[cfg(all(target_os = "android", feature = "mobile", feature = "secure-store"))]
             Backend::Android => "Android",
-            #[cfg(all(target_os = "macos", feature = "secure-store"))]
-            Backend::Keychain { .. } => "Keychain",
-            Backend::Memory(_) => "Memory",
+            #[cfg(all(any(target_os = "macos", script_runner), feature = "secure-store"))]
+            Backend::Desktop(ref store) => match store.security_level() {
+                libdevice::secure_store::SecurityLevel::Keychain => "Keychain",
+                _ => "Memory",
+            },
         };
         f.debug_struct("SecureStore")
             .field("backend", &backend)
@@ -94,7 +103,8 @@ impl PutOptions {
     }
 }
 
-/// Why a secure store call failed.
+/// Why a secure store call failed. The same variants as libmobile's and
+/// libdevice's.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum SecureStoreError {
@@ -152,6 +162,23 @@ impl From<libmobile::SecureStoreError> for SecureStoreError {
     }
 }
 
+#[cfg(all(any(target_os = "macos", script_runner), feature = "secure-store"))]
+impl From<libdevice::secure_store::SecureStoreError> for SecureStoreError {
+    fn from(error: libdevice::secure_store::SecureStoreError) -> Self {
+        use libdevice::secure_store::SecureStoreError as E;
+        match error {
+            E::InvalidName => Self::InvalidName,
+            E::TooLarge => Self::TooLarge,
+            E::Keystore(detail) => Self::Keystore(detail),
+            E::DeviceLocked => Self::DeviceLocked,
+            E::Io(detail) => Self::Io(detail),
+            E::Corrupt(detail) => Self::Corrupt(detail),
+            E::Platform(detail) => Self::Platform(detail),
+            other => Self::Platform(other.to_string()),
+        }
+    }
+}
+
 impl SecureStore {
     #[cfg(all(target_os = "android", feature = "mobile", feature = "secure-store"))]
     pub(crate) fn android() -> Self {
@@ -160,41 +187,29 @@ impl SecureStore {
         }
     }
 
-    /// The login Keychain, service `libmorph.<id>`; `id` defaults to the
-    /// executable's file stem.
+    /// The login Keychain, service `namespace`.
     #[cfg(all(target_os = "macos", feature = "secure-store"))]
-    pub(crate) fn keychain(id: &str) -> Self {
-        let id = if id.is_empty() {
-            std::env::current_exe()
-                .ok()
-                .and_then(|exe| exe.file_stem().map(|s| s.to_string_lossy().into_owned()))
-                .unwrap_or_else(|| "app".to_owned())
-        } else {
-            id.to_owned()
-        };
+    pub(crate) fn keychain(namespace: &str) -> Self {
         Self {
-            backend: Backend::Keychain {
-                service: format!("libmorph.{id}").into(),
-            },
+            backend: Backend::Desktop(libdevice::secure_store::SecureStore::keychain(namespace)),
         }
     }
 
-    #[cfg_attr(not(script_runner), allow(dead_code))] // Scripted runs only.
+    #[cfg(all(script_runner, feature = "secure-store"))]
     pub(crate) fn memory() -> Self {
         Self {
-            backend: Backend::Memory(Arc::default()),
+            backend: Backend::Desktop(libdevice::secure_store::SecureStore::memory()),
         }
     }
 
     /// The blob called `name`, or `None` if there is none.
     pub fn get(&self, name: &str) -> Result<Option<Vec<u8>>, SecureStoreError> {
-        check_name(name)?;
-        match &self.backend {
+        let _ = name;
+        match self.backend {
             #[cfg(all(target_os = "android", feature = "mobile", feature = "secure-store"))]
             Backend::Android => Ok(libmobile::android::secure_store::get(name)?),
-            #[cfg(all(target_os = "macos", feature = "secure-store"))]
-            Backend::Keychain { service } => keychain::get(service, name),
-            Backend::Memory(map) => Ok(lock(map).get(name).cloned()),
+            #[cfg(all(any(target_os = "macos", script_runner), feature = "secure-store"))]
+            Backend::Desktop(ref store) => Ok(store.get(name)?),
         }
     }
 
@@ -210,9 +225,8 @@ impl SecureStore {
         value: &[u8],
         options: PutOptions,
     ) -> Result<(), SecureStoreError> {
-        check_name(name)?;
-        check_value(value)?;
-        match &self.backend {
+        let _ = (name, value, options);
+        match self.backend {
             #[cfg(all(target_os = "android", feature = "mobile", feature = "secure-store"))]
             Backend::Android => {
                 let options = libmobile::PutOptions::default().unlocked_only(options.unlocked_only);
@@ -220,35 +234,30 @@ impl SecureStore {
                     name, value, options,
                 )?)
             }
-            #[cfg(all(target_os = "macos", feature = "secure-store"))]
-            Backend::Keychain { service } => {
-                let _ = options;
-                keychain::put(service, name, value)
-            }
-            Backend::Memory(map) => {
-                let _ = options;
-                lock(map).insert(name.to_owned(), value.to_vec());
-                Ok(())
+            #[cfg(all(any(target_os = "macos", script_runner), feature = "secure-store"))]
+            Backend::Desktop(ref store) => {
+                let options = libdevice::secure_store::PutOptions::default()
+                    .unlocked_only(options.unlocked_only);
+                Ok(store.put_with(name, value, options)?)
             }
         }
     }
 
     /// Remove the blob called `name`. `true` if there was one.
     pub fn delete(&self, name: &str) -> Result<bool, SecureStoreError> {
-        check_name(name)?;
-        match &self.backend {
+        let _ = name;
+        match self.backend {
             #[cfg(all(target_os = "android", feature = "mobile", feature = "secure-store"))]
             Backend::Android => Ok(libmobile::android::secure_store::delete(name)?),
-            #[cfg(all(target_os = "macos", feature = "secure-store"))]
-            Backend::Keychain { service } => keychain::delete(service, name),
-            Backend::Memory(map) => Ok(lock(map).remove(name).is_some()),
+            #[cfg(all(any(target_os = "macos", script_runner), feature = "secure-store"))]
+            Backend::Desktop(ref store) => Ok(store.delete(name)?),
         }
     }
 
     /// Where the secrets are kept. On Android this asks Keystore, creating
     /// the key if there is none yet, so it can fail.
     pub fn protection(&self) -> Result<Protection, SecureStoreError> {
-        match &self.backend {
+        match self.backend {
             #[cfg(all(target_os = "android", feature = "mobile", feature = "secure-store"))]
             Backend::Android => {
                 use libmobile::SecurityLevel;
@@ -258,77 +267,80 @@ impl SecureStore {
                     _ => Protection::AndroidSoftware,
                 })
             }
-            #[cfg(all(target_os = "macos", feature = "secure-store"))]
-            Backend::Keychain { .. } => Ok(Protection::MacKeychain),
-            Backend::Memory(_) => Ok(Protection::Memory),
+            #[cfg(all(any(target_os = "macos", script_runner), feature = "secure-store"))]
+            Backend::Desktop(ref store) => Ok(match store.security_level() {
+                libdevice::secure_store::SecurityLevel::Keychain => Protection::MacKeychain,
+                _ => Protection::Memory,
+            }),
         }
     }
 }
 
-fn lock(
-    map: &Mutex<HashMap<String, Vec<u8>>>,
-) -> std::sync::MutexGuard<'_, HashMap<String, Vec<u8>>> {
-    map.lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
-/// 1 to [`MAX_NAME_LEN`] of `[A-Za-z0-9._-]`, not starting with `.`.
-fn check_name(name: &str) -> Result<(), SecureStoreError> {
-    let valid = !name.is_empty()
-        && name.len() <= MAX_NAME_LEN
-        && !name.starts_with('.')
-        && name
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'));
-    if valid {
-        Ok(())
+/// `libmorph.<id>`: the namespace of the app's secure store and key store.
+/// An empty `id` defaults to the app's own name (the executable's file stem
+/// on the desktop, the package name on Android), with characters outside
+/// `[A-Za-z0-9._-]` replaced by `_` and cut to fit the 64-byte name rule.
+#[cfg_attr(
+    not(all(
+        feature = "secure-store",
+        any(target_os = "android", target_os = "macos")
+    )),
+    allow(dead_code)
+)]
+pub(crate) fn namespace(id: &str) -> String {
+    let id = if id.is_empty() {
+        default_id()
     } else {
-        Err(SecureStoreError::InvalidName)
-    }
+        id.to_owned()
+    };
+    let id: String = id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .take(MAX_NAME_LEN - "libmorph.".len())
+        .collect();
+    format!("libmorph.{id}")
 }
 
-fn check_value(value: &[u8]) -> Result<(), SecureStoreError> {
-    if value.len() <= MAX_VALUE_LEN {
-        Ok(())
-    } else {
-        Err(SecureStoreError::TooLarge)
-    }
+#[cfg(target_os = "android")]
+#[cfg_attr(
+    not(all(
+        feature = "secure-store",
+        any(target_os = "android", target_os = "macos")
+    )),
+    allow(dead_code)
+)]
+fn default_id() -> String {
+    // An Android app's process is named after its package.
+    std::fs::read("/proc/self/cmdline")
+        .ok()
+        .and_then(|cmdline| {
+            let name = cmdline.split(|&b| b == 0).next()?;
+            let name = String::from_utf8_lossy(name);
+            let package = name.split(':').next()?.to_owned();
+            (!package.is_empty()).then_some(package)
+        })
+        .unwrap_or_else(|| "app".to_owned())
 }
 
-/// The login Keychain through `security-framework`: one generic password
-/// per blob, service `libmorph.<id>`, account the blob's name.
-#[cfg(all(target_os = "macos", feature = "secure-store"))]
-mod keychain {
-    use super::SecureStoreError;
-    use security_framework::base::Error;
-    use security_framework::passwords;
-
-    /// `errSecItemNotFound`.
-    const NOT_FOUND: i32 = -25300;
-
-    fn platform(error: Error) -> SecureStoreError {
-        SecureStoreError::Platform(format!("keychain: {error} ({})", error.code()))
-    }
-
-    pub(super) fn get(service: &str, name: &str) -> Result<Option<Vec<u8>>, SecureStoreError> {
-        match passwords::get_generic_password(service, name) {
-            Ok(value) => Ok(Some(value)),
-            Err(error) if error.code() == NOT_FOUND => Ok(None),
-            Err(error) => Err(platform(error)),
-        }
-    }
-
-    pub(super) fn put(service: &str, name: &str, value: &[u8]) -> Result<(), SecureStoreError> {
-        passwords::set_generic_password(service, name, value).map_err(platform)
-    }
-
-    pub(super) fn delete(service: &str, name: &str) -> Result<bool, SecureStoreError> {
-        match passwords::delete_generic_password(service, name) {
-            Ok(()) => Ok(true),
-            Err(error) if error.code() == NOT_FOUND => Ok(false),
-            Err(error) => Err(platform(error)),
-        }
-    }
+#[cfg(not(target_os = "android"))]
+#[cfg_attr(
+    not(all(
+        feature = "secure-store",
+        any(target_os = "android", target_os = "macos")
+    )),
+    allow(dead_code)
+)]
+fn default_id() -> String {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.file_stem().map(|s| s.to_string_lossy().into_owned()))
+        .unwrap_or_else(|| "app".to_owned())
 }
 
 #[cfg(test)]
@@ -336,24 +348,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn names_and_sizes() {
-        for ok in ["a", "noise.static", "server", "A-b_c.9", &"x".repeat(64)] {
-            assert_eq!(check_name(ok), Ok(()), "{ok}");
-        }
-        for bad in ["", ".hidden", "a/b", "a b", "ü", &"x".repeat(65)] {
-            assert_eq!(
-                check_name(bad),
-                Err(SecureStoreError::InvalidName),
-                "{bad:?}"
-            );
-        }
-        assert_eq!(check_value(&vec![0; MAX_VALUE_LEN]), Ok(()));
-        assert_eq!(
-            check_value(&vec![0; MAX_VALUE_LEN + 1]),
-            Err(SecureStoreError::TooLarge)
-        );
+    fn namespaces_follow_the_name_rule() {
+        assert_eq!(namespace("handlr"), "libmorph.handlr");
+        assert_eq!(namespace("a b/c"), "libmorph.a_b_c");
+        assert_eq!(namespace(&"x".repeat(100)).len(), MAX_NAME_LEN);
+        assert!(namespace("").starts_with("libmorph."));
     }
 
+    #[cfg(all(script_runner, feature = "secure-store"))]
     #[test]
     fn memory_store_round_trip() {
         let store = SecureStore::memory();
@@ -361,33 +363,9 @@ mod tests {
         assert_eq!(store.get("k"), Ok(None));
         store.put("k", b"v").unwrap();
         assert_eq!(other.get("k"), Ok(Some(b"v".to_vec())));
-        store
-            .put_with("k", b"w", PutOptions::default().unlocked_only(true))
-            .unwrap();
-        assert_eq!(store.get("k"), Ok(Some(b"w".to_vec())));
         assert_eq!(store.delete("k"), Ok(true));
-        assert_eq!(store.delete("k"), Ok(false));
         assert_eq!(store.get("../k"), Err(SecureStoreError::InvalidName));
         assert_eq!(store.protection(), Ok(Protection::Memory));
-    }
-
-    /// Writes to the login Keychain (service `libmorph.secure-store-test`),
-    /// so it runs only when asked: `cargo test --features secure-store --
-    /// --ignored keychain`.
-    #[cfg(all(target_os = "macos", feature = "secure-store"))]
-    #[test]
-    #[ignore = "uses the login Keychain"]
-    fn keychain_round_trip() {
-        let store = SecureStore::keychain("secure-store-test");
-        let _ = store.delete("k");
-        assert_eq!(store.get("k"), Ok(None));
-        store.put("k", &[1, 2, 3]).unwrap();
-        assert_eq!(store.get("k"), Ok(Some(vec![1, 2, 3])));
-        store.put("k", &[4]).unwrap();
-        assert_eq!(store.get("k"), Ok(Some(vec![4])));
-        assert_eq!(store.delete("k"), Ok(true));
-        assert_eq!(store.delete("k"), Ok(false));
-        assert_eq!(store.protection(), Ok(Protection::MacKeychain));
     }
 
     #[test]

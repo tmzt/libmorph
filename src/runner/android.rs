@@ -137,6 +137,8 @@ impl<A: MorphApp> Adapter<A> {
         #[cfg(feature = "secure-store")]
         {
             ctx.secure_store = Some(crate::SecureStore::android());
+            ctx.key_store =
+                crate::Vault::named(&crate::secure_store::namespace(A::SECURE_STORE_ID)).ok();
         }
         ctx.pipeline_cache = ctx.data_dir.as_deref().and_then(|dir| {
             PipelineCacheStore::open(&ctx.gpu.device, &ctx.gpu.adapter.get_info(), dir)

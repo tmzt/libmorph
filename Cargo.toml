@@ -36,12 +36,14 @@ web = [
     "wgpu/webgl",
     "cpal?/wasm-bindgen",
 ]
-# Named secrets, encrypted at rest (`ctx.secure_store()`): libmobile's
-# Keystore store on Android, the login Keychain on macOS.
-secure-store = ["dep:security-framework"]
+# Named secrets and adapter keys, encrypted at rest (`ctx.secure_store()`,
+# `ctx.key_store()`): libmobile's Keystore stores on Android, libdevice's
+# login Keychain on macOS.
+secure-store = ["libdevice/secure-store"]
 # Scripted headless runs with PNG screenshots (desktop only; enables
-# nothing on Android and the web).
-script = ["dep:png", "dep:crc32fast"]
+# nothing on Android and the web). Also libdevice's test-only memory vault,
+# which scripted runs use for `ctx.key_store()`.
+script = ["dep:png", "dep:crc32fast", "libdevice/test-vault"]
 
 [dependencies]
 libdevice = { git = "https://github.com/tmzt/libdevice" }
@@ -82,7 +84,6 @@ objc2-app-kit = { version = "0.2.2", features = [
     "NSView",
 ] }
 block2 = "0.5.1"
-security-framework = { version = "3", optional = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 raw-window-handle = "0.6"
@@ -101,6 +102,8 @@ web-sys = { version = "0.3", optional = true, features = [
 
 [target.'cfg(not(any(target_os = "android", target_arch = "wasm32")))'.dev-dependencies]
 env_logger = "0.11"
+# Test key adapters (tests/secure_store.rs).
+zeroize = { version = "1.8", features = ["derive"] }
 
 [[example]]
 name = "touch"

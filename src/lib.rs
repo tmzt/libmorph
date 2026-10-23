@@ -37,6 +37,18 @@ pub use config::{MORPH_ARGS_HELP, MorphError};
 pub use context::MorphContext;
 pub use gpu::{GpuError, LimitFailure, LimitsRequest};
 pub use input::{Key, KeyStatus, Touch, TouchPhase};
+#[cfg(feature = "secure-store")]
+pub use key_store::{
+    FLAG_APP_UNLOCK_REQUIRED, FLAG_DEVICE_UNLOCK_REQUIRED, KeyStoreError, SealToken, SecretKey,
+    Vault,
+};
+#[cfg(all(feature = "secure-store", not(target_os = "android")))]
+pub use libdevice::key_store;
+/// The key store (plan `20261022_06_KEY_STORE_PLAN.md`): the active
+/// platform crate's engine, re-exported as is. libmobile's on Android,
+/// libdevice's elsewhere; the two engines are the same file.
+#[cfg(all(feature = "secure-store", target_os = "android"))]
+pub use libmobile::key_store;
 pub use permission::{PermissionRequest, Permissions};
 pub use safe_area::SafeArea;
 pub use secure_store::{

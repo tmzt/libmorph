@@ -10,6 +10,10 @@
 //!   is none, and reads it at start and on every resume: on Android it gives
 //!   `DeviceLocked` while the device is locked; macOS does not enforce it.
 //! * A tap deletes `counter`, so the next launch counts from 1 again.
+//! * The key store (`ctx.key_store()`): key `device` is generated on the
+//!   first launch and its fingerprint logged on later ones. Its adapter,
+//!   `ExampleKey`, is 32 random bytes with a `u64` fingerprint as its public
+//!   value (enough for an example).
 //!
 //! The screen is green with the key in StrongBox, blue elsewhere, and grey
 //! with no store.
@@ -22,10 +26,52 @@
 use std::time::Duration;
 
 use libmorph::{
-    Frame, MorphApp, MorphContext, Protection, PutOptions, SecureStore, Touch, TouchPhase, wgpu,
+    Frame, KeyStoreError, MorphApp, MorphContext, Protection, PutOptions, SealToken, SecretKey,
+    SecureStore, Touch, TouchPhase, key_store, wgpu,
 };
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 const COUNTER: &str = "counter";
+const DEVICE_KEY: &str = "device";
+
+/// 32 bytes behind a pointer, so moves copy only the pointer.
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct ExampleKey(Box<[u8; 32]>);
+
+impl SecretKey for ExampleKey {
+    type Public = u64;
+    const KIND: &'static str = "libmorph.example.test.v1";
+
+    fn generate(_: &SealToken) -> Self {
+        let mut key = Self(Box::new([0; 32]));
+        if let Err(error) = std::fs::File::open("/dev/urandom")
+            .and_then(|mut f| std::io::Read::read_exact(&mut f, &mut key.0[..]))
+        {
+            panic!("example key: no randomness: {error}");
+        }
+        key
+    }
+
+    fn seal(&self, _: &SealToken) -> Zeroizing<Vec<u8>> {
+        Zeroizing::new(self.0.to_vec())
+    }
+
+    fn unseal(_: &str, bytes: &[u8], _: &SealToken) -> Result<Self, String> {
+        if bytes.len() != 32 {
+            return Err(format!("{} bytes, not 32", bytes.len()));
+        }
+        let mut key = Self(Box::new([0; 32]));
+        key.0.copy_from_slice(bytes);
+        Ok(key)
+    }
+
+    fn public(&self) -> u64 {
+        use std::hash::{DefaultHasher, Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        self.0.hash(&mut hasher);
+        hasher.finish()
+    }
+}
 const UNLOCKED_ONLY: &str = "unlocked-only";
 
 pub struct SecureStoreApp {
@@ -55,6 +101,21 @@ impl MorphApp for SecureStoreApp {
     const SECURE_STORE_ID: &'static str = "securestore";
 
     fn init(ctx: &mut MorphContext) -> Self {
+        match ctx.key_store() {
+            Some(vault) => match key_store::public::<ExampleKey>(vault, DEVICE_KEY) {
+                Ok(public) => log::info!("securestore: key {DEVICE_KEY}: {public:016x} (loaded)"),
+                Err(KeyStoreError::NotFound) => {
+                    match key_store::generate::<ExampleKey>(vault, DEVICE_KEY, 0) {
+                        Ok(public) => {
+                            log::info!("securestore: key {DEVICE_KEY}: {public:016x} (generated)")
+                        }
+                        Err(error) => log::error!("securestore: key {DEVICE_KEY}: {error}"),
+                    }
+                }
+                Err(error) => log::error!("securestore: key {DEVICE_KEY}: {error:?}"),
+            },
+            None => log::warn!("securestore: no key store on this host"),
+        }
         let Some(store) = ctx.secure_store().cloned() else {
             log::warn!("securestore: no secure store on this host");
             return Self {

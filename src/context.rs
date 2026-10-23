@@ -25,6 +25,9 @@ pub struct MorphContext {
     pub(crate) exit_requested: bool,
     /// Set by the runner where the host has one (feature `secure-store`).
     pub(crate) secure_store: Option<SecureStore>,
+    /// Set by the runner where the host has one (feature `secure-store`).
+    #[cfg(feature = "secure-store")]
+    pub(crate) key_store: Option<crate::Vault>,
     /// For libmobile's calls (permissions); set before `init`.
     #[cfg(all(target_os = "android", feature = "mobile"))]
     pub(crate) android: Option<libmobile::android::AndroidApp>,
@@ -46,6 +49,8 @@ impl MorphContext {
             pipeline_cache: None,
             exit_requested: false,
             secure_store: None,
+            #[cfg(feature = "secure-store")]
+            key_store: None,
             #[cfg(all(target_os = "android", feature = "mobile"))]
             android: None,
         }
@@ -156,6 +161,18 @@ impl MorphContext {
     #[must_use]
     pub fn secure_store(&self) -> Option<&SecureStore> {
         self.secure_store.as_ref()
+    }
+
+    /// The app's key store vault (feature `secure-store`, plan
+    /// `20261022_06_KEY_STORE_PLAN.md`), for the functions in
+    /// [`key_store`](crate::key_store): namespace `libmorph.<SECURE_STORE_ID>`
+    /// on Android (Keystore) and macOS (login Keychain), a fresh memory vault
+    /// in scripted runs, `None` elsewhere. Clone it to keep it in the app's
+    /// own types or threads; make others with `Vault::named`.
+    #[cfg(feature = "secure-store")]
+    #[must_use]
+    pub fn key_store(&self) -> Option<&crate::Vault> {
+        self.key_store.as_ref()
     }
 
     /// Ask the user for `permissions` (full names such as

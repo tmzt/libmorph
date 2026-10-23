@@ -32,6 +32,7 @@ pub(crate) fn run<A: MorphApp>(script: &Script, run: ScriptRun) -> Result<Report
     #[cfg(feature = "secure-store")]
     {
         ctx.secure_store = Some(crate::SecureStore::memory());
+        ctx.key_store = Some(crate::Vault::memory());
     }
 
     let fps = script.fps();

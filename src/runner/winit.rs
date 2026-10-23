@@ -270,7 +270,9 @@ impl<A: MorphApp> Handler<A> {
         place(&mut ctx, &window, size);
         #[cfg(all(target_os = "macos", feature = "secure-store"))]
         {
-            ctx.secure_store = Some(crate::SecureStore::keychain(A::SECURE_STORE_ID));
+            let namespace = crate::secure_store::namespace(A::SECURE_STORE_ID);
+            ctx.secure_store = Some(crate::SecureStore::keychain(&namespace));
+            ctx.key_store = crate::Vault::named(&namespace).ok();
         }
 
         match Shell::<A>::start(ctx, surface, size) {
