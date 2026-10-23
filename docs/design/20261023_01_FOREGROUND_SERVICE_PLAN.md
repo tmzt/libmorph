@@ -505,3 +505,59 @@ named in each item.
 
 **Open question 5:** should swiping the app away stop the service by
 default (`stopWithTask="true"`, with an opt-out), or keep it running?
+
+## Amendment — 2026-10-23 01:42 EDT: a generic notification
+
+The owner's direction, relayed by the handlr session (2026-10-23): the
+notification API is generic, with no app-specific concepts. This replaces
+`ServiceOptions::stop_action` and `ServiceEvent::StopRequested` in the
+amendment "review: visibility, battery exemption, stopping, Samsung,
+specialUse only" (its item 5, second bullet). It also replaces
+`ServiceOptions`' `title` and `text`, and `update(text)`, in section 3.2.
+
+```rust
+#[derive(Clone, Debug, Default, PartialEq)]
+#[non_exhaustive]
+pub struct NotificationContent {
+    pub title: String,
+    pub text: String,
+    /// At most 3, Android's limit; more is NotificationError::TooManyActions.
+    pub actions: Vec<NotificationAction>,
+    /// Notification.VISIBILITY_PUBLIC / PRIVATE / SECRET on the lock screen.
+    pub visibility: LockScreenVisibility,   // default Private
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct NotificationAction {
+    /// The app's own id, returned on a tap.
+    pub id: String,
+    pub label: String,
+    /// Bring the activity forward on tap; nothing else.
+    pub opens_app: bool,
+}
+
+pub struct ServiceOptions<'a> {
+    pub types: &'a [ServiceType],
+    pub content: &'a NotificationContent,
+    pub wake_lock: bool,
+}
+pub fn update(content: &NotificationContent) -> Result<(), ServiceError>; // any thread
+pub fn update_text(text: &str) -> Result<(), ServiceError>;               // a convenience
+```
+
+- **A tap on a button** is `ServiceEvent::Action(String)`, carrying the
+  action's `id`. libmobile does nothing more with it: there is no built-in
+  stop. The app decides, for example by calling `stop()`. Each action is a
+  `PendingIntent` to the service, with the id as an extra; one with
+  `opens_app` also brings `MobileNativeActivity` forward.
+- **Tapping the body** opens the app, as before.
+- **The wake lock** stays a start option. A toggle is the app's own
+  action plus its own logic.
+- **`ServiceError`** gains `TooManyActions` and `EmptyId` (an action with
+  an empty id).
+- **Step 3's example** shows two actions, `"ping"` (logged) and `"stop"`
+  (the example calls `stop()` itself). It checks both, and the lock-screen
+  visibility setting.
+- handlr's text and buttons (its connection state, a disconnect button,
+  approval counts) are its own content, built on these.
