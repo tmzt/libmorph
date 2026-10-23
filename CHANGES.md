@@ -631,3 +631,11 @@ QR code of `libmorph-urlopen://camera-scan/qr#secret` with the camera
 app (Google Lens) on the S23 started no intent. The owner: "it should work
 if the scheme is registered. let's just pass as is, I'll test it with
 handlr". Step 5 is passed as is; the camera check moves to handlr.
+
+## 2026-10-23 18:14 EDT — Released libmorph 0.3.2 and libmorph-build 0.2.2
+
+Plan: `docs/design/20261022_07_URL_SCHEMES_PLAN.md` (Implemented). On
+the owner's word ("build next release"): libmorph 0.3.2 (`1b3d7d8`, tag
+`v0.3.2`) with `on_open_url` and `open <url>`, and libmorph-build
+0.2.2 (tag `libmorph-build-v0.2.2`), both taking libmobile 0.2.2.
+`Cargo.lock` was resolved with the local patch moved aside.
