@@ -354,3 +354,42 @@ sections 4, 5 and 7.
 - **Tests:** the host `Stream` tests run with `--features futures`, and
   the queue tests without it.
 - **handlr** turns `futures` on in its companion app.
+
+## Amendment — 2026-10-23 01:28 EDT: one feature per async runtime, none by default
+
+The owner's correction, relayed by the handlr session (2026-10-23): "not
+one generic `futures` feature. Use a specific feature for each runtime,
+or a `-compat` variant". This replaces the amendment "futures support is
+an opt-in feature" entirely, and the dependency and `Stream` lines of
+sections 4, 5 and 7.
+
+- **Default.** `system-events` on its own has no async dependency.
+  `Events` offers `try_next`, `next_blocking` and `current()`, and
+  nothing more.
+- **One opt-in feature per runtime, named for it.** Native support uses
+  the runtime's own primitive. A `-compat` variant (for example
+  `tokio-compat`) is used only where an integration goes through a
+  compatibility layer instead.
+- **First to ship: `tokio`** (handlr's net thread is a Tokio
+  current-thread runtime).
+  - It adds `tokio` with `default-features = false, features = ["sync"]`,
+    and `system_events::subscribe_tokio() ->
+    tokio::sync::mpsc::UnboundedReceiver<SystemEvent>`.
+  - The Java callbacks push into the sender directly. An unbounded
+    send needs no runtime and works from any thread.
+  - The app awaits `rx.recv()` in its `select!`.
+- **Later, each when an app needs it,** each with its own amendment and
+  following the same pattern:
+  - `smol`, through `async-channel`'s `Receiver`, which is smol's own
+    channel;
+  - `-compat` variants such as `tokio-compat`.
+
+  None is built now.
+- **libmorph** carries the same feature names and forwards them
+  (`tokio = ["libmobile?/tokio"]`, and its own desktop stream gains
+  `subscribe_tokio` under it). Without a runtime feature, libmorph has no
+  async dependency either.
+- **`futures-core` is not a dependency** under any feature in this plan.
+- **Tests:** the queue tests run with no features, and the `tokio`
+  tests (`--features tokio`, with Tokio's `rt` and `macros` as
+  dev-dependencies) check order and delivery from a non-runtime thread.
