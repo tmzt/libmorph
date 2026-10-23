@@ -596,3 +596,12 @@ backgrounded, because of the cached-app freezer.
 - libmorph wraps both.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-23 18:04 EDT — URL schemes: `#` on an `open` line
+
+Plan: `docs/design/20261022_07_URL_SCHEMES_PLAN.md`, step 4 (`319e16c`).
+A small departure needed to make the step work. In scripts, `#` to the
+end of a line is a comment, which would cut a URL's fragment, and
+pairing links carry their secret there. On a line whose first word is
+`open`, `#` is part of the URL, and the line has no comment. Other
+lines are unchanged.
