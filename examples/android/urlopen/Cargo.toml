@@ -1,0 +1,23 @@
+[package]
+name = "libmorph-example-urlopen-android"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "The urlopen example on Android, opened by libmorph-urlopen:// links"
+
+[lib]
+name = "urlopen_android"
+crate-type = ["lib", "cdylib"]
+
+[dependencies]
+libmorph = { path = "../../..", default-features = false }
+log = "0.4"
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.14"
+libmorph = { path = "../../..", default-features = false, features = ["mobile"] }
+
+# Generates the Gradle project from libmorph's forwarded libmobile metadata.
+[build-dependencies]
+libmorph-build = { path = "../../../crates/libmorph-build" }

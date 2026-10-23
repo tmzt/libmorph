@@ -1095,6 +1095,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "libmorph-example-urlopen-android"
+version = "0.1.0"
+dependencies = [
+ "android_logger",
+ "libmorph",
+ "libmorph-build",
+ "log",
+]
+
+[[package]]
 name = "libredox"
 version = "0.1.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
