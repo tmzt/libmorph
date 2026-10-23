@@ -139,3 +139,12 @@ additions.
   (`Command` is `#[non_exhaustive]`). On an `open` line, `#` belongs to
   the URL.
 - **Dependencies:** libmobile 0.2.1 → 0.2.2 (compatible).
+
+## libmorph-build 0.2.2 — 2026-10-23 (tag libmorph-build-v0.2.2)
+
+No changes of its own.
+
+- libmobile 0.2.1 → 0.2.2 (compatible), whose `gradle` module it
+  re-exports: `Project::url_scheme`, so
+  `gradle_project(id).url_scheme("myapp")` works in app build scripts,
+  and `codegen::url_scheme_filters`.
