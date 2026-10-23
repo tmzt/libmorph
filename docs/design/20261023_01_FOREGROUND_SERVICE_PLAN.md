@@ -332,3 +332,25 @@ libmorph either always or behind its passthrough (open question 3).
 4. **Desktop network events.** Should a later libdevice plan add network
    and sleep events on macOS (`NWPathMonitor`, power notifications), or is
    lifecycle-only enough for now?
+
+## Amendment — 2026-10-23 01:27 EDT: futures support is an opt-in feature
+
+The owner's answer to open question 3, relayed by the handlr session
+(2026-10-23): "futures and compat need a positive feature". It settles
+that question, and replaces the dependency and `Stream` lines of
+sections 4, 5 and 7.
+
+- **libmobile:** a feature `futures`, off by default, enables
+  `system-events` and adds `futures-core` 0.3. Only with it do `Events`
+  implement `futures_core::Stream`, along with any adapter helpers for async
+  runtimes added later.
+- **The default build:** `system-events` without `futures` has no
+  `futures-core`, and `Events` offers only `try_next`, `next_blocking`
+  and `current()`. The waker-based queue stays, since `Stream` is built
+  on it, but registering a waker is internal until `futures` is on.
+- **libmorph:** `futures = ["libmobile?/futures", ...]` forwards it. On the
+  desktop, libmorph's own lifecycle stream implements `Stream` only under
+  the same feature. Without it libmorph has no `futures-core` either.
+- **Tests:** the host `Stream` tests run with `--features futures`, and
+  the queue tests without it.
+- **handlr** turns `futures` on in its companion app.
