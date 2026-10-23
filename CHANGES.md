@@ -538,3 +538,19 @@ So with this, libmorph's key store and secure store keep their values
 across relaunches on both the S23 Ultra and macOS. The first run also
 logged a cpal "buffer underrun or overrun" from the audio output at
 startup, which is unrelated to the store.
+
+## 2026-10-22 21:13 EDT — Released libmorph 0.3.1 and libmorph-build 0.2.1
+
+Plans: `docs/design/20261022_03_SECURE_STORE_PLAN.md` and
+`docs/design/20261022_06_KEY_STORE_PLAN.md` (both Implemented).
+
+On the owner's word, the `secure-store` branches were merged and released
+in order:
+1. libmobile 0.2.1 (`b3bf43e`, tag `v0.2.1`);
+2. libdevice 0.1.1 (`b46963b`, tag `v0.1.1`), its first release under the
+   critical rules;
+3. libmorph 0.3.1 (tag `v0.3.1`) and libmorph-build 0.2.1 (tag
+   `libmorph-build-v0.2.1`).
+
+`Cargo.lock` was resolved against the pushed crates with the local patch
+moved aside. Next, the handlr session gets the revision to pin.
