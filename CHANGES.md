@@ -568,3 +568,10 @@ pairing links scanned or tapped on the phone.
 - macOS needs an app bundle and is deferred.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-22 23:30 EDT — Opening the app from a URL scheme (approved)
+
+Plan: `docs/design/20261022_07_URL_SCHEMES_PLAN.md` (Draft, approved).
+The owner approved it with its libmobile part, which is now libmobile's
+`docs/design/20261022_05_URL_SCHEMES_PLAN.md`. No Cargo feature. The
+launch mode question waits for the S23 check; macOS stays open.
