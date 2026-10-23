@@ -355,3 +355,42 @@ trait in section 2, the lock paragraph of 2.1, the constructors in section
   also drops its `&AndroidApp` argument in favour of the process-wide
   slot. That would depart from the frozen blob store plan, and is the
   owner's call.
+
+## Amendment — 2026-10-22 20:01 EDT: the Application context, the blob store without `&app`, a test-only memory vault
+
+Agreed with the owner (2026-10-22), after a review the owner relayed
+("it should absolutely drop the `&AndroidApp` argument") and "Vault::memory()
+should testing only". Replaces the Android bullet of the amendment "the
+vault is a thin handle" (the process-wide `AndroidApp` slot), and the
+memory rows of section 3 and that amendment. Settles its open question.
+
+- **The Application context from `ndk-context`.** android-activity 0.6.1
+  registers the JavaVM and the **Application** with `ndk-context` once per
+  process, before `android_main` (`src/init.rs`, `APP_ONCE`). libmobile
+  depends on `ndk-context = "0.1"` directly, so it shares that copy, and
+  reads it with `ndk_context::android_context()`. There is no slot of
+  libmobile's own and no lifecycle bookkeeping. It stays valid across
+  `android_main` runs and works from any thread.
+  - `SecureStorePlugin` takes a `Context` (the Application) instead of an
+    `Activity`. It finds the plugin class through the Application's class
+    loader, and reaches Keystore, `noBackupFilesDir` and
+    `KeyguardManager` from it.
+  - On Android, `Vault::named(namespace)` holds only the namespace.
+- **The blob store drops `&AndroidApp`.** It becomes
+  `secure_store::{get, put, put_with, delete, security_level}(name, ..)`,
+  with an `android::SecureStore` struct of the same methods for the shape
+  libdevice shares. libmorph's `SecureStore` stops holding an app clone.
+  This departs from the frozen libmobile and libmorph secure-store plans,
+  and is recorded in their CHANGES.md when it is made. It is done right
+  after the rename in step 1, before the engine.
+- **`Vault::memory()` is for testing only.** It exists only under a
+  `test-vault` feature in libmobile and libdevice. Each crate turns the
+  feature on for its own tests (as a dev-dependency on itself, or
+  `required-features` on its test targets). libmorph turns it on only
+  through its `script` feature, whose scripted runs are tests and
+  evidence. A normal app build has no memory vault. On hosts with no real
+  backend, `ctx.key_store()` is `None`.
+- **Steps:** step 1 gains the blob store change after the rename, with its
+  tests and the S23 count check repeated. Step 2's tests run with
+  `--features test-vault`, and a `compile_fail` doc test shows that
+  `Vault::memory()` is absent without it.
