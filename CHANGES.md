@@ -522,3 +522,19 @@ The key store is in: `libmorph::key_store` and `ctx.key_store()`. On the
 owner's S23 Ultra, the Android `securestore` example generated key
 `device` in namespace `libmorph.securestore`, and loaded the same
 fingerprint after a force-stop.
+
+## 2026-10-22 21:09 EDT — The key store checked on macOS
+
+Plan: `docs/design/20261022_06_KEY_STORE_PLAN.md`, step 7.
+
+The owner ran the `securestore` example twice from a Terminal on the Mac
+mini (Apple M4):
+- run 1: `key device: f26e6d8ecc648479 (generated)`, `kept in
+  MacKeychain`, `launch 1`, and the `unlocked-only` blob written and
+  read;
+- run 2: the same fingerprint `(loaded)` and `launch 2`.
+
+So with this, libmorph's key store and secure store keep their values
+across relaunches on both the S23 Ultra and macOS. The first run also
+logged a cpal "buffer underrun or overrun" from the audio output at
+startup, which is unrelated to the store.
