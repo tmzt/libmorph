@@ -496,3 +496,14 @@ and its amendments, reviewed, and adjusted:
 The owner said it is ready to build. The Android blob store moves to the
 Application context with it, because the two stores share
 `SecureStorePlugin`.
+
+## 2026-10-22 20:36 EDT — Secure store: Android without an app clone
+
+Plans: `docs/design/20261022_03_SECURE_STORE_PLAN.md` (In implementation),
+and `docs/design/20261022_06_KEY_STORE_PLAN.md`, step 2.
+
+A departure from the secure-store plan, which had the Android backend hold
+an `AndroidApp` clone. libmobile's blob store now uses the Application
+from `ndk-context` and takes no app, so libmorph's backend holds nothing.
+On the S23 Ultra, the Android `securestore` example reports
+`AndroidStrongBox` and counts launch 3 after the earlier two.
