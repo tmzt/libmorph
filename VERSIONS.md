@@ -124,3 +124,18 @@ No changes of its own.
 - libmobile 0.2.0 → 0.2.1 (compatible), whose `gradle` module it
   re-exports, unchanged. Generated projects now carry libmobile's core
   `store.SecureStorePlugin` and `GeneratedPlugins.SECURE_STORE_STRONGBOX`.
+
+## libmorph 0.3.2 — 2026-10-23 (tag v0.3.2)
+
+URL schemes (`docs/design/20261022_07_URL_SCHEMES_PLAN.md`). All
+additions.
+
+- `MorphApp::on_open_url(&mut self, ctx, url: &str)`, with a default
+  body: a link with a scheme the app's build script declared
+  (`gradle_project(id).url_scheme("myapp")`). On Android, VIEW intents
+  with data, after `init` (a link that started the app waits for it), in
+  order; while suspended, after `on_resume`.
+- `script::Command::Open(String)` and the script command `open <url>`
+  (`Command` is `#[non_exhaustive]`). On an `open` line, `#` belongs to
+  the URL.
+- **Dependencies:** libmobile 0.2.1 → 0.2.2 (compatible).
