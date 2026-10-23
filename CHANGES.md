@@ -554,3 +554,17 @@ in order:
 
 `Cargo.lock` was resolved against the pushed crates with the local patch
 moved aside. Next, the handlr session gets the revision to pin.
+
+## 2026-10-22 23:01 EDT — Opening the app from a URL scheme (proposed)
+
+Plan: `docs/design/20261022_07_URL_SCHEMES_PLAN.md` (Draft). Requested by
+the handlr session with the owner's approval, for `handlr://…/pair#…`
+pairing links scanned or tapped on the phone.
+- libmobile gains `Project::url_scheme` for the manifest's intent
+  filters, and stops logging intents in full: it currently logs the whole
+  URL, which would leak the pairing secret.
+- libmorph gains `MorphApp::on_open_url` over libmobile's existing intent
+  bridge.
+- macOS needs an app bundle and is deferred.
+
+Proposed only; nothing is implemented until the owner approves.
