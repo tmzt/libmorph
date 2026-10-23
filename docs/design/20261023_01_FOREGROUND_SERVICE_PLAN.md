@@ -411,3 +411,97 @@ amendment stands.
 - libmobile and libmorph use the same names, off by default, with
   libmorph forwarding (`tokio = ["libmobile?/tokio", "dep:tokio"]`, the
   second for its own desktop stream).
+
+## Amendment — 2026-10-23 01:40 EDT: review: visibility, battery exemption, stopping, Samsung, specialUse only
+
+From the handlr session's review, made at the owner's direction
+(2026-10-23), proposed for the owner's approval. It replaces the text
+named in each item.
+
+0. **Scope: `specialUse` only (owner).** The service work is aimed at
+   handlr's `specialUse`, to keep its link alive.
+   `ServiceType::Microphone` stays in the enum and the manifest code, but
+   is not checked or recommended now. The handlr suggestion at the end of
+   section 2 becomes: `specialUse`, started while visible. A background
+   microphone is left to a later amendment. It would need `microphone` in
+   the types at the visible start, since a running service's types cannot
+   change.
+1. **Samsung battery management** (adds to step 3). One UI's "Sleeping"
+   and "Deep sleeping" apps, and its default battery setting, can stop
+   background work even with a foreground service running. Step 3's
+   10-minute and Doze checks are run twice, with the app's battery setting
+   on "Unrestricted" and on the default, and both results are recorded,
+   along with whether the app has to be on "Never sleeping apps".
+2. **A battery-optimization exemption** (adds a module next to the
+   service, in libmobile under `foreground-service`, wrapped by
+   libmorph):
+
+   ```rust
+   pub mod battery {
+       /// PowerManager.isIgnoringBatteryOptimizations(package).
+       pub fn is_ignoring_optimizations() -> Result<bool, ServiceError>;
+       /// ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS: the system's
+       /// Allow/Deny dialog. Only while the app is visible; needs the
+       /// build-script opt-in below, else NotDeclared.
+       pub fn request_ignore_optimizations() -> Result<(), ServiceError>;
+       /// ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS: the system list, for
+       /// builds that may not ask directly.
+       pub fn open_settings() -> Result<(), ServiceError>;
+   }
+   ```
+
+   - `Project::request_ignore_battery_optimizations()`, off by default,
+     declares `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`.
+   - Play allows asking directly only for some kinds of app. A Play build
+     uses `open_settings` instead, and the rustdoc says so.
+   - The result of the dialog is read back with `is_ignoring_optimizations`
+     on the next `Visible(true)`.
+   - Step 3 compares the background and Doze results with and without
+     the exemption. On Samsung, granting it shows as "Unrestricted", which
+     step 3 confirms.
+3. **Visibility, not focus** (replaces `Foreground(bool)` in section 4,
+   and "on `on_resume`" in section 2's start rule). `SystemEvent` has
+   `Visible(bool)` and `Focused(bool)`:
+   - `Visible(bool)` comes from `onActivityStarted` and
+     `onActivityStopped`. Android's start rule is about visibility, and
+     an app in split screen or picture-in-picture is paused but visible.
+   - `Focused(bool)` comes from `onActivityResumed` and
+     `onActivityPaused`.
+
+   Both come from `Application.registerActivityLifecycleCallbacks`,
+   registered at the first `subscribe()`, so `MobileActivityPlugin` does
+   not change. `current()` gives both. An app starts the service when it
+   sees `Visible(true)` (or from `init` or `on_resume`, which happen while
+   visible).
+4. **No restart** (replaces section 2's "If Android restarts the service
+   (`START_STICKY` is not used), …"). The service returns
+   `START_NOT_STICKY`, so Android never restarts it after the process
+   dies. Bringing it back is the app's job, the next time it is visible.
+5. **Stopping:**
+   - An app stops the service when it no longer needs to run in the
+     background, for example after the user disconnects or signs out, or
+     after unpairing.
+   - **A "Disconnect" action on the notification.**
+     `ServiceOptions::stop_action: Option<&str>` gives its label. Tapping
+     it delivers `ServiceEvent::StopRequested`, and does not stop the
+     service by itself, so the app can close its link and then call
+     `stop()`.
+   - **Swiping the app away from Recents.** The proposed default is that it
+     stops the service: the generated `<service>` has
+     `android:stopWithTask="true"`, and the app gets
+     `ServiceEvent::Stopped` if its process is still alive. The reason is
+     that a swipe is the user's way of closing the app.
+     `Project::foreground_service_keeps_running()` opts out, giving
+     `stopWithTask="false"` and `ServiceEvent::TaskRemoved` instead. This
+     is open question 5.
+   - Each case is checked in step 3: stop from the app, the action, and
+     the swipe.
+6. **Housekeeping.** The `futures-core` lines in section 4 (its
+   dependency paragraph and the `impl futures_core::Stream` line), in
+   section 5 (`implementing futures_core::Stream`) and in section 7 are
+   superseded by the amendments "one feature per async runtime, none by
+   default" and "async features are named after their crates". So is open
+   question 3, which they answered.
+
+**Open question 5:** should swiping the app away stop the service by
+default (`stopWithTask="true"`, with an opt-out), or keep it running?
