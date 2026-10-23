@@ -231,7 +231,8 @@ Never commit a `path` dependency or a `Cargo.lock` that was resolved with a patc
 - `SurfaceTarget::current(&app)` implements raw-window-handle 0.6, so pass it to wgpu's safe `create_surface`.
 - Runtime permissions: `request_permissions(&app, &[&str]) -> PermissionRequest` (one request at a time, in order), answered by `MobileEvent::Permissions(PermissionsOutcome { request, permissions })`; `permission_granted`, `should_show_rationale`. Each permission must be declared in the manifest.
 - `CaptureStream` (under `cpal`): AAudio capture with an `InputPreset`, which cpal cannot set: `open(preset, callback)`, `format()`, `preset()`, `set_preset` (reopens with the same callback and format), `start`/`stop`. Needs `RECORD_AUDIO`.
-- `secure_store` (core, plan `20261022_03_SECURE_STORE_PLAN.md`): `get`, `put`, `put_with(PutOptions { unlocked_only })`, `delete`, `security_level`. Named blobs (1 to 64 of `[A-Za-z0-9._-]`, up to 64 KiB) sealed with AES-256-GCM under a non-exportable Keystore key (StrongBox unless `secure-store-no-strongbox`), kept in no-backup storage. Synchronous, any thread. `SecureStoreError::Locked` for an `unlocked_only` blob while the device is locked.
+- `secure_store` (core, plan `20261022_03_SECURE_STORE_PLAN.md`): `get(name)`, `put`, `put_with(PutOptions { unlocked_only })`, `delete`, `security_level()`, and `android::SecureStore` with the same methods. No `AndroidApp` argument: it reaches the plugin through the Application android-activity registers with `ndk-context`. Named blobs (1 to 64 of `[A-Za-z0-9._-]`, up to 64 KiB) sealed with AES-256-GCM under a non-exportable Keystore key (StrongBox unless `secure-store-no-strongbox`), kept in no-backup storage. Synchronous, any thread. `SecureStoreError::DeviceLocked` for an `unlocked_only` blob while the device is locked.
+- `key_store` (core, libmorph plan `20261022_06_KEY_STORE_PLAN.md`): the engine (`src/key_store.rs`, the same file as libdevice's) with `generate`, `public`, `with_key`, `delete` over a `Vault`, adapter keys (`SecretKey`, `SealToken`), and flags refused unless enforced; `Vault::named(namespace)` (the plugin's key space), `Vault::memory()` under `test-vault`.
 - Cargo features: `google-auth`, `camera`, `cpal` (cpal re-exported as `libmobile::android::cpal`, plus `CaptureStream`; needs API 28), and the negative `secure-store-no-strongbox`. No others exist.
 - The app's activity must be `dev.highbay.libmobile.MobileNativeActivity` (Gradle wiring comes from `libmobile::gradle`; see Gradle Handoff).
 
@@ -256,11 +257,12 @@ mobile-camera = ["mobile", "libmobile/camera"]
 # Negative, so turning off default features cannot turn off StrongBox.
 mobile-secure-store-no-strongbox = ["mobile", "libmobile/secure-store-no-strongbox"]
 # ctx.secure_store(): libmobile's store on Android, the Keychain on macOS.
-secure-store = ["dep:security-framework"]
+# ctx.secure_store() and ctx.key_store(): libmobile on Android, libdevice elsewhere.
+secure-store = ["libdevice/secure-store"]
 web = ["dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:web-sys", "wgpu/webgl"]
 # Scripted headless runs with PNG screenshots; png and crc32fast are
 # desktop-only dependencies, so this enables nothing on Android and the web.
-script = ["dep:png", "dep:crc32fast"]
+script = ["dep:png", "dep:crc32fast", "libdevice/test-vault"]
 ```
 
 `build.rs` sets `cfg(script_runner)` when `script` is on and the target is neither Android nor wasm32. Gate runner code on `#[cfg(script_runner)]` rather than repeating the feature-and-target condition.
@@ -355,7 +357,8 @@ Expose whatever was granted on `MorphContext` (`ctx.limits()`) so apps can featu
     - the streams pause with the app: on Android at `Pause`/`Resume`, on desktop and web in winit's `suspended`/`resumed`. Scripted runs have no streams, so sources and sinks are never called;
   - `exit()`: ask the runner to stop. On desktop and web the window closes; on Android libmorph calls `libmobile::android::finish` and the activity tears down normally;
   - `data_dir() -> Option<&Path>`: Android's internal data path; `None` on desktop and web.
-  - `secure_store() -> Option<&SecureStore>` (feature `secure-store`, plan `20261022_03_SECURE_STORE_PLAN.md`): named secrets with one API on every host, `Clone + Send + Sync`: `get`, `put`, `put_with(name, value, PutOptions)`, `delete`, `protection() -> Result<Protection>`. Android uses libmobile's `secure_store`. macOS uses the login Keychain, one generic password per blob, and `unlocked_only` is not enforced there. Scripted runs use memory, empty for each run. `None` on the web and other desktops;
+  - `secure_store() -> Option<&SecureStore>` (feature `secure-store`, plan `20261022_03_SECURE_STORE_PLAN.md`): named secrets with one API on every host, `Clone + Send + Sync`: `get`, `put`, `put_with(name, value, PutOptions)`, `delete`, `protection() -> Result<Protection>`. Android uses libmobile's `secure_store`; macOS uses libdevice's (the login Keychain, one generic password per blob, `unlocked_only` not enforced); scripted runs use libdevice's memory store, empty for each run. `None` on the web and other desktops;
+  - `key_store() -> Option<&Vault>` (feature `secure-store`, plan `20261022_06_KEY_STORE_PLAN.md`): the vault for the re-exported `libmorph::key_store` engine (libmobile's on Android, libdevice's elsewhere; the same file, checked by a test). Namespace `libmorph.<MorphApp::SECURE_STORE_ID>` (default: package name or executable stem). An adapter implements `SecretKey`; `generate` returns its public value, `with_key` lends the key for one call. Scripted runs get a fresh `Vault::memory()`;
   - `request_permissions(&[&str]) -> Option<PermissionRequest>`, `permission_granted`, `should_show_rationale`: libmorph's own types over libmobile's, the same on every host. Off Android there are no runtime permissions: `None`, `true` and `false`.
   - `pipeline_cache() -> Option<&wgpu::PipelineCache>` (plan `20261016_02_PIPELINE_CACHE_PLAN.md`): `Some` only on Android with Vulkan when the adapter offers `PIPELINE_CACHE`, which `Gpu::new` then requests (its `want_pipeline_cache`, `true` from the Android runner only). Apps pass it as `cache` in their pipeline descriptors, cloning it for pipelines built on another thread; a pipeline built with `cache: None` is not cached. The data is kept at `<data_dir>/libmorph/<wgpu::util::pipeline_cache_key>.bin`, loaded before `init` (`fallback: true`, so stale data gives an empty cache), and saved through a `.tmp` rename after `init`, after `on_suspend` and on exit, skipped when unchanged (`src/pipeline_cache.rs`).
 - **`libmorph::script`** (plan `20261014_04_SCRIPTED_RUNS_AND_PNG_CAPTURE_PLAN.md`): scripted, headless runs.
