@@ -1,7 +1,7 @@
 ---
 title: Key store for keying material
 date: 2026-10-22
-status: Draft
+status: Superseded (by 20261022_06_KEY_STORE_PLAN.md)
 covers:
   - One small key store engine (`key_store.rs`), the same file in libmobile
     and libdevice, over a per-platform `Vault`
@@ -394,3 +394,14 @@ memory rows of section 3 and that amendment. Settles its open question.
   tests and the S23 count check repeated. Step 2's tests run with
   `--features test-vault`, and a `compile_fail` doc test shows that
   `Vault::memory()` is absent without it.
+
+## Amendment — 2026-10-22 20:31 EDT: superseded by the consolidated key store plan
+
+Superseded by `docs/design/20261022_06_KEY_STORE_PLAN.md`, which restates
+this plan and its amendments as one document, on the owner's request ("I'd
+like one clean plan not a bunch of amendments"). Nothing in this plan was
+implemented. Carried over unchanged in substance, with these additions:
+- stored flags this build does not enforce are refused on read;
+- the vault returns its flags and envelope in one read;
+- the engine and memory vault build on every host;
+- `log` becomes a dependency.
