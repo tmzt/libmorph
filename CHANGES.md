@@ -583,3 +583,16 @@ instruction, an amendment records that the schemes and the log redaction
 are implemented in libmobile (its `docs/design/20261022_05_URL_SCHEMES_PLAN.md`),
 and libmorph only wraps them with `on_open_url`, the `open` script
 command and the `urlopen` example.
+
+## 2026-10-23 01:24 EDT — Foreground service and system events (proposed)
+
+Plan: `docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md` (Draft).
+Requested by the handlr session on the owner's instruction: the companion
+app's link to the daemon closes about 7 seconds after the app is
+backgrounded, because of the cached-app freezer.
+- libmobile would generate a foreground service from the app's build
+  script, with Rust control from any thread, and add a runtime-agnostic
+  stream of system events that keeps working while the UI is paused.
+- libmorph wraps both.
+
+Proposed only; nothing is implemented until the owner approves.
