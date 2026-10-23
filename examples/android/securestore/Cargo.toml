@@ -17,6 +17,7 @@ no-strongbox = ["libmorph/mobile-secure-store-no-strongbox"]
 [dependencies]
 libmorph = { path = "../../..", default-features = false }
 log = "0.4"
+zeroize = { version = "1.8", features = ["derive"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.14"
