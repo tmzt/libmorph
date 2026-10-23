@@ -220,3 +220,17 @@ argument, which handlr's tty client may already do.
    anyway?
 3. **macOS.** Should a follow-up plan cover the bundle and the Apple
    Event, or is a command-line argument enough for the desktop companion?
+
+## Amendment — 2026-10-22 23:30 EDT: approved
+
+The owner approved this plan on 2026-10-22, with libmobile's part written
+out as its own plan, libmobile `docs/design/20261022_05_URL_SCHEMES_PLAN.md`.
+That plan carries section 2 and steps 1 to 3 here, which are now built
+from it. The status stays `Draft` until the first commit that implements
+this plan's step 4.
+
+Section 7 stands as follows:
+1. `singleTop` or `singleTask`: answered after step 2, only if a
+   background link creates a second activity.
+2. A Cargo feature: none, as section 3 proposes.
+3. macOS: not answered; this plan does not depend on it.
