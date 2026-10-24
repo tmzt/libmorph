@@ -946,3 +946,10 @@ commit), on the owner's S23 Ultra with libmobile 0.2.4:
   UI-hidden level `HIDDEN`.
 
 Both examples were force-stopped afterwards.
+
+## 2026-10-24 13:40 EDT — Released libmorph 0.4.1 and libmorph-build 0.2.4
+
+On the owner's word ("Yes, go ahead with all three"): libmorph 0.4.1
+(`890496a`, tag `v0.4.1`) with `build_info()` and `on_trim_memory`, and
+libmorph-build 0.2.4 (tag `libmorph-build-v0.2.4`), taking libmobile 0.2.4.
+The device info and memory pressure plans are Implemented.
