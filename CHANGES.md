@@ -953,3 +953,13 @@ On the owner's word ("Yes, go ahead with all three"): libmorph 0.4.1
 (`890496a`, tag `v0.4.1`) with `build_info()` and `on_trim_memory`, and
 libmorph-build 0.2.4 (tag `libmorph-build-v0.2.4`), taking libmobile 0.2.4.
 The device info and memory pressure plans are Implemented.
+
+## 2026-10-24 13:51 EDT — App icons (proposed)
+
+Plan: `docs/design/20261024_03_APP_ICON_PLAN.md` (Draft). On the owner's
+request, relayed by the handlr session: icons from PNGs, made into Android
+resources automatically, with vector sources and desktop use later.
+libmobile generates the resources and manifest attributes behind a
+host-only `icons` feature; libmorph-build turns it on.
+
+Proposed only; nothing is implemented until the owner approves.
