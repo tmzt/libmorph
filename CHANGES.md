@@ -986,3 +986,11 @@ Proposed only; nothing is implemented until the owner approves.
 Plan: `docs/design/20261024_04_NOTIFICATIONS_PLAN.md` (Draft, approved).
 The owner approved the notification plans in libmobile and libmorph
 ("approve both"), with the recommended answers.
+
+## 2026-10-24 14:32 EDT — Released libmorph 0.4.2 and libmorph-build 0.2.5
+
+On the owner's word ("add this to 0.4.2 if that's the next build, don't
+hold up the current work"): libmorph-build 0.2.5 (tag
+`libmorph-build-v0.2.5`) with app icons, and libmorph 0.4.2 (`a28e9bb`, tag
+`v0.4.2`), both taking libmobile 0.2.5. The icon plan is Implemented here;
+the launcher check on the S23 is libmobile's step 2.
