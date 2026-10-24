@@ -801,3 +801,32 @@ meaning blocked. The check before it is the same as on every host.
 Also: the commit implementing step 1 (`1e32d90`) left out the
 `Cargo.lock` lines for libdevice's `open-link` dependencies, which
 `8734d4b` adds; nothing between them ran with the lock missing them.
+
+## 2026-10-24 12:59 EDT — Open link: checked on the Mac, the S23 and in a scripted run
+
+Plan: `docs/design/20261023_02_OPEN_LINK_PLAN.md`, step 2, with the
+`urlopen` example (`3acaed1`).
+
+- **Scripted run: passed.** `cargo run --example urlopen --features script
+  -- --morph-script examples/scripts/urlopen.morph`: the final `tap` logged
+  `libmorph: script: open link https://example.com/` and
+  `urlopen: open_link https://example.com/: Ok`, and no browser opened.
+  `tests/open_link.rs` checks the same with a query and fragment
+  (`Ok`, nothing opened) and `javascript:` and `file:` links
+  (`BadUrl`).
+- **Mac: passed.** No synthetic click reaches the window (posted
+  `CGEvent`s are dropped without Accessibility access), so the example's
+  `--open-link` called `ctx.open_link` from `init` in a real window:
+  `urlopen: open_link https://example.com/: Ok` at 12:52:18, and the
+  system log shows the default browser taking it at the same moment:
+  `Safari[40729] Navigation: Open URL from AppleEvent`,
+  `Going to URL from external application` (12:52:18.131).
+- **S23: passed.** `adb shell input tap 540 1500` in the example:
+  `urlopen: open_link https://example.com/: Ok`, and Chrome came to the
+  front with `Intent { act=android.intent.action.VIEW
+  dat=https://example.com/ … cmp=com.android.chrome/org.chromium.chrome.browser.ChromeTabbedActivity }`.
+  Back closed the tab, and the example was force-stopped.
+- **Agreement:** `cargo test --features mobile --lib link` on macOS runs
+  `libmobile_and_libdevice_agree` (libmobile's, libdevice's and libmorph's
+  `check_link` on 10 good and 30 bad links): passed. Without `mobile`,
+  `libdevice_agrees` runs on every macOS build.
