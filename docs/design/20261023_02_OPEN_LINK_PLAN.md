@@ -87,3 +87,12 @@ pub enum OpenLinkError {
    instead of opening. A free function could be called from any thread,
    but could not tell a scripted run apart. Recommended: the method; an
    app's other threads send the URL to the main thread.
+
+## Amendment — 2026-10-23 22:02 EDT: approved
+
+The owner approved the open-link plans in libmobile, libdevice and
+libmorph on 2026-10-23 ("approve plans"), without separate answers, so
+their recommendations stand: http and https only; libmobile's call is
+core, with no Cargo feature; the Mac uses `NSWorkspace`; libmorph's is a
+`MorphContext` method. The status stays `Draft` until the first commit
+that implements it.
