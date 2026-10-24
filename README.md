@@ -181,11 +181,11 @@ Android on GL), which is what `cache` takes when nothing is cached.
 - `scripts/make_icon.py`: Android launcher icons (legacy, round, adaptive
   and monochrome) from one square image, with a contact sheet. The source is
   a PNG with transparency, or any image (a JPEG, say) on a flat colour that
-  `--key` removes. Needs Python 3 with Pillow and numpy:
+  `--key` removes; `--crop` picks a square region of a larger image. Needs Python 3 with Pillow and numpy:
 
   ```sh
   python3 -I scripts/make_icon.py --source art.png --out icon/ \
-      [--key RRGGBB|auto] [--key-tolerance T] [--background RRGGBB] \
+      [--crop X,Y,W,H] [--key RRGGBB|auto] [--key-tolerance T] [--background RRGGBB] \
       [--hue DEG] [--full-bleed] [--no-monochrome]
   ```
 
