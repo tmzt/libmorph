@@ -29,6 +29,7 @@ pub(crate) fn run<A: MorphApp>(script: &Script, run: ScriptRun) -> Result<Report
     let _ = super::audio_setup::<A>();
     let mut ctx = MorphContext::new(gpu, spec, run.args, Audio::silent());
     ctx.safe_area = SafeArea::from(spec.insets(InsetType::SafeDrawing));
+    ctx.scripted = true;
     #[cfg(feature = "secure-store")]
     {
         ctx.secure_store = Some(crate::SecureStore::memory());

@@ -87,6 +87,8 @@ crc32fast = { version = "1.5", optional = true }
 
 # Trackpad fingers from AppKit, at the versions winit already uses.
 [target.'cfg(target_os = "macos")'.dependencies]
+# `MorphContext::open_link`: libdevice's NSWorkspace opener, always on.
+libdevice = { git = "https://github.com/tmzt/libdevice", features = ["open-link"] }
 objc2 = "0.5.2"
 objc2-foundation = { version = "0.2.2", features = ["NSEnumerator", "NSGeometry", "NSSet"] }
 objc2-app-kit = { version = "0.2.2", features = [

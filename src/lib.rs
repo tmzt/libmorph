@@ -19,6 +19,7 @@ mod config;
 mod context;
 mod gpu;
 mod input;
+mod link;
 mod out_dir;
 mod permission;
 mod pipeline_cache;
@@ -52,6 +53,7 @@ pub use libdevice::key_store;
 /// libdevice's elsewhere; the two engines are the same file.
 #[cfg(all(feature = "secure-store", target_os = "android"))]
 pub use libmobile::key_store;
+pub use link::OpenLinkError;
 pub use permission::{PermissionRequest, Permissions};
 pub use safe_area::SafeArea;
 pub use secure_store::{

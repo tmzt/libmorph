@@ -6,7 +6,7 @@ use libdevice::DeviceSpec;
 
 use crate::gpu::Gpu;
 use crate::pipeline_cache::PipelineCacheStore;
-use crate::{Audio, PermissionRequest, SafeArea, SecureStore};
+use crate::{Audio, OpenLinkError, PermissionRequest, SafeArea, SecureStore};
 
 /// Shared state for the whole run. The device and queue never change; the
 /// surface size, format, safe area and scale factor follow the host.
@@ -23,6 +23,8 @@ pub struct MorphContext {
     pub(crate) data_dir: Option<PathBuf>,
     pub(crate) pipeline_cache: Option<PipelineCacheStore>,
     pub(crate) exit_requested: bool,
+    /// A scripted run: links are logged, not opened.
+    pub(crate) scripted: bool,
     /// Set by the runner where the host has one (feature `secure-store`).
     pub(crate) secure_store: Option<SecureStore>,
     /// Set by the runner where the host has one (feature `secure-store`).
@@ -48,6 +50,7 @@ impl MorphContext {
             data_dir: None,
             pipeline_cache: None,
             exit_requested: false,
+            scripted: false,
             secure_store: None,
             #[cfg(feature = "secure-store")]
             key_store: None,
@@ -223,6 +226,24 @@ impl MorphContext {
             let _ = permission;
             false
         }
+    }
+
+    /// Open `url` (http or https) in the app that handles it, normally the
+    /// browser. Android: libmobile, while the app is visible
+    /// ([`OpenLinkError::NotVisible`] otherwise); macOS: libdevice; the web:
+    /// a new tab; other desktops: [`OpenLinkError::Unsupported`]. Scripted
+    /// runs check the link and log it, cut after its path, without opening
+    /// it. Any other scheme, or whitespace or control characters, is
+    /// [`OpenLinkError::BadUrl`] on every host. Returns once the system has
+    /// the link; it does not wait for the browser. libmorph never logs the
+    /// link past its path.
+    pub fn open_link(&self, url: &str) -> Result<(), OpenLinkError> {
+        if self.scripted {
+            crate::link::check_link(url)?;
+            log::info!("libmorph: script: open link {}", crate::link::redacted(url));
+            return Ok(());
+        }
+        crate::link::open(url)
     }
 
     /// Save the pipeline cache's data, if there is a cache and it changed.

@@ -1,7 +1,7 @@
 ---
 title: Opening a link in another app
 date: 2026-10-23
-status: Draft
+status: In implementation
 covers:
   - "`MorphContext::open_link(url)`: one call on every host, wrapping
     libmobile on Android and libdevice on the Mac"
@@ -96,3 +96,9 @@ their recommendations stand: http and https only; libmobile's call is
 core, with no Cargo feature; the Mac uses `NSWorkspace`; libmorph's is a
 `MorphContext` method. The status stays `Draft` until the first commit
 that implements it.
+
+## Amendment — 2026-10-24 12:47 EDT: implementation has started; the document is now immutable
+
+Step 1 (the wrapper) starts with this commit, against libmobile 0.2.3
+(tag `v0.2.3`) and libdevice 0.1.2 (tag `v0.1.2`). The document now
+changes only on the owner's explicit instruction.
