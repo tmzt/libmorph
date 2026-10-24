@@ -648,3 +648,13 @@ approved). The owner approved it with libmobile's
 the service, its Termux-style notification controls and the system
 events. libmorph only wraps them, after libmobile 0.2.3. No background
 microphone: Android stops input when the app is hidden.
+
+## 2026-10-23 21:59 EDT — Opening a link in another app (proposed)
+
+Plan: `docs/design/20261023_02_OPEN_LINK_PLAN.md` (Draft). Requested by the handlr
+session for repowiki links in its agent view: an outbound call that opens
+an http or https URL in the browser. libmobile builds it for Android,
+libdevice for the Mac, and libmorph wraps both as
+`MorphContext::open_link`.
+
+Proposed only; nothing is implemented until the owner approves.
