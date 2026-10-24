@@ -223,3 +223,10 @@ No changes of its own.
 - libmobile 0.2.3 → 0.2.4 (compatible), whose `gradle` module it
   re-exports, unchanged. Generated projects now carry libmobile's core
   `bridge.BuildInfoPlugin` and `bridge.TrimMemoryPlugin`.
+
+## libmorph 0.4.2 — 2026-10-24 (tag v0.4.2)
+
+No public API changes of its own; released with libmorph-build 0.2.5's app
+icons (`docs/design/20261024_03_APP_ICON_PLAN.md`).
+
+- **Dependencies:** libmobile 0.2.4 → 0.2.5 (compatible).
