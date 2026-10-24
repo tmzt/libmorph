@@ -215,3 +215,11 @@ and memory pressure, stage 2
 - `script::Command::TrimMemory(TrimLevel)` and the script command
   `trim-memory <level>`.
 - **Dependencies:** libmobile 0.2.3 → 0.2.4 (compatible).
+
+## libmorph-build 0.2.4 — 2026-10-24 (tag libmorph-build-v0.2.4)
+
+No changes of its own.
+
+- libmobile 0.2.3 → 0.2.4 (compatible), whose `gradle` module it
+  re-exports, unchanged. Generated projects now carry libmobile's core
+  `bridge.BuildInfoPlugin` and `bridge.TrimMemoryPlugin`.
