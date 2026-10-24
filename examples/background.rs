@@ -12,6 +12,7 @@
 //!   notification's text. On `Exited` it stops.
 //! * Another thread logs every system event, and `on_service` logs every
 //!   service event on the main thread.
+//! * `on_low_memory` is logged (`adb shell am send-trim-memory <package> COMPLETE`).
 //! * Each launch counts itself in `launches` in `ctx.data_dir()`, which
 //!   survives restarts: `~/Library/Application Support/<APP_ID>` on the Mac,
 //!   the app's files directory on Android.
@@ -286,6 +287,10 @@ impl MorphApp for Background {
             Some(host) => set_host(host),
             None => log::warn!("background: not a {SCHEME}://<ip:port> link"),
         }
+    }
+
+    fn on_low_memory(&mut self, _ctx: &mut MorphContext) {
+        log::info!("background: on_low_memory");
     }
 
     fn on_suspend(&mut self, _ctx: &mut MorphContext) {
