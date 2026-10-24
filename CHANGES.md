@@ -675,3 +675,11 @@ directories, libdevice the desktop paths by app id, and libmorph creates
 them before `init` as `MorphContext::storage_dir()` and `cache_dir()`.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-23 23:30 EDT — App storage: `data_dir()` itself becomes cross-platform
+
+Plan: `docs/design/20261023_03_APP_STORAGE_PLAN.md` (Draft). The owner's
+correction, relayed by the handlr session: `data_dir()` was meant to be
+cross-platform. An amendment drops `storage_dir()`; `data_dir()` keeps
+its signature and is `Some` on every host with a filesystem, created
+before `init`. The release becomes libmorph 0.4.0.
