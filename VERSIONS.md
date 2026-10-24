@@ -148,3 +148,43 @@ No changes of its own.
   re-exports: `Project::url_scheme`, so
   `gradle_project(id).url_scheme("myapp")` works in app build scripts,
   and `codegen::url_scheme_filters`.
+
+## libmorph 0.4.0 — 2026-10-24 (tag v0.4.0)
+
+The foreground service (`docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md`),
+opening links (`docs/design/20261023_02_OPEN_LINK_PLAN.md`), app storage
+(`docs/design/20261023_03_APP_STORAGE_PLAN.md`) and memory pressure, stage 1
+(`docs/design/20261024_01_MEMORY_PRESSURE_PLAN.md`).
+
+- **Breaking:** `MorphContext::data_dir()` is now `Some` on every host with
+  a filesystem: the per-app directory from libdevice on the desktop
+  (`~/Library/Application Support/<APP_ID>` on macOS), the run's
+  `storage/` in scripted runs, and Android's files directory as before.
+  It is created before `init`, and is `None` only on the web or if it
+  could not be created. The signature is unchanged.
+- `MorphContext::cache_dir()`, created before `init` the same way.
+- `MorphApp::APP_ID`, a defaulted const: the directory name on the
+  desktop (default: the executable's stem).
+- `MorphContext::open_link(url)` and `OpenLinkError`: http and https
+  links, through libmobile on Android, libdevice's `NSWorkspace` on macOS,
+  a new tab on the web; logged and not opened in scripted runs.
+- `libmorph::service`: `start`, `update`, `update_text`, `stop`,
+  `is_running`, `set_wake_lock`, `wake_lock_held`, with `ServiceOptions`,
+  `NotificationContent`, `NotificationAction` (each with `new`),
+  `LockScreenVisibility`, `Controls`, `ControlLabels`, `ServiceType`,
+  `ServiceEvent`, `ServiceError` and `MAX_ACTIONS`. `Unsupported` off
+  Android.
+- `MorphApp::on_service(&mut self, ctx, &ServiceEvent)`, defaulted.
+- `libmorph::battery`: `state`, `is_ignoring_optimizations`,
+  `request_ignore_optimizations`, `open_settings`, `open_app_details`,
+  `open_vendor_battery`, with `BatteryState`, `Page` and `BatteryError`.
+- `libmorph::system_events`: `subscribe`, `current`, `Events`,
+  `SystemEvent`, `SystemState`, `NetworkInfo`, `Transport`; and
+  `subscribe_tokio` under the feature `tokio`. Off Android, only
+  `Visible` from the window's lifecycle.
+- `MorphApp::on_low_memory(&mut self, ctx)`, defaulted, and the script
+  command `low-memory`.
+- **Features:** `mobile-foreground-service`, `mobile-system-events`,
+  `mobile-battery` and `tokio` (adds `tokio` 1 with `sync` only).
+- **Dependencies:** libmobile 0.2.2 → 0.2.3 and libdevice 0.1.1 → 0.1.2,
+  both compatible; on macOS libdevice's `open-link` is always on.
