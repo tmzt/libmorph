@@ -12,6 +12,9 @@
 //!   notification's text. On `Exited` it stops.
 //! * Another thread logs every system event, and `on_service` logs every
 //!   service event on the main thread.
+//! * Each launch counts itself in `launches` in `ctx.data_dir()`, which
+//!   survives restarts: `~/Library/Application Support/<APP_ID>` on the Mac,
+//!   the app's files directory on Android.
 //!
 //! On Android the host comes from a link with the example's scheme (see
 //! `examples/android/background`):
@@ -177,6 +180,18 @@ fn events_loop(events: system_events::Events) {
     }
 }
 
+/// Add one to the `launches` file in `dir`, returning the new count.
+fn count_launch(dir: &std::path::Path) -> std::io::Result<u64> {
+    let path = dir.join("launches");
+    let count = match std::fs::read_to_string(&path) {
+        Ok(text) => text.trim().parse().unwrap_or(0),
+        Err(error) if error.kind() == ErrorKind::NotFound => 0,
+        Err(error) => return Err(error),
+    } + 1;
+    std::fs::write(&path, format!("{count}\n"))?;
+    Ok(count)
+}
+
 fn start_service() {
     let mut content = NotificationContent::new("libmorph background", "starting");
     content
@@ -198,8 +213,18 @@ pub struct Background {
 }
 
 impl MorphApp for Background {
+    const APP_ID: &'static str = "dev.highbay.libmorph.example.background";
+
     fn init(ctx: &mut MorphContext) -> Self {
         log::info!("background: init");
+        match ctx.data_dir() {
+            Some(dir) => match count_launch(dir) {
+                Ok(count) => log::info!("background: launch {count} ({})", dir.display()),
+                Err(error) => log::error!("background: launches in {}: {error}", dir.display()),
+            },
+            None => log::warn!("background: no data_dir on this host"),
+        }
+        log::info!("background: cache_dir {:?}", ctx.cache_dir());
         // Subscribed here, so the thread misses nothing from now on.
         let events = system_events::subscribe();
         std::thread::spawn(move || events_loop(events));
@@ -280,7 +305,16 @@ fn main() -> Result<(), libmorph::MorphError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{host_from_link, line, status};
+    use super::{count_launch, host_from_link, line, status};
+
+    #[test]
+    fn launches_count_up() {
+        let dir = std::env::temp_dir().join(format!("libmorph-launches-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(count_launch(&dir).unwrap(), 1);
+        assert_eq!(count_launch(&dir).unwrap(), 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn lines_and_status() {
