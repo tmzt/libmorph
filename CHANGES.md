@@ -830,3 +830,29 @@ Plan: `docs/design/20261023_02_OPEN_LINK_PLAN.md`, step 2, with the
   `libmobile_and_libdevice_agree` (libmobile's, libdevice's and libmorph's
   `check_link` on 10 good and 30 bad links): passed. Without `mobile`,
   `libdevice_agrees` runs on every macOS build.
+
+## 2026-10-24 13:03 EDT — App storage: checked on the Mac, the S23 and in scripted runs
+
+Plan: `docs/design/20261023_03_APP_STORAGE_PLAN.md`, step 2, with the
+`background` example (`27a9d3d`), which counts its launches in
+`data_dir()/launches` (`APP_ID = "dev.highbay.libmorph.example.background"`).
+The plan names `securestore` or a new `storage` example; the counter
+went into `background` instead, which already had an Android crate.
+
+- **Mac: passed.** Two runs of `target/debug/examples/background`, each
+  stopped after start: `background: launch 1 (/Users/tmeade/Library/Application Support/dev.highbay.libmorph.example.background)`,
+  then `background: launch 2 (…)`, and `launches` held `2`;
+  `cache_dir Some("/Users/tmeade/Library/Caches/dev.highbay.libmorph.example.background")`.
+  Neither directory existed before the first run. Both were removed after
+  the check. The same runs logged `start: Err(Unsupported)`,
+  `battery Err(Unsupported)` and `SystemState { visible: Some(true), .. }`
+  (the desktop stream, from winit's `resumed`), which item 1 needed.
+- **S23: passed.** Launched, then `am force-stop`, twice:
+  `background: launch 1 (/data/user/0/dev.highbay.libmorph.example.background/files)`
+  and `background: launch 2 (…)`; `run-as … cat files/launches` gave
+  `1` then `2`; `cache_dir Some("/data/user/0/dev.highbay.libmorph.example.background/cache")`.
+  The pipeline cache's `files/libmorph/` is where it was.
+- **Scripted runs: passed.** `tests/storage.rs` runs the same script
+  twice into one `OutDir::Exact`: both times `init` saw `Some(<out>/storage)`
+  and `Some(<out>/cache)`, existing and empty, though the first run left a
+  file in each.
