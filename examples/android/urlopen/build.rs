@@ -5,6 +5,11 @@ fn main() {
         .label("libmorph urlopen")
         .lib_name("urlopen_android")
         .url_scheme("libmorph-urlopen")
+        // Launcher icons from one PNG (libmobile's `icons`).
+        .icon(
+            libmorph_build::gradle::Icon::png("icon/icon-1024.png")
+                .background_color([0x14, 0x18, 0x24]),
+        )
         .generate()
         .expect("libmorph-build: generating the Gradle project");
 }
