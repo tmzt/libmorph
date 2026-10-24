@@ -1,7 +1,7 @@
 ---
 title: App icons through libmorph-build
 date: 2026-10-24
-status: Draft
+status: In implementation
 covers:
   - "libmorph-build turning on libmobile's `icons` and re-exporting
     `gradle::Icon`, so `gradle_project(id).icon(Icon::png(..))` works in
@@ -58,3 +58,9 @@ sources, while the generated files are in whatever format each platform
 takes (that plan's amendment "approved; sources are PNGs, outputs are what
 the platform takes"). The status stays `Draft` until the first commit
 that implements it.
+
+## Amendment — 2026-10-24 14:31 EDT: implementation has started; the document is now immutable
+
+Step 1 starts with this commit, against libmobile 0.2.5 (`e5221d8`, tag
+`v0.2.5`). The document now changes only on the owner's explicit
+instruction.

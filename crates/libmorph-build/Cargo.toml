@@ -7,4 +7,6 @@ description = "Build-script helpers for libmorph apps: Gradle project generation
 repository = "https://github.com/tmzt/libmorph"
 
 [dependencies]
-libmobile = { git = "https://github.com/tmzt/libmobile" }
+# `icons`: gradle::Icon and Project::icon (host-only; this crate is a
+# build-dependency).
+libmobile = { git = "https://github.com/tmzt/libmobile", features = ["icons"] }

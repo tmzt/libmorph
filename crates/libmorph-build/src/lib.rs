@@ -10,6 +10,18 @@
 //!     .expect("gradle project");
 //! ```
 //!
+//! An icon is declared from one PNG, and the launcher, round, adaptive and
+//! monochrome resources are generated from it:
+//!
+//! ```no_run
+//! use libmorph_build::gradle::Icon;
+//!
+//! libmorph_build::gradle_project("com.example.app")
+//!     .icon(Icon::png("icon/icon-1024.png").background_color([0x10, 0x14, 0x1c]))
+//!     .generate()
+//!     .expect("gradle project");
+//! ```
+//!
 //! libmorph's own build script republishes libmobile's Gradle handoff under
 //! libmorph's `links` key, which Cargo exposes to the app's build script
 //! because the app depends on libmorph directly.
