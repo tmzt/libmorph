@@ -994,3 +994,13 @@ hold up the current work"): libmorph-build 0.2.5 (tag
 `libmorph-build-v0.2.5`) with app icons, and libmorph 0.4.2 (`a28e9bb`, tag
 `v0.4.2`), both taking libmobile 0.2.5. The icon plan is Implemented here;
 the launcher check on the S23 is libmobile's step 2.
+
+## 2026-10-24 15:34 EDT — The system's dark mode (proposed)
+
+Plan: `docs/design/20261024_05_DARK_MODE_PLAN.md` (Draft). Requested by the handlr session with the
+owner's "yes", for its Appearance setting's System option: libmobile reads
+Android's night mode, and libmorph offers `dark_mode()` and
+`on_dark_mode` on every host, with winit's theme on the desktop and the
+web.
+
+Proposed only; nothing is implemented until the owner approves.
