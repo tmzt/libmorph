@@ -48,3 +48,13 @@ related:
    example's APK lists its icons (`aapt dump badging`).
 2. **Release** libmorph-build, on the owner's word. Additive (a new
    re-exported type and builder method).
+
+## Amendment — 2026-10-24 13:55 EDT: approved
+
+The owner approved this plan with libmobile's
+`docs/design/20261024_03_APP_ICON_PLAN.md` on 2026-10-24, with its
+recommended answers and the owner's note that PNG describes the bitmap
+sources, while the generated files are in whatever format each platform
+takes (that plan's amendment "approved; sources are PNGs, outputs are what
+the platform takes"). The status stays `Draft` until the first commit
+that implements it.
