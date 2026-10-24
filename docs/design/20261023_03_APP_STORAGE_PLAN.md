@@ -150,3 +150,15 @@ Open questions 2 to 5 stand. A new question 1: keep `Option<&Path>`
 (recommended), or return `&Path` with a documented fallback (for
 example a temporary directory) where there is no storage, which would
 change the signature and break callers.
+
+## Amendment — 2026-10-23 23:32 EDT: approved
+
+The owner approved the app storage plans in libmobile, libdevice and
+libmorph on 2026-10-23 ("approved plan and start"). In libmorph's plan,
+as amended ("`data_dir()` itself becomes cross-platform"), the answers
+are: `data_dir()` keeps `Option<&Path>` ("it's missing on web so option
+makes sense", relayed by the handlr session); a new `APP_ID`, with
+`SECURE_STORE_ID` unchanged; the pipeline cache stays at
+`<data_dir>/libmorph/`; `None` on the web for now; libdevice computes
+the Linux and Windows paths too. The status stays `Draft` until the
+first commit that implements it.
