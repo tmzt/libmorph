@@ -913,3 +913,14 @@ Plan: `docs/design/20261024_02_DEVICE_INFO_PLAN.md`. The owner's decision:
 libmorph's method is `build_info()`, like libmobile's, returning its own
 `BuildInfo { vendor, make, model }`. This replaces `brand_info()` in the
 0.4.0 plan above.
+
+## 2026-10-24 13:13 EDT — Released libmorph 0.4.0 and libmorph-build 0.2.3
+
+On the owner's word (2026-10-24), released now rather than with
+everything in "libmorph 0.4.0 planned" above, so `open_link` and the
+foreground service reach handlr sooner: libmorph 0.4.0 (`586ef89`, tag
+`v0.4.0`) and libmorph-build 0.2.3 (tag `libmorph-build-v0.2.3`), taking
+libmobile 0.2.3 and libdevice 0.1.2. Open link and app storage are
+Implemented. The foreground service (its device checks) and memory
+pressure (stage 2) stay In implementation. `build_info()` and
+`on_trim_memory` follow in 0.4.1, after libmobile 0.2.4.
