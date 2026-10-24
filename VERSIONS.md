@@ -188,3 +188,12 @@ opening links (`docs/design/20261023_02_OPEN_LINK_PLAN.md`), app storage
   `mobile-battery` and `tokio` (adds `tokio` 1 with `sync` only).
 - **Dependencies:** libmobile 0.2.2 → 0.2.3 and libdevice 0.1.1 → 0.1.2,
   both compatible; on macOS libdevice's `open-link` is always on.
+
+## libmorph-build 0.2.3 — 2026-10-24 (tag libmorph-build-v0.2.3)
+
+No changes of its own.
+
+- libmobile 0.2.2 → 0.2.3 (compatible), whose `gradle` module it
+  re-exports: `Project::foreground_service`,
+  `foreground_service_keeps_running` and
+  `request_ignore_battery_optimizations`, and `gradle::ServiceType`.
