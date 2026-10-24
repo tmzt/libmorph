@@ -1,16 +1,25 @@
 #!/usr/bin/env python3
-"""Make an app's Android launcher icons from one square PNG.
+"""Make an app's Android launcher icons from one square image.
 
     python3 -I scripts/make_icon.py --source art.png --out icon/
+                                    [--key RRGGBB|auto] [--key-tolerance T]
                                     [--background RRGGBB] [--hue DEG]
                                     [--full-bleed] [--no-monochrome]
 
 Needs Python 3 with Pillow and numpy.
 
-The source is a square PNG, at least 432 px (1024 recommended):
+The source is a square image (PNG, JPEG or anything Pillow reads), at least
+432 px (1024 recommended):
   - by default, the artwork on transparency. It is placed inside the
     adaptive icon's 66 dp safe circle, and drawn over a rounded square of
     the background colour for the legacy icons;
+  - with --key, the artwork on a flat colour, such as a JPEG. Pixels of
+    the key colour become transparent, and edges are unmixed from it
+    (alpha from each pixel's distance to the key, its colour solved from
+    p = a*C + (1-a)*key), so no fringe of the old colour is left. `auto`
+    takes the key from the image's corners. --key-tolerance (0..1,
+    default 0.03) is how close to the key still counts as transparent,
+    which absorbs JPEG noise;
   - with --full-bleed, an image made for the whole 108 dp adaptive canvas
     (artwork inside its centre 66 dp), used as the foreground unchanged.
 
@@ -214,29 +223,58 @@ def load_source(path):
         src.load()
     except (OSError, ValueError) as error:
         sys.exit(f"make_icon: cannot read {path}: {error}")
-    if src.format != "PNG":
-        sys.exit(f"make_icon: {path} is not a PNG ({src.format})")
     if src.width != src.height:
         sys.exit(f"make_icon: {path} is not square ({src.width}x{src.height})")
     if src.width < MIN_SOURCE:
         print(f"make_icon: warning: {path} is {src.width} px; scaling up to {MASTER}",
               file=sys.stderr)
-    return premul_resize(src.convert("RGBA"), (MASTER, MASTER))
+    return src.convert("RGBA")
 
 
-def parse_rgb(text):
+def corner_key(img):
+    """The key colour: the median of four 16 px corner patches."""
+    arr = np.asarray(img.convert("RGB")).astype(np.float64)
+    n = max(1, min(16, img.width // 8))
+    patches = [arr[:n, :n], arr[:n, -n:], arr[-n:, :n], arr[-n:, -n:]]
+    return np.median(np.concatenate([p.reshape(-1, 3) for p in patches]), axis=0)
+
+
+def unmix_key(img, key, tolerance):
+    """`img` with the key colour made transparent: each pixel's alpha is the
+    least `a` for which p = a*C + (1-a)*key has C within 0..255, less the
+    tolerance, and C is solved from it."""
+    arr = np.asarray(img).astype(np.float64)
+    p = arr[..., :3]
+    k = np.asarray(key, dtype=np.float64)
+    up = np.where(p > k, (p - k) / np.maximum(255.0 - k, 1e-6), 0.0)
+    down = np.where(p < k, (k - p) / np.maximum(k, 1e-6), 0.0)
+    a = np.maximum(up, down).max(axis=2)
+    a = np.clip((a - tolerance) / max(1.0 - tolerance, 1e-6), 0.0, 1.0)
+    # The source's own alpha still counts (a PNG with a key colour too).
+    a = a * (arr[..., 3] / 255.0)
+    safe = np.maximum(a, 1e-3)[..., None]
+    c = np.clip((p - (1.0 - a[..., None]) * k) / safe, 0.0, 255.0)
+    out = np.dstack([c, a * 255.0]).round().astype(np.uint8)
+    return Image.fromarray(out, "RGBA")
+
+
+def parse_rgb(text, option="--background"):
     text = text.lstrip("#")
     if len(text) != 6:
-        sys.exit(f"make_icon: --background {text!r} is not RRGGBB")
+        sys.exit(f"make_icon: {option} {text!r} is not RRGGBB")
     try:
         return tuple(int(text[i : i + 2], 16) for i in (0, 2, 4))
     except ValueError:
-        sys.exit(f"make_icon: --background {text!r} is not RRGGBB")
+        sys.exit(f"make_icon: {option} {text!r} is not RRGGBB")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--source", required=True, help="square PNG, 1024 px recommended")
+    ap.add_argument("--source", required=True,
+                    help="square image (PNG, JPEG, ...), 1024 px recommended")
+    ap.add_argument("--key", help="RRGGBB, or 'auto' from the corners: the colour to make transparent")
+    ap.add_argument("--key-tolerance", type=float, default=0.03,
+                    help="0..1: how close to the key still counts as transparent (default 0.03)")
     ap.add_argument("--out", required=True, help="output directory")
     ap.add_argument("--background", default=DEFAULT_BACKGROUND, help="RRGGBB")
     ap.add_argument("--hue", type=float, default=0.0,
@@ -247,7 +285,17 @@ def main():
                     help="leave the themed-icon layer out")
     args = ap.parse_args()
 
-    art = turn_hue(load_source(args.source), args.hue)
+    src = load_source(args.source)
+    if args.key:
+        if not 0.0 <= args.key_tolerance < 1.0:
+            sys.exit("make_icon: --key-tolerance must be at least 0 and below 1")
+        key = corner_key(src) if args.key == "auto" else parse_rgb(args.key, "--key")
+        print("make_icon: key #%02X%02X%02X" % tuple(int(round(x)) for x in key))
+        src = unmix_key(src, key, args.key_tolerance)
+    elif not args.full_bleed and np.asarray(src.getchannel("A")).min() == 255:
+        print("make_icon: warning: the source has no transparency; the whole square is "
+              "the artwork (use --key to drop a flat background)", file=sys.stderr)
+    art = turn_hue(premul_resize(src, (MASTER, MASTER)), args.hue)
     bg = parse_rgb(args.background)
     hexbg = "%02X%02X%02X" % bg
     out = args.out
