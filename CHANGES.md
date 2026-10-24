@@ -690,3 +690,11 @@ The owner approved the app storage plans in libmobile, libdevice and
 libmorph ("approved plan and start"): `data_dir()` on every host with a
 filesystem, `Option` kept for the web, a new `MorphApp::APP_ID`, and a
 new `cache_dir()`. libmobile and libdevice are built first.
+
+## 2026-10-24 12:17 EDT — Memory pressure (approved)
+
+Plan: `docs/design/20261024_01_MEMORY_PRESSURE_PLAN.md` (Draft, approved). Requested by handlr on the
+owner's instruction, and approved by the owner ("approve them, the new
+hook in stages"): libmorph's `on_low_memory` first, over libmobile's
+existing `MobileEvent::LowMemory`; then libmobile's
+`MobileEvent::TrimMemory(TrimLevel)` and libmorph's `on_trim_memory`.
