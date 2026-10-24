@@ -14,6 +14,7 @@
 
 mod app;
 mod audio;
+pub mod battery;
 mod config;
 mod context;
 mod gpu;
@@ -27,6 +28,8 @@ pub mod safe_area;
 mod screenshot;
 pub mod script;
 mod secure_store;
+pub mod service;
+pub mod system_events;
 
 pub use app::{Frame, MorphApp};
 pub use audio::{

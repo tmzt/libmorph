@@ -403,6 +403,7 @@ fn emulated_safe_area(spec: &DeviceSpec, (width, height): (u32, u32)) -> SafeAre
 
 impl<A: MorphApp> ApplicationHandler<Ready> for Handler<A> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        crate::system_events::publish(crate::system_events::SystemEvent::Visible(true));
         // Before the first resume there is no shell yet, and the stream is
         // already playing.
         if let Some(shell) = &self.shell {
@@ -413,6 +414,7 @@ impl<A: MorphApp> ApplicationHandler<Ready> for Handler<A> {
     }
 
     fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+        crate::system_events::publish(crate::system_events::SystemEvent::Visible(false));
         #[cfg(target_os = "macos")]
         self.cancel_pad();
         if let Some(shell) = &mut self.shell {

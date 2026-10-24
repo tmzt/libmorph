@@ -1,7 +1,7 @@
 ---
 title: Foreground service and system events
 date: 2026-10-23
-status: Draft
+status: In implementation
 covers:
   - A generated Android foreground service (libmobile), declared from the
     app's build script with its service types, and controlled from Rust on
@@ -600,3 +600,9 @@ Section 8 and open question 5 stand as follows:
 No microphone in the background: Android stops input when the app is
 hidden. The status stays `Draft` until step 5's first commit, after
 libmobile 0.2.3 is released.
+
+## Amendment — 2026-10-24 12:27 EDT: implementation has started; the document is now immutable
+
+Step 5 (libmorph wraps it) starts with this commit, against libmobile
+0.2.3 (tag `v0.2.3`). The document now changes only on the owner's
+explicit instruction.

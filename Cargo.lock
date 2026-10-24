@@ -1037,6 +1037,7 @@ dependencies = [
  "ndk",
  "ndk-context",
  "raw-window-handle",
+ "tokio",
  "zeroize",
 ]
 
@@ -1057,6 +1058,7 @@ dependencies = [
  "png",
  "pollster",
  "raw-window-handle",
+ "tokio",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

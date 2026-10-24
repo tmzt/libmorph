@@ -29,6 +29,17 @@ mobile-camera = ["mobile", "libmobile/camera"]
 # The secure store's Keystore key in the TEE only, never StrongBox. Negative,
 # so turning off default features cannot turn off StrongBox; apps only.
 mobile-secure-store-no-strongbox = ["mobile", "libmobile/secure-store-no-strongbox"]
+# A foreground service with its notification (`libmorph::service`) and
+# its events (`MorphApp::on_service`).
+mobile-foreground-service = ["mobile", "libmobile/foreground-service"]
+# libmobile's system events for `libmorph::system_events`: visibility,
+# focus, the service, the network and Doze.
+mobile-system-events = ["mobile", "libmobile/system-events"]
+# Battery optimization and app sleeping (`libmorph::battery`).
+mobile-battery = ["mobile", "libmobile/battery"]
+# `system_events::subscribe_tokio`: libmobile's on Android, and libmorph's
+# own desktop stream. No tokio runtime is needed to send.
+tokio = ["libmobile?/tokio", "dep:tokio"]
 web = [
     "dep:wasm-bindgen",
     "dep:wasm-bindgen-futures",
@@ -53,6 +64,8 @@ wgpu = "30.0.1"
 # Its platform-free types (`SafeArea`, `Insets`) build on any host; the
 # runtime is Android-only.
 libmobile = { git = "https://github.com/tmzt/libmobile", optional = true }
+# `system_events::subscribe_tokio` (feature `tokio`): an unbounded channel only.
+tokio = { version = "1", default-features = false, features = ["sync"], optional = true }
 
 # The host copy, for `libmobile::gradle::forward_metadata` in build.rs.
 # `dep:libmobile` (the `mobile` feature) enables it with the normal one.

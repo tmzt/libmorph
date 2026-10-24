@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 
+use crate::service::ServiceEvent;
 use crate::{AudioSetup, Key, KeyStatus, LimitsRequest, MorphContext, Permissions, Touch};
 
 /// The surface texture for one frame. libmorph presents it after
@@ -121,6 +122,18 @@ pub trait MorphApp: Sized + 'static {
     /// not log it past its path, since a query or fragment may be a secret.
     fn on_open_url(&mut self, ctx: &mut MorphContext, url: &str) {
         let _ = (ctx, url);
+    }
+
+    /// The foreground service ([`service`](crate::service)) did something,
+    /// or its notification was tapped: an app button
+    /// ([`ServiceEvent::Action`]), Exit ([`ServiceEvent::Exited`], after
+    /// which the activity closes), a wake-lock change, `Started`, `Stopped`,
+    /// `Failed` and the rest. On the main thread, whether or not the app is
+    /// suspended, after [`init`](Self::init). Android with
+    /// `mobile-foreground-service` only; the app's other threads hear the
+    /// same through [`system_events`](crate::system_events).
+    fn on_service(&mut self, ctx: &mut MorphContext, event: &ServiceEvent) {
+        let _ = (ctx, event);
     }
 
     /// The surface is gone (app backgrounded). The device, queue and every

@@ -329,6 +329,18 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
                     }
                 }
             }
+            // The foreground service, on the main loop: also while suspended.
+            #[cfg(feature = "mobile-foreground-service")]
+            MobileEvent::Service(event) => {
+                match (
+                    &mut self.shell,
+                    crate::service::from_mobile_event(event.clone()),
+                ) {
+                    (Some(shell), Some(event)) => shell.app.on_service(&mut shell.ctx, &event),
+                    (None, _) => log::warn!("libmorph: a service event before the app exists"),
+                    (_, None) => log::debug!("libmorph: an unknown service event: {event:?}"),
+                }
+            }
             MobileEvent::ConfigChanged => {
                 if let Some(shell) = &mut self.shell {
                     shell.ctx.scale_factor = scale_factor(app);
