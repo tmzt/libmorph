@@ -83,3 +83,15 @@ the front matter and section 1: the method is
 `BrandInfo { vendor, make, model }`, otherwise as section 1 describes.
 libmobile's `build_info()` keeps its name, which follows Android's
 `Build`, unless the owner says otherwise. Questions 2 and 3 are open.
+
+## Amendment — 2026-10-24 13:06 EDT: approved, for 0.4.0
+
+The owner approved this plan and libmobile's
+`docs/design/20261024_02_BUILD_INFO_PLAN.md` on 2026-10-24 ("approve,
+plan a 0.4.0 with what we've planned"). Section 3:
+1. The name is `brand_info` (the amendment before this one).
+2. It ships in libmorph 0.4.0, after libmobile 0.2.4 with `build_info()`.
+3. Desktop, the web and scripted runs return `None` ("for now it can
+   return None", relayed by the handlr session).
+
+The status stays `Draft` until the first commit that implements it.
