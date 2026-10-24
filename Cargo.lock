@@ -631,7 +631,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1000,8 +1000,8 @@ checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 
 [[package]]
 name = "libdevice"
-version = "0.1.1"
-source = "git+https://github.com/tmzt/libdevice#b46963b724cf0451e94d099e26b1e8e7473d3add"
+version = "0.1.2"
+source = "git+https://github.com/tmzt/libdevice#9cbddc9c10420ac8233d25416b847b514d98c62d"
 dependencies = [
  "log",
  "security-framework",
@@ -1027,8 +1027,8 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libmobile"
-version = "0.2.2"
-source = "git+https://github.com/tmzt/libmobile#eccea7cdf960fbcf9f71763b46abf6462133074e"
+version = "0.2.3"
+source = "git+https://github.com/tmzt/libmobile#7973fb3bda47d5f86130d1bc6bc17120eb2f49e7"
 dependencies = [
  "android-activity",
  "cpal",
@@ -1976,7 +1976,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2792,7 +2792,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
