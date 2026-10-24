@@ -665,3 +665,13 @@ The owner approved, on 2026-10-23 ("approve plans"), with the
 recommended answers:
 - `docs/design/20261023_02_OPEN_LINK_PLAN.md`: `MorphContext::open_link`,
   after libmobile's and libdevice's releases.
+
+## 2026-10-23 23:30 EDT — App storage directories (proposed)
+
+Plan: `docs/design/20261023_03_APP_STORAGE_PLAN.md` (Draft). On the owner's request, relayed by the
+handlr session: "libmorph should provide a persistent storage location on
+all platforms, with mkdir_all". libmobile gives Android's files and cache
+directories, libdevice the desktop paths by app id, and libmorph creates
+them before `init` as `MorphContext::storage_dir()` and `cache_dir()`.
+
+Proposed only; nothing is implemented until the owner approves.
