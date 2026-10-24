@@ -1086,6 +1086,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "libmorph-example-background-android"
+version = "0.1.0"
+dependencies = [
+ "android_logger",
+ "libmorph",
+ "libmorph-build",
+ "log",
+]
+
+[[package]]
 name = "libmorph-example-securestore-android"
 version = "0.1.0"
 dependencies = [

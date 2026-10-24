@@ -1,0 +1,28 @@
+[package]
+name = "libmorph-example-background-android"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "The background example on Android: a foreground service keeps a TCP connection alive"
+
+[lib]
+name = "background_android"
+crate-type = ["lib", "cdylib"]
+
+[dependencies]
+libmorph = { path = "../../..", default-features = false }
+log = "0.4"
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.14"
+libmorph = { path = "../../..", default-features = false, features = [
+    "mobile",
+    "mobile-foreground-service",
+    "mobile-system-events",
+    "mobile-battery",
+] }
+
+# Generates the Gradle project from libmorph's forwarded libmobile metadata.
+[build-dependencies]
+libmorph-build = { path = "../../../crates/libmorph-build" }
