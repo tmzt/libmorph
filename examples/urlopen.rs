@@ -120,6 +120,10 @@ impl MorphApp for UrlOpen {
         }
     }
 
+    fn on_trim_memory(&mut self, _ctx: &mut MorphContext, level: libmorph::TrimLevel) {
+        log::info!("urlopen: on_trim_memory {level:?}");
+    }
+
     fn on_open_url(&mut self, _ctx: &mut MorphContext, url: &str) {
         match scheme_and_host(url) {
             Some((scheme, host)) => {
