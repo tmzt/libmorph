@@ -698,3 +698,39 @@ owner's instruction, and approved by the owner ("approve them, the new
 hook in stages"): libmorph's `on_low_memory` first, over libmobile's
 existing `MobileEvent::LowMemory`; then libmobile's
 `MobileEvent::TrimMemory(TrimLevel)` and libmorph's `on_trim_memory`.
+
+## 2026-10-24 12:27 EDT — Foreground service wrapper: `MorphApp::on_service` approved; implementation starts
+
+Plan: `docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md`, section 5 and
+step 5, as replaced by its amendment "approved; implemented in libmobile,
+wrapped here", over libmobile 0.2.3 (its plans
+`20261023_01_FOREGROUND_SERVICE_PLAN.md` and
+`20261023_02_BATTERY_EXEMPTION_PLAN.md`).
+
+- **The new hook, approved.** The owner approved, on 2026-10-24
+  ("approve them, the new hook in stages"), a new defaulted hook
+  `MorphApp::on_service(&mut self, ctx: &mut MorphContext, event:
+  &ServiceEvent)`. It delivers libmobile's `MobileEvent::Service` on the
+  main loop (Exit, the app's buttons, wake-lock changes, `Started`,
+  `Stopped`, `Failed` and the rest), after `init` and whether or not the
+  app is suspended. Android with `mobile-foreground-service` only.
+- **Names, as the plans give them.** `libmorph::service` (`start`,
+  `update`, `update_text`, `stop`, `is_running`, `set_wake_lock`,
+  `wake_lock_held`, `ServiceOptions`, `ServiceType`, `Controls`,
+  `ControlLabels`, `NotificationContent`, `NotificationAction`,
+  `LockScreenVisibility`, `ServiceError`, `ServiceEvent`, `MAX_ACTIONS`),
+  `libmorph::battery` (the name libmobile's battery plan gives the
+  wrapper; its calls, `BatteryState`, `Page`, `BatteryError`) and
+  `libmorph::system_events` (`subscribe`, `Events`, `current`,
+  `SystemState`, `SystemEvent`, `NetworkInfo`, `Transport`, and
+  `subscribe_tokio` under `tokio`). All are libmorph's own types, the
+  same with or without features, with libmobile's `new` constructors.
+- **Off Android:** `service::start` is `ServiceError::Unsupported` and the
+  other service calls do nothing (`Ok`, `false`); every battery call is
+  `BatteryError::Unsupported`. On Android without
+  `mobile-foreground-service`, `start` is `NotDeclared` (the build cannot
+  have declared the service), and the battery calls without
+  `mobile-battery` are `Unsupported`.
+- **The desktop stream** reports `Visible(true)` and `Visible(false)` from
+  winit's `resumed` and `suspended`: the plan's `Foreground`, which the
+  review amendment renamed `Visible`. Nothing else, as section 5 says.
