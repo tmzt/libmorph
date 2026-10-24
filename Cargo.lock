@@ -1004,6 +1004,9 @@ version = "0.1.2"
 source = "git+https://github.com/tmzt/libdevice#9cbddc9c10420ac8233d25416b847b514d98c62d"
 dependencies = [
  "log",
+ "objc2 0.5.3",
+ "objc2-app-kit",
+ "objc2-foundation 0.2.2",
  "security-framework",
  "toml",
  "zeroize",
