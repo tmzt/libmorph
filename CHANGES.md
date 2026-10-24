@@ -906,3 +906,10 @@ On the S23, `on_low_memory` did not fire: android-activity's `LowMemory`
 comes only from `onLowMemory`, and `am send-trim-memory` refused
 `COMPLETE` for a process with a foreground service. Stage 2 is what
 delivers memory pressure there.
+
+## 2026-10-24 13:08 EDT — Device info: `build_info`, not `brand_info`
+
+Plan: `docs/design/20261024_02_DEVICE_INFO_PLAN.md`. The owner's decision:
+libmorph's method is `build_info()`, like libmobile's, returning its own
+`BuildInfo { vendor, make, model }`. This replaces `brand_info()` in the
+0.4.0 plan above.
