@@ -2,6 +2,7 @@
 """Make an app's Android launcher icons from one square image.
 
     python3 -I scripts/make_icon.py --source art.png --out icon/
+                                    [--crop X,Y,W,H]
                                     [--key RRGGBB|auto] [--key-tolerance T]
                                     [--background RRGGBB] [--hue DEG]
                                     [--full-bleed] [--no-monochrome]
@@ -9,7 +10,8 @@
 Needs Python 3 with Pillow and numpy.
 
 The source is a square image (PNG, JPEG or anything Pillow reads), at least
-432 px (1024 recommended):
+432 px (1024 recommended), or a square region of a larger image given by
+--crop X,Y,W,H in source pixels (W must equal H):
   - by default, the artwork on transparency. It is placed inside the
     adaptive icon's 66 dp safe circle, and drawn over a rounded square of
     the background colour for the legacy icons;
@@ -18,7 +20,7 @@ The source is a square image (PNG, JPEG or anything Pillow reads), at least
     (alpha from each pixel's distance to the key, its colour solved from
     p = a*C + (1-a)*key), so no fringe of the old colour is left. `auto`
     takes the key from the image's corners. --key-tolerance (0..1,
-    default 0.03) is how close to the key still counts as transparent,
+    default 0.08) is how close to the key still counts as transparent,
     which absorbs JPEG noise;
   - with --full-bleed, an image made for the whole 108 dp adaptive canvas
     (artwork inside its centre 66 dp), used as the foreground unchanged.
@@ -217,12 +219,29 @@ COLOR_XML = """<?xml version="1.0" encoding="utf-8"?>
 """
 
 
-def load_source(path):
+def parse_crop(text):
+    try:
+        x, y, w, h = (int(v) for v in text.split(","))
+    except ValueError:
+        sys.exit(f"make_icon: --crop {text!r} is not X,Y,W,H")
+    if w <= 0 or h <= 0 or x < 0 or y < 0:
+        sys.exit(f"make_icon: --crop {text!r} needs X, Y >= 0 and W, H > 0")
+    return x, y, w, h
+
+
+def load_source(path, crop=None):
     try:
         src = Image.open(path)
         src.load()
     except (OSError, ValueError) as error:
         sys.exit(f"make_icon: cannot read {path}: {error}")
+    if crop:
+        x, y, w, h = crop
+        if x + w > src.width or y + h > src.height:
+            sys.exit(f"make_icon: --crop {x},{y},{w},{h} is outside {path} "
+                     f"({src.width}x{src.height})")
+        src = src.crop((x, y, x + w, y + h))
+        path = f"{path} [{x},{y},{w},{h}]"
     if src.width != src.height:
         sys.exit(f"make_icon: {path} is not square ({src.width}x{src.height})")
     if src.width < MIN_SOURCE:
@@ -272,9 +291,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--source", required=True,
                     help="square image (PNG, JPEG, ...), 1024 px recommended")
+    ap.add_argument("--crop", help="X,Y,W,H: the square region of the source to use")
     ap.add_argument("--key", help="RRGGBB, or 'auto' from the corners: the colour to make transparent")
-    ap.add_argument("--key-tolerance", type=float, default=0.03,
-                    help="0..1: how close to the key still counts as transparent (default 0.03)")
+    ap.add_argument("--key-tolerance", type=float, default=0.08,
+                    help="0..1: how close to the key still counts as transparent (default 0.08)")
     ap.add_argument("--out", required=True, help="output directory")
     ap.add_argument("--background", default=DEFAULT_BACKGROUND, help="RRGGBB")
     ap.add_argument("--hue", type=float, default=0.0,
@@ -285,7 +305,7 @@ def main():
                     help="leave the themed-icon layer out")
     args = ap.parse_args()
 
-    src = load_source(args.source)
+    src = load_source(args.source, parse_crop(args.crop) if args.crop else None)
     if args.key:
         if not 0.0 <= args.key_tolerance < 1.0:
             sys.exit("make_icon: --key-tolerance must be at least 0 and below 1")
