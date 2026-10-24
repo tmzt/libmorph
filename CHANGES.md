@@ -786,3 +786,18 @@ phone). The owner was using the phone at the same time (Termux in front).
 
 The example was force-stopped afterwards; `POST_NOTIFICATIONS` stays
 granted to it, as answered on the phone.
+
+## 2026-10-24 12:50 EDT — Open link: the web cuts the opener after `window.open`
+
+Plan: `docs/design/20261023_02_OPEN_LINK_PLAN.md`, step 1 (section 1's
+web bullet: `window.open(url, "_blank", "noopener")`, a blocked pop-up,
+`None`, being `Platform("blocked")`). With `noopener` in the
+features string, `window.open` returns null even when the tab opens, so
+every call would read as blocked. libmorph calls
+`window.open(url, "_blank")` and sets the returned window's `opener`
+to null, which cuts the opener as `noopener` does and keeps `None`
+meaning blocked. The check before it is the same as on every host.
+
+Also: the commit implementing step 1 (`1e32d90`) left out the
+`Cargo.lock` lines for libdevice's `open-link` dependencies, which
+`8734d4b` adds; nothing between them ran with the lock missing them.
