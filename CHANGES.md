@@ -865,3 +865,26 @@ vendor, make and model". libmobile reads `Build.MANUFACTURER`, `BRAND`
 and `MODEL` only; libmorph wraps them as `MorphContext::hardware()`.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-24 13:06 EDT — Memory pressure, stage 1: checked; `am send-trim-memory` does not reach `on_low_memory`
+
+Plan: `docs/design/20261024_01_MEMORY_PRESSURE_PLAN.md`, step 1 (`a72a3b4`),
+with the `background` example logging `on_low_memory` (`2c690ed`).
+
+- **Scripted runs: passed.** `tests/low_memory.rs`:
+  `init, low memory, frame, suspend, low memory, resume, low memory,
+  suspend` for `low-memory` before a frame, while suspended and after
+  the resume.
+- **S23: `on_low_memory` did not fire, as the plan allowed ("if
+  android-activity forwards it; whichever happens is recorded").** With
+  the example in front (pid 19855), `am send-trim-memory <pkg>
+  RUNNING_CRITICAL` was accepted and the process logged
+  `HWUI CacheManager::trimMemory(15)`, but no `background: on_low_memory`:
+  Android sends trim levels to `onTrimMemory`, and android-activity's
+  `LowMemory` comes only from `NativeActivity`'s `onLowMemory`.
+  `COMPLETE` was refused, in front and after Home alike ("Unable to set
+  a background trim level on a foreground process"), since the running
+  foreground service keeps the process foreground; `RUNNING_CRITICAL`
+  after Home was refused as "higher than current level". So trim reports
+  reach the app only with stage 2 (libmobile's `onTrimMemory`). The
+  example was force-stopped afterwards.
