@@ -606,3 +606,13 @@ libmobile 0.2.3 is released.
 Step 5 (libmorph wraps it) starts with this commit, against libmobile
 0.2.3 (tag `v0.2.3`). The document now changes only on the owner's
 explicit instruction.
+
+## Amendment — 2026-10-24 13:12 EDT: released in 0.4.0; step 5's device checks still open
+
+Step 5 is `d4c4774`, `a49e5a6`, `ea54c70`, `0a667ca`, `ecc43b4`,
+`9f958f5` and `f892940`, with `MorphApp::on_service` approved by the
+owner. Step 6 is libmorph 0.4.0 (`586ef89`, tag `v0.4.0`) and
+libmorph-build 0.2.3 (tag `libmorph-build-v0.2.3`), released on the
+owner's word before step 5's device checks are complete: the
+notification's buttons, the screen off, and the 10-minute run need the
+owner's hands. The status stays `In implementation` until they pass.

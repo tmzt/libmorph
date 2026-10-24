@@ -1,7 +1,7 @@
 ---
 title: Opening a link in another app
 date: 2026-10-23
-status: In implementation
+status: Implemented
 covers:
   - "`MorphContext::open_link(url)`: one call on every host, wrapping
     libmobile on Android and libdevice on the Mac"
@@ -102,3 +102,15 @@ that implements it.
 Step 1 (the wrapper) starts with this commit, against libmobile 0.2.3
 (tag `v0.2.3`) and libdevice 0.1.2 (tag `v0.1.2`). The document now
 changes only on the owner's explicit instruction.
+
+## Amendment — 2026-10-24 13:12 EDT: implemented
+
+Every step is done:
+1. `1e32d90` and `8734d4b` (its lock), with `2b37fe8` (CHANGES: the
+   web's `opener` departure) and `5d15a53` (AGENTS.md).
+2. `3acaed1` (the `urlopen` example), results in `e4ad22c`: the browser
+   opened on the Mac and on the S23; the scripted run logged the link
+   redacted and opened nothing.
+3. libmorph 0.4.0 (`586ef89`, tag `v0.4.0`), taking libmobile 0.2.3 and
+   libdevice 0.1.2, on the owner's word. The handlr session gets the
+   revision after the push.

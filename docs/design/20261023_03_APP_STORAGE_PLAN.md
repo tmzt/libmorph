@@ -1,7 +1,7 @@
 ---
 title: Persistent storage and cache directories on every host
 date: 2026-10-23
-status: In implementation
+status: Implemented
 covers:
   - "`MorphContext::storage_dir()` and `cache_dir()`: a private per-app
     directory on every host, created before `init`"
@@ -169,3 +169,13 @@ Step 1 (the wrapper, with `data_dir()` as amended) starts with this
 commit, against libmobile 0.2.3 (tag `v0.2.3`) and libdevice 0.1.2 (tag
 `v0.1.2`). The document now changes only on the owner's explicit
 instruction.
+
+## Amendment — 2026-10-24 13:12 EDT: implemented
+
+Every step is done:
+1. `e5cc6bb` (`data_dir()` on every host, `cache_dir()`, `APP_ID`),
+   with `afc53c7` (AGENTS.md).
+2. `27a9d3d` (the `background` example's launch counter), results in
+   `9185481`: the count survived restarts on the Mac and the S23, and
+   scripted runs started empty each time.
+3. libmorph 0.4.0 (`586ef89`, tag `v0.4.0`), on the owner's word.

@@ -106,3 +106,10 @@ the type is libmorph's own `BuildInfo { vendor, make, model }`, mapped
 from libmobile's `manufacturer`, `brand` and `model`. Each field's
 rustdoc names its Android source. Everything else in the approval
 amendment stands.
+
+## Amendment — 2026-10-24 13:12 EDT: in 0.4.1
+
+The owner's decision (2026-10-24): libmorph 0.4.0 is released without it,
+so that `open_link` and the foreground service reach handlr sooner. This
+replaces answer 2 of the approval amendment: `build_info()` ships in
+libmorph 0.4.1, after libmobile 0.2.4. Additive.

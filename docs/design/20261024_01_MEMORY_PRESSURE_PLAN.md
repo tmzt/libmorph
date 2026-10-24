@@ -123,3 +123,14 @@ Step 1 (stage 1: `on_low_memory`) starts with this commit, over
 libmobile 0.2.3's `MobileEvent::LowMemory`. Stage 2 waits for libmobile's
 trim-memory release. The document now changes only on the owner's
 explicit instruction.
+
+## Amendment — 2026-10-24 13:12 EDT: stage 1 released in 0.4.0; stage 2 in 0.4.1
+
+Step 1 is `a72a3b4`, `2c690ed`, `7ac722d` and `efaba1f`. On the S23
+`on_low_memory` did not fire: android-activity's `LowMemory` comes only
+from `onLowMemory`, and `am send-trim-memory` refused `COMPLETE` for a
+process with a foreground service, while `RUNNING_CRITICAL` reached the
+process as `trimMemory(15)`; the step allows recording either. Step 2 is
+libmorph 0.4.0 (`586ef89`, tag `v0.4.0`). Stage 2 ships in 0.4.1, after
+libmobile 0.2.4, on the owner's word (2026-10-24: release 0.4.0 now and
+the rest as 0.4.1).
