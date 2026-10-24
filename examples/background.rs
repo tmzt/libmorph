@@ -218,6 +218,7 @@ impl MorphApp for Background {
 
     fn init(ctx: &mut MorphContext) -> Self {
         log::info!("background: init");
+        log::info!("background: build info {:?}", ctx.build_info());
         match ctx.data_dir() {
             Some(dir) => match count_launch(dir) {
                 Ok(count) => log::info!("background: launch {count} ({})", dir.display()),
@@ -291,6 +292,10 @@ impl MorphApp for Background {
 
     fn on_low_memory(&mut self, _ctx: &mut MorphContext) {
         log::info!("background: on_low_memory");
+    }
+
+    fn on_trim_memory(&mut self, _ctx: &mut MorphContext, level: libmorph::TrimLevel) {
+        log::info!("background: on_trim_memory {level:?}");
     }
 
     fn on_suspend(&mut self, _ctx: &mut MorphContext) {
