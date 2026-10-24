@@ -230,3 +230,14 @@ No public API changes of its own; released with libmorph-build 0.2.5's app
 icons (`docs/design/20261024_03_APP_ICON_PLAN.md`).
 
 - **Dependencies:** libmobile 0.2.4 → 0.2.5 (compatible).
+
+## libmorph-build 0.2.5 — 2026-10-24 (tag libmorph-build-v0.2.5)
+
+App icons (`docs/design/20261024_03_APP_ICON_PLAN.md`). All additions.
+
+- libmobile 0.2.4 → 0.2.5 (compatible), now with its `icons` feature:
+  `gradle::Icon` (`png`, `pngs`, `background_color`, `background_png`,
+  `monochrome_png`, `full_bleed`) and `Project::icon`, through the
+  existing `gradle` re-export, so `gradle_project(id).icon(..)` generates
+  the Android launcher, round, adaptive and monochrome icons. It adds
+  `image` 0.25 (PNG only) to app build scripts.
