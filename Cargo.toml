@@ -136,3 +136,6 @@ name = "urlopen"
 [[example]]
 name = "securestore"
 required-features = ["secure-store"]
+
+[[example]]
+name = "background"
