@@ -29,6 +29,14 @@ pub trait MorphApp: Sized + 'static {
     /// executable's file stem. Unused elsewhere.
     const SECURE_STORE_ID: &'static str = "";
 
+    /// The app's directory name on the desktop, for
+    /// [`MorphContext::data_dir`] and [`cache_dir`](MorphContext::cache_dir):
+    /// `~/Library/Application Support/<APP_ID>` and `~/Library/Caches/<APP_ID>`
+    /// on macOS. 1 to 64 of `[A-Za-z0-9._-]`, not `.` or `..`; empty (the
+    /// default) uses the executable's file stem, with any other character
+    /// replaced by `_`. Android uses the package's own directories instead.
+    const APP_ID: &'static str = "";
+
     /// The device limits to ask for, before [`init`](Self::init). `base` is
     /// what libmorph asks for by default: the downlevel defaults (WebGL2
     /// defaults on a GL adapter) with texture sizes raised to the adapter's.

@@ -268,6 +268,10 @@ impl<A: MorphApp> Handler<A> {
             crate::Audio::open(super::audio_setup::<A>()),
         );
         place(&mut ctx, &window, size);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            (ctx.data_dir, ctx.cache_dir) = crate::storage::desktop(A::APP_ID);
+        }
         #[cfg(all(target_os = "macos", feature = "secure-store"))]
         {
             let namespace = crate::secure_store::namespace(A::SECURE_STORE_ID);

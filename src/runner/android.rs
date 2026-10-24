@@ -139,7 +139,8 @@ impl<A: MorphApp> Adapter<A> {
         let mut ctx = MorphContext::new(gpu, spec, Vec::new(), crate::Audio::open(setup));
         ctx.safe_area = self.safe_area;
         ctx.scale_factor = scale_factor(app);
-        ctx.data_dir = app.internal_data_path();
+        ctx.data_dir = crate::storage::ensure(libmobile::android::dirs::files_dir());
+        ctx.cache_dir = crate::storage::ensure(libmobile::android::dirs::cache_dir());
         ctx.android = Some(app.clone());
         #[cfg(feature = "secure-store")]
         {

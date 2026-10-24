@@ -30,6 +30,9 @@ pub(crate) fn run<A: MorphApp>(script: &Script, run: ScriptRun) -> Result<Report
     let mut ctx = MorphContext::new(gpu, spec, run.args, Audio::silent());
     ctx.safe_area = SafeArea::from(spec.insets(InsetType::SafeDrawing));
     ctx.scripted = true;
+    // The app's directories, inside the output and empty for each run.
+    ctx.data_dir = crate::storage::fresh(&dir.join("storage"));
+    ctx.cache_dir = crate::storage::fresh(&dir.join("cache"));
     #[cfg(feature = "secure-store")]
     {
         ctx.secure_store = Some(crate::SecureStore::memory());

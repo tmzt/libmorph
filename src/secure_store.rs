@@ -315,7 +315,7 @@ pub(crate) fn namespace(id: &str) -> String {
     )),
     allow(dead_code)
 )]
-fn default_id() -> String {
+pub(crate) fn default_id() -> String {
     // An Android app's process is named after its package.
     std::fs::read("/proc/self/cmdline")
         .ok()
@@ -336,7 +336,7 @@ fn default_id() -> String {
     )),
     allow(dead_code)
 )]
-fn default_id() -> String {
+pub(crate) fn default_id() -> String {
     std::env::current_exe()
         .ok()
         .and_then(|exe| exe.file_stem().map(|s| s.to_string_lossy().into_owned()))

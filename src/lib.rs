@@ -30,6 +30,7 @@ mod screenshot;
 pub mod script;
 mod secure_store;
 pub mod service;
+mod storage;
 pub mod system_events;
 
 pub use app::{Frame, MorphApp};

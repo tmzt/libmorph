@@ -21,6 +21,7 @@ pub struct MorphContext {
     pub(crate) audio: Audio,
     pub(crate) args: Vec<String>,
     pub(crate) data_dir: Option<PathBuf>,
+    pub(crate) cache_dir: Option<PathBuf>,
     pub(crate) pipeline_cache: Option<PipelineCacheStore>,
     pub(crate) exit_requested: bool,
     /// A scripted run: links are logged, not opened.
@@ -48,6 +49,7 @@ impl MorphContext {
             audio,
             args,
             data_dir: None,
+            cache_dir: None,
             pipeline_cache: None,
             exit_requested: false,
             scripted: false,
@@ -139,11 +141,26 @@ impl MorphContext {
         self.exit_requested = true;
     }
 
-    /// A private, persistent directory for app data: Android's internal data
-    /// path. `None` on desktop and the web.
+    /// A private directory for files the app keeps, created before
+    /// [`init`](crate::MorphApp::init). Android: the app's files directory
+    /// (libmobile); macOS: `~/Library/Application Support/<APP_ID>`, and
+    /// libdevice's per-user directory on other desktops
+    /// ([`MorphApp::APP_ID`](crate::MorphApp::APP_ID)); scripted runs:
+    /// `storage/` in the run's output, empty at the start of each run.
+    /// `None` on the web, and where it could not be created (logged at
+    /// error).
     #[must_use]
     pub fn data_dir(&self) -> Option<&Path> {
         self.data_dir.as_deref()
+    }
+
+    /// The same as [`data_dir`](Self::data_dir), for files the app can make
+    /// again: the system may delete them. Android: the app's cache
+    /// directory; macOS: `~/Library/Caches/<APP_ID>`; scripted runs:
+    /// `cache/` in the run's output, emptied each run; `None` on the web.
+    #[must_use]
+    pub fn cache_dir(&self) -> Option<&Path> {
+        self.cache_dir.as_deref()
     }
 
     /// The pipeline cache to pass as `cache` in pipeline descriptors.

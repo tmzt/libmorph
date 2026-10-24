@@ -1,7 +1,7 @@
 ---
 title: Persistent storage and cache directories on every host
 date: 2026-10-23
-status: Draft
+status: In implementation
 covers:
   - "`MorphContext::storage_dir()` and `cache_dir()`: a private per-app
     directory on every host, created before `init`"
@@ -162,3 +162,10 @@ makes sense", relayed by the handlr session); a new `APP_ID`, with
 `<data_dir>/libmorph/`; `None` on the web for now; libdevice computes
 the Linux and Windows paths too. The status stays `Draft` until the
 first commit that implements it.
+
+## Amendment — 2026-10-24 13:01 EDT: implementation has started; the document is now immutable
+
+Step 1 (the wrapper, with `data_dir()` as amended) starts with this
+commit, against libmobile 0.2.3 (tag `v0.2.3`) and libdevice 0.1.2 (tag
+`v0.1.2`). The document now changes only on the owner's explicit
+instruction.
