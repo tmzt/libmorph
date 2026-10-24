@@ -73,3 +73,13 @@ impl MorphContext {
    owner approves today; otherwise the release after.
 3. **Desktop.** `None`, as handlr suggested. Recommended: yes; the Mac's
    model would be a libdevice plan if an app ever needs it.
+
+## Amendment — 2026-10-24 13:04 EDT: the name is `brand_info`
+
+The owner's answer to question 1, relayed by the handlr session
+(2026-10-24): "brand_info". This replaces `hardware()` and `Hardware` in
+the front matter and section 1: the method is
+`MorphContext::brand_info() -> Option<&BrandInfo>`, and the type is
+`BrandInfo { vendor, make, model }`, otherwise as section 1 describes.
+libmobile's `build_info()` keeps its name, which follows Android's
+`Build`, unless the owner says otherwise. Questions 2 and 3 are open.
