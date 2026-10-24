@@ -116,3 +116,37 @@ impl MorphContext {
    today. libdevice computes their paths anyway (they are pure and
    tested), so nothing is lost. Recommended: keep them in libdevice;
    libmorph uses whatever libdevice returns.
+
+## Amendment — 2026-10-23 23:30 EDT: `data_dir()` itself becomes cross-platform
+
+The owner's correction, relayed by the handlr session (2026-10-23): "no,
+it was intended to be cross platform, the agent chose option".
+`data_dir()` was always meant to be the app's persistent directory on
+every host; `None` off Android was an earlier implementation choice.
+This replaces `storage_dir()` in sections 1 and 2, section 1's bullet
+"`data_dir()` does not change", and open question 1.
+
+- **`data_dir() -> Option<&Path>`** keeps its signature and becomes what
+  section 1 gave `storage_dir()`: Android's files directory (as now,
+  through libmobile's `files_dir()`), the desktop's per-app directory
+  from libdevice, the run's `storage/` in scripted runs, created with
+  `create_dir_all` before `init`. There is no `storage_dir()`.
+- **`None` only where there is no filesystem or creation failed:** the
+  web, and a directory that could not be created (logged at error).
+  Callers that handle `Some` keep working; on the desktop they now get
+  it. Keeping `Option` avoids a fallback path that would look writable
+  and is not.
+- **`cache_dir()`** stays a new method, as section 1 defines it.
+- **Version.** `data_dir()` returning `Some` on the desktop is behaviour
+  a caller can observe, so the release bumps libmorph's minor version
+  (0.3.x to 0.4.0) under Rule 5.4, marked **Breaking** in VERSIONS.md.
+- **The pipeline cache is unaffected.** It is created only when the
+  runner asks for it (`want_pipeline_cache`, Android only), so a desktop
+  `data_dir()` does not start one; it stays at `<data_dir>/libmorph/`.
+- Section 2's checks use `data_dir()`; step 1 adds a test that scripted
+  runs return `Some` for it.
+
+Open questions 2 to 5 stand. A new question 1: keep `Option<&Path>`
+(recommended), or return `&Path` with a documented fallback (for
+example a temporary directory) where there is no storage, which would
+change the signature and break callers.
