@@ -888,3 +888,21 @@ with the `background` example logging `on_low_memory` (`2c690ed`).
   after Home was refused as "higher than current level". So trim reports
   reach the app only with stage 2 (libmobile's `onTrimMemory`). The
   example was force-stopped afterwards.
+
+## 2026-10-24 13:07 EDT — libmorph 0.4.0 planned
+
+On the owner's word (2026-10-24: "approve, plan a 0.4.0 with what we've
+planned"), with the device info plan approved:
+- in 0.4.0: the foreground service wrapper (`libmorph::service`,
+  `battery`, `system_events`, `on_service`), `open_link`,
+  `data_dir()` on every host with `cache_dir()` and `APP_ID`, memory
+  pressure stages 1 and 2 (`on_low_memory`, `on_trim_memory`), and
+  `brand_info()`;
+- libmobile 0.2.4 first, with `build_info()` and
+  `MobileEvent::TrimMemory`;
+- minor, not patch, because `data_dir()` is `Some` on the desktop now.
+
+On the S23, `on_low_memory` did not fire: android-activity's `LowMemory`
+comes only from `onLowMemory`, and `am send-trim-memory` refused
+`COMPLETE` for a process with a foreground service. Stage 2 is what
+delivers memory pressure there.
