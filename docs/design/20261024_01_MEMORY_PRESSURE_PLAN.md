@@ -1,7 +1,7 @@
 ---
 title: Telling the app about memory pressure
 date: 2026-10-24
-status: In implementation
+status: Implemented
 covers:
   - "Stage 1: `MorphApp::on_low_memory`, from libmobile's existing
     `MobileEvent::LowMemory`"
@@ -134,3 +134,15 @@ process as `trimMemory(15)`; the step allows recording either. Step 2 is
 libmorph 0.4.0 (`586ef89`, tag `v0.4.0`). Stage 2 ships in 0.4.1, after
 libmobile 0.2.4, on the owner's word (2026-10-24: release 0.4.0 now and
 the rest as 0.4.1).
+
+## Amendment — 2026-10-24 13:40 EDT: implemented
+
+Stage 2 is done:
+3. `c88fde5` (`TrimLevel`, `on_trim_memory`, `trim-memory <level>`),
+   with `urlopen` logging trims and `6b489bf` (AGENTS.md). On the S23
+   the `urlopen` example received `UiHidden` (sent by the system on
+   Home), `Background`, `Moderate`, `Complete` and `RunningLow`; `am`
+   names the UI-hidden level `HIDDEN`. With a foreground service
+   running, background levels are refused and only running levels arrive
+   (CHANGES, "build_info and trim levels on the S23").
+4. libmorph 0.4.1 (`890496a`, tag `v0.4.1`), on the owner's word.

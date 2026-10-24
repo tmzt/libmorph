@@ -1,7 +1,7 @@
 ---
 title: The device's vendor, make and model
 date: 2026-10-24
-status: In implementation
+status: Implemented
 covers:
   - "`MorphContext::hardware() -> Option<&Hardware { vendor, make, model }>`"
   - Why it is not `ctx.device()`, and what desktop and the web return
@@ -119,3 +119,14 @@ libmorph 0.4.1, after libmobile 0.2.4. Additive.
 Step 1 starts with this commit, against libmobile 0.2.4 (`f4d5c04`, tag
 `v0.2.4`). The document now changes only on the owner's explicit
 instruction.
+
+## Amendment — 2026-10-24 13:40 EDT: implemented
+
+Every step is done:
+1. `c88fde5` (`build_info()` and `BuildInfo`, with `on_trim_memory`
+   from the memory pressure plan), `03b6ff7` (the `background`
+   example) and `6b489bf` (AGENTS.md); on the S23 it logged
+   `samsung`, `samsung`, `SM-S918U` (CHANGES, "build_info and trim
+   levels on the S23").
+2. libmorph 0.4.1 (`890496a`, tag `v0.4.1`), taking libmobile 0.2.4, on the
+   owner's word ("Yes, go ahead with all three").
