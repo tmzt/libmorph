@@ -1,7 +1,7 @@
 ---
 title: App icons through libmorph-build
 date: 2026-10-24
-status: In implementation
+status: Implemented
 covers:
   - "libmorph-build turning on libmobile's `icons` and re-exporting
     `gradle::Icon`, so `gradle_project(id).icon(Icon::png(..))` works in
@@ -64,3 +64,16 @@ that implements it.
 Step 1 starts with this commit, against libmobile 0.2.5 (`e5221d8`, tag
 `v0.2.5`). The document now changes only on the owner's explicit
 instruction.
+
+## Amendment — 2026-10-24 14:32 EDT: implemented
+
+Every step is done:
+1. `1ae2c89` (libmorph-build with libmobile's `icons`) and `021cdfd` (an
+   icon in the `urlopen` Android example); `aapt dump badging` lists
+   `res/mipmap-anydpi-v26/ic_launcher.xml` at every density, and
+   `image` is not in libmorph's Android dependencies.
+2. libmorph-build 0.2.5 (`8e5ce25`, tag `libmorph-build-v0.2.5`), with
+   libmorph 0.4.2 (`a28e9bb`, tag `v0.4.2`), on the owner's word ("add this
+   to 0.4.2 if that's the next build").
+
+The launcher check on the S23 belongs to libmobile's plan, step 2.
