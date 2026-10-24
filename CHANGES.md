@@ -856,3 +856,12 @@ went into `background` instead, which already had an Android crate.
   twice into one `OutDir::Exact`: both times `init` saw `Some(<out>/storage)`
   and `Some(<out>/cache)`, existing and empty, though the first run left a
   file in each.
+
+## 2026-10-24 13:03 EDT — The device's vendor, make and model (proposed)
+
+Plan: `docs/design/20261024_02_DEVICE_INFO_PLAN.md` (Draft). On the owner's request,
+relayed by the handlr session: "does not expose private identifiers just
+vendor, make and model". libmobile reads `Build.MANUFACTURER`, `BRAND`
+and `MODEL` only; libmorph wraps them as `MorphContext::hardware()`.
+
+Proposed only; nothing is implemented until the owner approves.
