@@ -7,6 +7,11 @@
 //! before any link), and each link is logged without its query or
 //! fragment, which may hold a secret.
 //!
+//! The other way round, a tap opens `https://example.com/` in the browser
+//! (`MorphContext::open_link`); a scripted run only logs it. On the
+//! desktop, `--open-link` also opens it once at start, to check the opener
+//! without a tap (`cargo run --example urlopen -- --open-link`).
+//!
 //! On the desktop, links come only from scripted runs:
 //!
 //! ```text
@@ -15,7 +20,10 @@
 
 use std::time::Duration;
 
-use libmorph::{Frame, MorphApp, MorphContext, wgpu};
+use libmorph::{Frame, MorphApp, MorphContext, Touch, TouchPhase, wgpu};
+
+/// What a tap opens.
+const LINK: &str = "https://example.com/";
 
 pub struct UrlOpen {
     /// 0..1, from the last link's scheme and host.
@@ -59,10 +67,23 @@ fn color(h: f64) -> wgpu::Color {
     }
 }
 
+impl UrlOpen {
+    fn open(&self, ctx: &MorphContext) {
+        match ctx.open_link(LINK) {
+            Ok(()) => log::info!("urlopen: open_link {LINK}: Ok"),
+            Err(error) => log::warn!("urlopen: open_link {LINK}: {error}"),
+        }
+    }
+}
+
 impl MorphApp for UrlOpen {
-    fn init(_ctx: &mut MorphContext) -> Self {
+    fn init(ctx: &mut MorphContext) -> Self {
         log::info!("urlopen: waiting for a link");
-        Self { hue: None }
+        let app = Self { hue: None };
+        if ctx.args().iter().any(|arg| arg == "--open-link") {
+            app.open(ctx);
+        }
+        app
     }
 
     fn update(&mut self, _ctx: &mut MorphContext, _dt: Duration) {}
@@ -91,6 +112,12 @@ impl MorphApp for UrlOpen {
             ..Default::default()
         });
         ctx.queue().submit([encoder.finish()]);
+    }
+
+    fn on_touch(&mut self, ctx: &mut MorphContext, touch: Touch) {
+        if touch.phase == TouchPhase::Ended {
+            self.open(ctx);
+        }
     }
 
     fn on_open_url(&mut self, _ctx: &mut MorphContext, url: &str) {
