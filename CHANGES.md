@@ -745,3 +745,44 @@ outside this plan. So the Android example declares the scheme
 `libmorph-background` and takes the host from
 `am start -a android.intent.action.VIEW -d libmorph-background://<ip:port>`;
 on the desktop it is the first argument. No public API changes.
+
+## 2026-10-24 12:44 EDT — Foreground service wrapper: checked on the S23
+
+Plan: `docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md`, step 5. The
+`background` example (`0a667ca`) on the owner's Galaxy S23 Ultra
+(Android 16, `BP2A.250605.031.A3.S918USQS7EZCI`), unlocked, on
+cellular with Tailscale, so the host was the Mac's tailnet address
+(`nc -lk 7999` on the Mac; its LAN address was not reachable from the
+phone). The owner was using the phone at the same time (Termux in front).
+
+- **Passed: start, notification, events.** `init` asked for
+  `POST_NOTIFICATIONS` (answered Allow on the phone), then
+  `background: start: Ok(())`, `libmobile: service Started`,
+  `background: on_service Started` (the new hook) and
+  `system event Service(Started)`. The first subscription logged
+  `SystemState { visible: Some(true), focused: Some(true), ..,
+  device_idle: Some(false), battery_exemption: Some(false) }` and
+  `Network(Some(NetworkInfo { validated: true, metered: true, transport:
+  Vpn }))`; `Visible` and `Focused` followed each switch.
+  `battery Ok(BatteryState { ignoring_optimizations: false,
+  background_restricted: false, manufacturer: "samsung" })`.
+  `dumpsys notification --noredact`: `flags=ONGOING_EVENT|ONLY_ALERT_ONCE|NO_CLEAR|FOREGROUND_SERVICE`,
+  `actions={ [0] "Exit", [1] "Acquire wake lock", [2] "Ping" }`,
+  `android.text=String (8 lines sent to 100.103.47.86:7999)`.
+- **Passed: a 3-minute background run.** In the background from
+  12:39:45 (`on_suspend`, `Visible(false)`), lines 1 to 8 arrived at
+  the Mac 30 s apart (`line 1 at 1792859965` … `line 8 at 1792860176`),
+  the process alive throughout. The screen stayed on (the owner's), so
+  the screen-off and 10-minute part of step 5's **Done when** is not
+  checked.
+- **Seen: a swipe from Recents.** The first run was swiped away at
+  12:35:12: `main loop exit`, then `libmobile: service Stopped` and
+  `system event Service(Stopped)`, and the process was gone, as the
+  default `stopWithTask="true"` intends. `on_service` did not hear
+  `Stopped`, since the main loop had already ended.
+- **Not checked: Ping, Exit and the wake-lock button.** The owner was
+  using the phone, so no taps were sent to the notification shade; the
+  buttons are listed above, and these checks need the owner's hands.
+
+The example was force-stopped afterwards; `POST_NOTIFICATIONS` stays
+granted to it, as answered on the phone.
