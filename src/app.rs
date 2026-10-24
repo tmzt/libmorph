@@ -144,6 +144,15 @@ pub trait MorphApp: Sized + 'static {
         let _ = (ctx, event);
     }
 
+    /// The system is low on memory (Android's `onLowMemory`). Free what can
+    /// be rebuilt: caches, offscreen resources, decoded data. Called once
+    /// per report after [`init`](Self::init), whether or not the app is
+    /// suspended. Never called on the desktop or the web, or in scripted
+    /// runs unless the script says `low-memory`.
+    fn on_low_memory(&mut self, ctx: &mut MorphContext) {
+        let _ = ctx;
+    }
+
     /// The surface is gone (app backgrounded). The device, queue and every
     /// resource built on them stay valid.
     fn on_suspend(&mut self, ctx: &mut MorphContext) {

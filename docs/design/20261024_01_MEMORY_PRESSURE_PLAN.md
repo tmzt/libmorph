@@ -1,7 +1,7 @@
 ---
 title: Telling the app about memory pressure
 date: 2026-10-24
-status: Draft
+status: In implementation
 covers:
   - "Stage 1: `MorphApp::on_low_memory`, from libmobile's existing
     `MobileEvent::LowMemory`"
@@ -116,3 +116,10 @@ The owner approved this plan on 2026-10-24 ("approve them, the new hook
 in stages"). Stage 1 (`on_low_memory`) is built first, in libmorph
 only; stage 2 (trim levels) follows libmobile's trim-memory release. The
 status stays `Draft` until the first commit that implements it.
+
+## Amendment — 2026-10-24 13:04 EDT: implementation has started; the document is now immutable
+
+Step 1 (stage 1: `on_low_memory`) starts with this commit, over
+libmobile 0.2.3's `MobileEvent::LowMemory`. Stage 2 waits for libmobile's
+trim-memory release. The document now changes only on the owner's
+explicit instruction.

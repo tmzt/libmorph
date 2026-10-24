@@ -115,6 +115,10 @@ pub enum Command {
     Resume,
     /// `exit`: end the run here.
     Exit,
+    /// `low-memory`: the system is low on memory
+    /// ([`MorphApp::on_low_memory`](crate::MorphApp::on_low_memory)).
+    /// Accepted while suspended.
+    LowMemory,
     /// `open <url>`: the app is opened with a link
     /// ([`MorphApp::on_open_url`](crate::MorphApp::on_open_url)). The URL has
     /// no whitespace, and the line has no comment. While suspended, it is
@@ -273,6 +277,7 @@ pub(crate) enum Action {
     Resume,
     Exit,
     Open(String),
+    LowMemory,
 }
 
 /// The static checks of the plan, section 3, with the expansion.
@@ -406,6 +411,7 @@ impl Planner {
                 self.push(line, Action::Resume);
             }
             Command::Exit => self.push(line, Action::Exit),
+            Command::LowMemory => self.push(line, Action::LowMemory),
             Command::Open(url) => {
                 if url.is_empty() || url.contains(char::is_whitespace) {
                     return Err("`open` takes one URL, without whitespace".into());
@@ -572,6 +578,10 @@ fn parse_command(words: &[&str]) -> Result<Command, String> {
             arity(&[0], "exit")?;
             Command::Exit
         }
+        "low-memory" => {
+            arity(&[0], "low-memory")?;
+            Command::LowMemory
+        }
         "open" => {
             arity(&[1], "open <url>")?;
             Command::Open(args[0].to_owned())
@@ -640,6 +650,22 @@ mod tests {
                 Action::Resume,
             ]
         );
+    }
+
+    #[test]
+    fn low_memory_takes_nothing_and_works_while_suspended() {
+        assert_eq!(
+            actions("low-memory\nsuspend\nlow-memory   # trailing comment\nresume"),
+            [
+                Action::LowMemory,
+                Action::Suspend,
+                Action::LowMemory,
+                Action::Resume,
+            ]
+        );
+        let (line, message) = rejected("low-memory now");
+        assert_eq!(line, 1);
+        assert!(message.contains("usage: low-memory"), "{message}");
     }
 
     #[test]

@@ -167,6 +167,12 @@ impl<A: MorphApp> Shell<A> {
         }
     }
 
+    /// The system is low on memory: tell the app, suspended or not.
+    #[cfg(any(script_runner, target_os = "android"))]
+    pub fn low_memory(&mut self) {
+        self.app.on_low_memory(&mut self.ctx);
+    }
+
     /// Drop the surface (it must not outlive the platform window) and tell
     /// the app, unless it already knows it is suspended.
     pub fn detach(&mut self) {

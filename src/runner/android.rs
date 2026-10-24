@@ -342,6 +342,11 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
                     (_, None) => log::debug!("libmorph: an unknown service event: {event:?}"),
                 }
             }
+            // A report before `init` is dropped: there is nothing to free.
+            MobileEvent::LowMemory => match &mut self.shell {
+                Some(shell) => shell.low_memory(),
+                None => log::debug!("libmorph: low memory before the app exists"),
+            },
             MobileEvent::ConfigChanged => {
                 if let Some(shell) = &mut self.shell {
                     shell.ctx.scale_factor = scale_factor(app);
