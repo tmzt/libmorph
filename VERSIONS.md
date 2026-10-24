@@ -197,3 +197,21 @@ No changes of its own.
   re-exports: `Project::foreground_service`,
   `foreground_service_keeps_running` and
   `request_ignore_battery_optimizations`, and `gradle::ServiceType`.
+
+## libmorph 0.4.1 — 2026-10-24 (tag v0.4.1)
+
+The device's build info (`docs/design/20261024_02_DEVICE_INFO_PLAN.md`)
+and memory pressure, stage 2
+(`docs/design/20261024_01_MEMORY_PRESSURE_PLAN.md`). All additions.
+
+- `MorphContext::build_info() -> Option<&BuildInfo>` and
+  `BuildInfo { vendor, make, model }` (`#[non_exhaustive]`): Android's
+  `Build.MANUFACTURER`, `BRAND` and `MODEL`; `None` on the desktop, the
+  web and in scripted runs.
+- `MorphApp::on_trim_memory(&mut self, ctx, TrimLevel)`, defaulted, and
+  `TrimLevel` (`RunningModerate`, `RunningLow`, `RunningCritical`,
+  `UiHidden`, `Background`, `Moderate`, `Complete`; ordered,
+  `#[non_exhaustive]`).
+- `script::Command::TrimMemory(TrimLevel)` and the script command
+  `trim-memory <level>`.
+- **Dependencies:** libmobile 0.2.3 → 0.2.4 (compatible).
