@@ -22,6 +22,8 @@ pub struct MorphContext {
     pub(crate) args: Vec<String>,
     pub(crate) data_dir: Option<PathBuf>,
     pub(crate) cache_dir: Option<PathBuf>,
+    /// The real device's vendor, make and model (Android).
+    pub(crate) build_info: Option<crate::BuildInfo>,
     pub(crate) pipeline_cache: Option<PipelineCacheStore>,
     pub(crate) exit_requested: bool,
     /// A scripted run: links are logged, not opened.
@@ -50,6 +52,7 @@ impl MorphContext {
             args,
             data_dir: None,
             cache_dir: None,
+            build_info: None,
             pipeline_cache: None,
             exit_requested: false,
             scripted: false,
@@ -152,6 +155,15 @@ impl MorphContext {
     #[must_use]
     pub fn data_dir(&self) -> Option<&Path> {
         self.data_dir.as_deref()
+    }
+
+    /// The real device's vendor, make and model (Android's
+    /// `Build.MANUFACTURER`, `BRAND` and `MODEL`), and nothing that
+    /// identifies the unit or its owner. `None` on the desktop, the web and
+    /// in scripted runs.
+    #[must_use]
+    pub fn build_info(&self) -> Option<&crate::BuildInfo> {
+        self.build_info.as_ref()
     }
 
     /// The same as [`data_dir`](Self::data_dir), for files the app can make

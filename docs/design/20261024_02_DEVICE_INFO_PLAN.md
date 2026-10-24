@@ -1,7 +1,7 @@
 ---
 title: The device's vendor, make and model
 date: 2026-10-24
-status: Draft
+status: In implementation
 covers:
   - "`MorphContext::hardware() -> Option<&Hardware { vendor, make, model }>`"
   - Why it is not `ctx.device()`, and what desktop and the web return
@@ -113,3 +113,9 @@ The owner's decision (2026-10-24): libmorph 0.4.0 is released without it,
 so that `open_link` and the foreground service reach handlr sooner. This
 replaces answer 2 of the approval amendment: `build_info()` ships in
 libmorph 0.4.1, after libmobile 0.2.4. Additive.
+
+## Amendment — 2026-10-24 13:35 EDT: implementation has started; the document is now immutable
+
+Step 1 starts with this commit, against libmobile 0.2.4 (`f4d5c04`, tag
+`v0.2.4`). The document now changes only on the owner's explicit
+instruction.

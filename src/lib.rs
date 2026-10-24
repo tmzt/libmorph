@@ -15,11 +15,13 @@
 mod app;
 mod audio;
 pub mod battery;
+mod build_info;
 mod config;
 mod context;
 mod gpu;
 mod input;
 mod link;
+mod memory;
 mod out_dir;
 mod permission;
 mod pipeline_cache;
@@ -38,6 +40,7 @@ pub use audio::{
     Audio, AudioSetup, CaptureFormat, CaptureMode, Captured, OutputFormat, Sink, SinkId, Sound,
     Source, SourceId, Voice,
 };
+pub use build_info::BuildInfo;
 pub use config::{MORPH_ARGS_HELP, MorphError};
 pub use context::MorphContext;
 pub use gpu::{GpuError, LimitFailure, LimitsRequest};
@@ -55,6 +58,7 @@ pub use libdevice::key_store;
 #[cfg(all(feature = "secure-store", target_os = "android"))]
 pub use libmobile::key_store;
 pub use link::OpenLinkError;
+pub use memory::TrimLevel;
 pub use permission::{PermissionRequest, Permissions};
 pub use safe_area::SafeArea;
 pub use secure_store::{

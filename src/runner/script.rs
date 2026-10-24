@@ -117,6 +117,7 @@ fn play<A: MorphApp>(
             Action::Resume => shell.attach_offscreen(),
             Action::Open(url) => shell.open_url(url),
             Action::LowMemory => shell.low_memory(),
+            Action::TrimMemory(level) => shell.trim_memory(level),
             Action::Exit => {
                 manifest.exit_by = ExitBy::Script;
                 manifest.exit_line = Some(line);

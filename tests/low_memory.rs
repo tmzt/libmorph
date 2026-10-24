@@ -1,5 +1,6 @@
-//! `low-memory` in a scripted run reaches `on_low_memory` after `init`, in
-//! order with the other hooks, and also while suspended. Needs a GPU
+//! `low-memory` and `trim-memory <level>` in a scripted run reach
+//! `on_low_memory` and `on_trim_memory` after `init`, in order with the
+//! other hooks, and also while suspended; `build_info()` is `None` there. Needs a GPU
 //! adapter; without one the test says so and passes.
 
 #![cfg(all(
@@ -10,7 +11,7 @@
 use std::sync::Mutex;
 
 use libmorph::script::{OutDir, Script, ScriptRun};
-use libmorph::{Frame, GpuError, MorphApp, MorphContext, MorphError};
+use libmorph::{Frame, GpuError, MorphApp, MorphContext, MorphError, TrimLevel};
 
 static EVENTS: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
 
@@ -21,7 +22,11 @@ fn record(event: &'static str) {
 struct Thrifty;
 
 impl MorphApp for Thrifty {
-    fn init(_ctx: &mut MorphContext) -> Self {
+    fn init(ctx: &mut MorphContext) -> Self {
+        assert!(
+            ctx.build_info().is_none(),
+            "scripted runs have no build info"
+        );
         record("init");
         Self
     }
@@ -32,6 +37,14 @@ impl MorphApp for Thrifty {
 
     fn on_low_memory(&mut self, _ctx: &mut MorphContext) {
         record("low memory");
+    }
+
+    fn on_trim_memory(&mut self, _ctx: &mut MorphContext, level: TrimLevel) {
+        record(match level {
+            TrimLevel::UiHidden => "trim ui-hidden",
+            TrimLevel::Complete => "trim complete",
+            _ => "trim other",
+        });
     }
 
     fn on_suspend(&mut self, _ctx: &mut MorphContext) {
@@ -48,8 +61,10 @@ low-memory
 frames 1
 suspend
 low-memory
+trim-memory ui-hidden
 resume
 low-memory
+trim-memory complete
 ";
 
 #[test]
@@ -82,8 +97,10 @@ fn low_memory_arrives_in_order_and_while_suspended() {
             "frame",
             "suspend",
             "low memory",
+            "trim ui-hidden",
             "resume",
             "low memory",
+            "trim complete",
             "suspend",
         ]
     );

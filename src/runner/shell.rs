@@ -173,6 +173,12 @@ impl<A: MorphApp> Shell<A> {
         self.app.on_low_memory(&mut self.ctx);
     }
 
+    /// Android asked the app to trim memory: tell it, suspended or not.
+    #[cfg(any(script_runner, target_os = "android"))]
+    pub fn trim_memory(&mut self, level: crate::TrimLevel) {
+        self.app.on_trim_memory(&mut self.ctx, level);
+    }
+
     /// Drop the surface (it must not outlive the platform window) and tell
     /// the app, unless it already knows it is suspended.
     pub fn detach(&mut self) {

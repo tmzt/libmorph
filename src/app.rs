@@ -153,6 +153,16 @@ pub trait MorphApp: Sized + 'static {
         let _ = ctx;
     }
 
+    /// Android asked the app to trim memory (`onTrimMemory`). Levels are
+    /// ordered, so `level >= TrimLevel::Background` means "free everything
+    /// you can". Called once per report after [`init`](Self::init),
+    /// whether or not the app is suspended. Never called on the desktop or
+    /// the web, or in scripted runs unless the script says
+    /// `trim-memory <level>`.
+    fn on_trim_memory(&mut self, ctx: &mut MorphContext, level: crate::TrimLevel) {
+        let _ = (ctx, level);
+    }
+
     /// The surface is gone (app backgrounded). The device, queue and every
     /// resource built on them stay valid.
     fn on_suspend(&mut self, ctx: &mut MorphContext) {

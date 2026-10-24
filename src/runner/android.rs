@@ -142,6 +142,7 @@ impl<A: MorphApp> Adapter<A> {
         ctx.data_dir = crate::storage::ensure(libmobile::android::dirs::files_dir());
         ctx.cache_dir = crate::storage::ensure(libmobile::android::dirs::cache_dir());
         ctx.android = Some(app.clone());
+        ctx.build_info = libmobile::android::build_info().map(Into::into);
         #[cfg(feature = "secure-store")]
         {
             ctx.secure_store = Some(crate::SecureStore::android());
@@ -347,6 +348,14 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
                 Some(shell) => shell.low_memory(),
                 None => log::debug!("libmorph: low memory before the app exists"),
             },
+            // As for low memory: a report before `init` is dropped.
+            MobileEvent::TrimMemory(level) => {
+                match (&mut self.shell, crate::memory::from_mobile(level)) {
+                    (Some(shell), Some(level)) => shell.trim_memory(level),
+                    (None, _) => log::debug!("libmorph: trim memory before the app exists"),
+                    (_, None) => log::debug!("libmorph: an unknown trim level: {level:?}"),
+                }
+            }
             MobileEvent::ConfigChanged => {
                 if let Some(shell) = &mut self.shell {
                     shell.ctx.scale_factor = scale_factor(app);

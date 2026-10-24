@@ -22,7 +22,7 @@ use std::collections::HashSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use crate::{Key, Touch, TouchPhase};
+use crate::{Key, Touch, TouchPhase, TrimLevel};
 
 pub use crate::out_dir::{DEFAULT_OUT_ROOT, OutDir};
 
@@ -119,6 +119,12 @@ pub enum Command {
     /// ([`MorphApp::on_low_memory`](crate::MorphApp::on_low_memory)).
     /// Accepted while suspended.
     LowMemory,
+    /// `trim-memory <level>`: Android asks the app to trim memory
+    /// ([`MorphApp::on_trim_memory`](crate::MorphApp::on_trim_memory)), with
+    /// the level as `running-moderate`, `running-low`, `running-critical`,
+    /// `ui-hidden`, `background`, `moderate` or `complete`. Accepted while
+    /// suspended.
+    TrimMemory(TrimLevel),
     /// `open <url>`: the app is opened with a link
     /// ([`MorphApp::on_open_url`](crate::MorphApp::on_open_url)). The URL has
     /// no whitespace, and the line has no comment. While suspended, it is
@@ -278,6 +284,7 @@ pub(crate) enum Action {
     Exit,
     Open(String),
     LowMemory,
+    TrimMemory(TrimLevel),
 }
 
 /// The static checks of the plan, section 3, with the expansion.
@@ -412,6 +419,7 @@ impl Planner {
             }
             Command::Exit => self.push(line, Action::Exit),
             Command::LowMemory => self.push(line, Action::LowMemory),
+            Command::TrimMemory(level) => self.push(line, Action::TrimMemory(*level)),
             Command::Open(url) => {
                 if url.is_empty() || url.contains(char::is_whitespace) {
                     return Err("`open` takes one URL, without whitespace".into());
@@ -582,6 +590,14 @@ fn parse_command(words: &[&str]) -> Result<Command, String> {
             arity(&[0], "low-memory")?;
             Command::LowMemory
         }
+        "trim-memory" => {
+            const USAGE: &str = "trim-memory <running-moderate|running-low|running-critical|ui-hidden|background|moderate|complete>";
+            arity(&[1], USAGE)?;
+            Command::TrimMemory(
+                TrimLevel::from_script(args[0])
+                    .ok_or_else(|| format!("unknown trim level `{}`; usage: {USAGE}", args[0]))?,
+            )
+        }
         "open" => {
             arity(&[1], "open <url>")?;
             Command::Open(args[0].to_owned())
@@ -628,7 +644,7 @@ fn key(word: &str) -> Result<Key, String> {
 #[cfg(test)]
 mod tests {
     use super::{Action, Command, DEFAULT_FPS, Script, ScriptError};
-    use crate::{Key, Touch, TouchPhase};
+    use crate::{Key, Touch, TouchPhase, TrimLevel};
 
     fn actions(source: &str) -> Vec<Action> {
         Script::parse(source)
@@ -650,6 +666,30 @@ mod tests {
                 Action::Resume,
             ]
         );
+    }
+
+    #[test]
+    fn trim_memory_takes_a_level_and_works_while_suspended() {
+        assert_eq!(
+            actions("trim-memory ui-hidden\nsuspend\ntrim-memory complete"),
+            [
+                Action::TrimMemory(TrimLevel::UiHidden),
+                Action::Suspend,
+                Action::TrimMemory(TrimLevel::Complete),
+            ]
+        );
+        for source in [
+            "trim-memory",
+            "trim-memory UI_HIDDEN",
+            "trim-memory low now",
+        ] {
+            let (line, message) = rejected(source);
+            assert_eq!(line, 1, "{source}");
+            assert!(
+                message.contains("usage: trim-memory"),
+                "{source}: {message}"
+            );
+        }
     }
 
     #[test]
