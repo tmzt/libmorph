@@ -924,3 +924,25 @@ libmobile 0.2.3 and libdevice 0.1.2. Open link and app storage are
 Implemented. The foreground service (its device checks) and memory
 pressure (stage 2) stay In implementation. `build_info()` and
 `on_trim_memory` follow in 0.4.1, after libmobile 0.2.4.
+
+## 2026-10-24 13:39 EDT — build_info and trim levels on the S23
+
+Plans: `docs/design/20261024_02_DEVICE_INFO_PLAN.md` (step 1, `c88fde5`,
+`03b6ff7`) and `docs/design/20261024_01_MEMORY_PRESSURE_PLAN.md` (step 3,
+`c88fde5`, with `urlopen` logging trims in this entry's preceding
+commit), on the owner's S23 Ultra with libmobile 0.2.4:
+- the `background` example logged `build info Some(BuildInfo { vendor:
+  "samsung", make: "samsung", model: "SM-S918U" })`, matching libmobile's
+  check;
+- with its foreground service running, `RUNNING_CRITICAL` reached
+  `on_trim_memory RunningCritical`, but `am send-trim-memory` refused
+  `HIDDEN`, `BACKGROUND` and `COMPLETE` ("Unable to set a background
+  trim level on a foreground process"), and Home sent the app no
+  `UiHidden`: a process with a foreground service is not trimmed as a
+  background one;
+- the `urlopen` example, with no service, logged `RunningLow` (sent while
+  in front), `UiHidden` (sent by the system on Home), then `Background`,
+  `Moderate` and `Complete` (sent while hidden). `am` names the
+  UI-hidden level `HIDDEN`.
+
+Both examples were force-stopped afterwards.
