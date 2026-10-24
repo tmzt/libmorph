@@ -95,3 +95,14 @@ plan a 0.4.0 with what we've planned"). Section 3:
    return None", relayed by the handlr session).
 
 The status stays `Draft` until the first commit that implements it.
+
+## Amendment — 2026-10-24 13:08 EDT: the name is `build_info`
+
+The owner's decision (2026-10-24: "should it just be build_info then?",
+then "that works"). This replaces the amendment "the name is
+`brand_info`": the method is `MorphContext::build_info() ->
+Option<&BuildInfo>`, the same name as libmobile's `build_info()`, and
+the type is libmorph's own `BuildInfo { vendor, make, model }`, mapped
+from libmobile's `manufacturer`, `brand` and `model`. Each field's
+rustdoc names its Android source. Everything else in the approval
+amendment stands.
