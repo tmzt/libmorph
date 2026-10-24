@@ -734,3 +734,14 @@ wrapped here", over libmobile 0.2.3 (its plans
 - **The desktop stream** reports `Visible(true)` and `Visible(false)` from
   winit's `resumed` and `suspended`: the plan's `Foreground`, which the
   review amendment renamed `Visible`. Nothing else, as section 5 says.
+
+## 2026-10-24 12:32 EDT — Foreground service: the example's host comes from a link
+
+Plan: `docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md`, step 5 (the
+`background` example "as in step 3", whose host is an intent extra,
+`--es host <ip:port>`). libmorph gives an app no intent extras, only
+`on_open_url` for links with its schemes, and adding an extras API is
+outside this plan. So the Android example declares the scheme
+`libmorph-background` and takes the host from
+`am start -a android.intent.action.VIEW -d libmorph-background://<ip:port>`;
+on the desktop it is the first argument. No public API changes.
