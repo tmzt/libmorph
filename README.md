@@ -179,12 +179,14 @@ Android on GL), which is what `cache` takes when nothing is cached.
 ## Tools
 
 - `scripts/make_icon.py`: Android launcher icons (legacy, round, adaptive
-  and monochrome) from one square PNG, with a contact sheet. Needs Python 3
-  with Pillow and numpy:
+  and monochrome) from one square image, with a contact sheet. The source is
+  a PNG with transparency, or any image (a JPEG, say) on a flat colour that
+  `--key` removes. Needs Python 3 with Pillow and numpy:
 
   ```sh
   python3 -I scripts/make_icon.py --source art.png --out icon/ \
-      [--background RRGGBB] [--hue DEG] [--full-bleed] [--no-monochrome]
+      [--key RRGGBB|auto] [--key-tolerance T] [--background RRGGBB] \
+      [--hue DEG] [--full-bleed] [--no-monochrome]
   ```
 
   Copy `icon/android/res/` into the app's resources until libmorph-build
