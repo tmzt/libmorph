@@ -683,3 +683,10 @@ correction, relayed by the handlr session: `data_dir()` was meant to be
 cross-platform. An amendment drops `storage_dir()`; `data_dir()` keeps
 its signature and is `Some` on every host with a filesystem, created
 before `init`. The release becomes libmorph 0.4.0.
+
+## 2026-10-23 23:32 EDT — App storage approved
+
+The owner approved the app storage plans in libmobile, libdevice and
+libmorph ("approved plan and start"): `data_dir()` on every host with a
+filesystem, `Option` kept for the web, a new `MorphApp::APP_ID`, and a
+new `cache_dir()`. libmobile and libdevice are built first.
