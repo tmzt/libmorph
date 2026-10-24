@@ -120,3 +120,14 @@ libmobile's plan, mapped to libmobile's on Android.
    Recommended: yes, following the layering rule.
 3. **`unicode-segmentation`** for Backspace on the desktop. Recommended:
    yes; a small, dependency-free crate.
+
+## Amendment — 2026-10-24 16:18 EDT: approved
+
+The owner approved the text input plans in libmobile, libdevice and
+libmorph on 2026-10-24 ("yes"), with libmorph's recommended answers: on
+the desktop, text is edited at its end only (no caret movement or
+selection); paste through libdevice's `clipboard`; `unicode-segmentation`
+for Backspace. They are built after the notification and dark mode work
+and released after it (libmobile 0.2.7, the next libdevice release,
+libmorph 0.4.4), so they do not hold it up. The status stays `Draft`
+until the first commit that implements it.
