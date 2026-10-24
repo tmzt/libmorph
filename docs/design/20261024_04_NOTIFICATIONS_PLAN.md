@@ -58,3 +58,12 @@ related:
 
 1. **A new hook.** `on_notify` is new public API, needed because alert
    taps are not service events. Recommended: yes.
+
+## Amendment — 2026-10-24 14:16 EDT: approved
+
+The owner approved the notification plans in libmobile and libmorph on
+2026-10-24 ("approve both"), with the recommended answers: the ongoing
+notification's tap is a `ServiceEvent::Tapped` and alerts' taps a
+`NotifyEvent`; `post` takes the channel each time, created on first use;
+libmorph adds the `on_notify` hook. The status stays `Draft` until the
+first commit that implements it.
