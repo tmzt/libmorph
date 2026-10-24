@@ -176,6 +176,20 @@ Android on GL), which is what `cache` takes when nothing is cached.
 - No native iOS. iPhone geometry can be emulated on desktop.
 - Device insets in libdevice are estimates, not measured on hardware.
 
+## Tools
+
+- `scripts/make_icon.py`: Android launcher icons (legacy, round, adaptive
+  and monochrome) from one square PNG, with a contact sheet. Needs Python 3
+  with Pillow and numpy:
+
+  ```sh
+  python3 -I scripts/make_icon.py --source art.png --out icon/ \
+      [--background RRGGBB] [--hue DEG] [--full-bleed] [--no-monochrome]
+  ```
+
+  Copy `icon/android/res/` into the app's resources until libmorph-build
+  generates icons itself.
+
 ## Development
 
 Contributor and agent rules are in [AGENTS.md](AGENTS.md); planned work is
