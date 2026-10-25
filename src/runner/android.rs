@@ -318,6 +318,13 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
                 self.safe_area = insets.safe_area.into();
                 if let Some(shell) = &mut self.shell {
                     shell.ctx.safe_area = self.safe_area;
+                    shell.ctx.keyboard_inset = insets.ime_bottom;
+                }
+            }
+            MobileEvent::TextChanged(text) => {
+                if let Some(shell) = &mut self.shell {
+                    shell.ctx.text_input_value = text.clone();
+                    shell.text_input(crate::TextInputEvent::Changed(text));
                 }
             }
             MobileEvent::Permissions(outcome) => self.permissions(outcome.into()),

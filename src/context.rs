@@ -36,6 +36,10 @@ pub struct MorphContext {
     /// For libmobile's calls (permissions); set before `init`.
     #[cfg(all(target_os = "android", feature = "mobile"))]
     pub(crate) android: Option<libmobile::android::AndroidApp>,
+    pub(crate) text_input_active: bool,
+    pub(crate) text_input_value: String,
+    pub(crate) text_input_options: crate::TextInputOptions,
+    pub(crate) keyboard_inset: f32,
 }
 
 impl MorphContext {
@@ -61,6 +65,10 @@ impl MorphContext {
             key_store: None,
             #[cfg(all(target_os = "android", feature = "mobile"))]
             android: None,
+            text_input_active: false,
+            text_input_value: String::new(),
+            text_input_options: crate::TextInputOptions::default(),
+            keyboard_inset: 0.0,
         }
     }
 
@@ -273,6 +281,42 @@ impl MorphContext {
             return Ok(());
         }
         crate::link::open(url)
+    }
+
+    /// Start editing `value`: on Android the soft keyboard opens; on the
+    /// desktop typed text and the IME are routed to the app. Calling it
+    /// again replaces the value and options.
+    pub fn start_text_input(&mut self, value: &str, options: &crate::TextInputOptions) {
+        self.text_input_active = true;
+        self.text_input_value = value.to_string();
+        self.text_input_options = options.clone();
+        #[cfg(all(target_os = "android", feature = "mobile"))]
+        if let Some(app) = &self.android {
+            libmobile::android::set_text_input(app, Some(value));
+        }
+    }
+
+    /// Stop editing; the keyboard closes. No event follows.
+    pub fn stop_text_input(&mut self) {
+        self.text_input_active = false;
+        self.text_input_value.clear();
+        #[cfg(all(target_os = "android", feature = "mobile"))]
+        if let Some(app) = &self.android {
+            libmobile::android::set_text_input(app, None);
+        }
+    }
+
+    /// Whether text editing is currently active.
+    #[must_use]
+    pub fn text_input_active(&self) -> bool {
+        self.text_input_active
+    }
+
+    /// The keyboard's height over the bottom of the surface, in physical
+    /// pixels; 0 when it is closed or there is none. Keep the field above it.
+    #[must_use]
+    pub fn keyboard_inset(&self) -> f32 {
+        self.keyboard_inset
     }
 
     /// Save the pipeline cache's data, if there is a cache and it changed.

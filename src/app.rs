@@ -104,6 +104,11 @@ pub trait MorphApp: Sized + 'static {
         KeyStatus::Unhandled
     }
 
+    /// Text input event: a change in text, an action key press, or keyboard dismissal.
+    fn on_text_input(&mut self, ctx: &mut MorphContext, event: &crate::TextInputEvent) {
+        let _ = (ctx, event);
+    }
+
     /// The capture stream asked for in [`audio_setup`](Self::audio_setup)
     /// has opened, and `ctx.audio().capture_format()` is `Some` from now on.
     /// Called once per run, after [`init`](Self::init): right after it when

@@ -228,6 +228,10 @@ impl<A: MorphApp> Shell<A> {
         self.app.on_key(&mut self.ctx, key)
     }
 
+    pub fn text_input(&mut self, event: crate::TextInputEvent) {
+        self.app.on_text_input(&mut self.ctx, &event);
+    }
+
     #[cfg(not(target_os = "android"))]
     pub fn hover(&mut self, x: f32, y: f32) {
         self.app.on_hover(&mut self.ctx, x, y);

@@ -568,11 +568,35 @@ impl<A: MorphApp> Handler<A> {
                 is_synthetic: false,
                 ..
             } if event.state == ElementState::Pressed && !event.repeat => {
-                if let (Some(shell), Some(key)) =
-                    (&mut self.shell, key_from_winit(&event.logical_key))
-                {
-                    // winit takes no default action on keys: the status is unused.
-                    let _ = shell.key(key);
+                if let Some(shell) = &mut self.shell {
+                    if shell.ctx.text_input_active {
+                        use winit::keyboard::{Key as WinitKey, NamedKey};
+                        match &event.logical_key {
+                            WinitKey::Named(NamedKey::Escape) => {
+                                shell.ctx.stop_text_input();
+                                shell.text_input(crate::TextInputEvent::Dismissed);
+                            }
+                            WinitKey::Named(NamedKey::Backspace) => {
+                                shell.ctx.text_input_value.pop();
+                                let text = shell.ctx.text_input_value.clone();
+                                shell.text_input(crate::TextInputEvent::Changed(text));
+                            }
+                            WinitKey::Named(NamedKey::Enter) => {
+                                let action = shell.ctx.text_input_options.action;
+                                shell.text_input(crate::TextInputEvent::Action(action));
+                            }
+                            _ => {
+                                if let Some(s) = event.text.as_deref() {
+                                    shell.ctx.text_input_value.push_str(s);
+                                    let text = shell.ctx.text_input_value.clone();
+                                    shell.text_input(crate::TextInputEvent::Changed(text));
+                                }
+                            }
+                        }
+                    } else if let Some(key) = key_from_winit(&event.logical_key) {
+                        // winit takes no default action on keys: the status is unused.
+                        let _ = shell.key(key);
+                    }
                 }
             }
             WindowEvent::TouchpadPressure { pressure, .. } => {
