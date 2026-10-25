@@ -1,7 +1,7 @@
 ---
 title: Text input and the soft keyboard
 date: 2026-10-24
-status: Draft
+status: In implementation
 covers:
   - "`MorphContext::start_text_input(value, &TextInputOptions)` and
     `stop_text_input()`"
@@ -131,3 +131,7 @@ for Backspace. They are built after the notification and dark mode work
 and released after it (libmobile 0.2.7, the next libdevice release,
 libmorph 0.4.4), so they do not hold it up. The status stays `Draft`
 until the first commit that implements it.
+
+## Amendment — 2026-10-25 17:22 EDT: implementation started
+
+Implementation of step 1 has started. The document is now immutable.

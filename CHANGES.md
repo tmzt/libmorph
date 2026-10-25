@@ -1025,3 +1025,15 @@ Proposed only; nothing is implemented until the owner approves.
 Plan: `docs/design/20261024_06_TEXT_INPUT_PLAN.md` (Draft, approved). The owner approved the text
 input plans ("yes"), with the recommended answers. Released after the
 notification and dark mode work.
+
+## 2026-10-25 17:22 EDT — Text input step 1: start_text_input, stop_text_input, on_text_input, keyboard_inset
+
+Plan: [Text input and the soft keyboard](docs/design/20261024_06_TEXT_INPUT_PLAN.md) (`In implementation`).
+
+- `MorphContext::start_text_input(value, &TextInputOptions)` and `stop_text_input()`
+  manage text editing; on Android `libmobile::android::set_text_input` shows or
+  hides the soft keyboard, and `keyboard_inset()` returns the IME height.
+- `MorphApp::on_text_input(&mut self, ctx, &TextInputEvent)` delivers `Changed(String)`,
+  `Action(TextAction)`, and `Dismissed`.
+- Android receives `MobileEvent::TextChanged(text)` and forwards it to `on_text_input`.
+- Desktop handles typing, backspace, and escape while text input is active.
