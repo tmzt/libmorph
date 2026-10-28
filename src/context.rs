@@ -40,6 +40,7 @@ pub struct MorphContext {
     pub(crate) text_input_value: String,
     pub(crate) text_input_options: crate::TextInputOptions,
     pub(crate) keyboard_inset: f32,
+    pub(crate) camera: crate::camera::CameraState,
 }
 
 impl MorphContext {
@@ -69,6 +70,7 @@ impl MorphContext {
             text_input_value: String::new(),
             text_input_options: crate::TextInputOptions::default(),
             keyboard_inset: 0.0,
+            camera: crate::camera::CameraState::default(),
         }
     }
 
@@ -281,6 +283,35 @@ impl MorphContext {
             return Ok(());
         }
         crate::link::open(url)
+    }
+
+    /// The camera ([`camera`](crate::camera)): preview, one still frame and
+    /// QR scanning. Calls never block; answers come to
+    /// [`MorphApp::on_camera`](crate::MorphApp::on_camera). On Android with
+    /// the `mobile-camera` features it is libmobile's camera; elsewhere, and
+    /// without them, every call answers
+    /// [`CameraError::Unsupported`](crate::camera::CameraError::Unsupported)
+    /// on the next frame. Scripted runs have a stand-in camera.
+    pub fn camera(&mut self) -> crate::camera::Camera<'_> {
+        crate::camera::Camera::new(self)
+    }
+
+    /// Open this app's page in the system Settings, where the user can grant
+    /// a permission Android no longer asks for (after
+    /// [`CameraError::PermissionDenied`](crate::camera::CameraError::PermissionDenied)
+    /// with `settings_only`). libmorph never opens it by itself. Android:
+    /// libmobile's `open_app_settings`, while the app is visible; elsewhere
+    /// [`OpenLinkError::Unsupported`].
+    pub fn open_app_settings(&self) -> Result<(), OpenLinkError> {
+        #[cfg(all(target_os = "android", feature = "mobile"))]
+        return match &self.android {
+            Some(app) => {
+                libmobile::android::open_app_settings(app).map_err(crate::link::from_mobile)
+            }
+            None => Err(OpenLinkError::NotVisible),
+        };
+        #[cfg(not(all(target_os = "android", feature = "mobile")))]
+        Err(OpenLinkError::Unsupported)
     }
 
     /// Start editing `value`: on Android the soft keyboard opens; on the

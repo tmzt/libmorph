@@ -37,6 +37,38 @@ pub(crate) fn encode_png(
     Ok(file)
 }
 
+/// Decode a PNG of any colour type and depth to tight RGBA rows (8 bits,
+/// alpha 255 where it has none): a `camera-frame` image.
+pub(crate) fn decode_png_rgba(file: &[u8]) -> Result<(u32, u32, Vec<u8>), png::DecodingError> {
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(file));
+    decoder.set_transformations(png::Transformations::normalize_to_color8());
+    let mut reader = decoder.read_info()?;
+    let size = reader
+        .output_buffer_size()
+        .ok_or(png::DecodingError::LimitsExceeded)?;
+    let mut buffer = vec![0; size];
+    let info = reader.next_frame(&mut buffer)?;
+    let (width, height) = (info.width as usize, info.height as usize);
+    let channels = match info.color_type {
+        png::ColorType::Grayscale => 1,
+        png::ColorType::GrayscaleAlpha => 2,
+        png::ColorType::Rgb => 3,
+        _ => 4,
+    };
+    let mut rgba = Vec::with_capacity(width * height * 4);
+    for row in buffer.chunks(info.line_size).take(height) {
+        for p in row[..width * channels].chunks_exact(channels) {
+            rgba.extend_from_slice(&match channels {
+                1 => [p[0], p[0], p[0], 255],
+                2 => [p[0], p[0], p[0], p[1]],
+                3 => [p[0], p[1], p[2], 255],
+                _ => [p[0], p[1], p[2], p[3]],
+            });
+        }
+    }
+    Ok((info.width, info.height, rgba))
+}
+
 /// CRC-32 of the tight RGB rows: the same whichever encoder wrote the file.
 pub(crate) fn pixels_crc32(rgb: &[u8]) -> u32 {
     crc32fast::hash(rgb)
@@ -165,7 +197,7 @@ fn string(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Entry, ExitBy, Manifest, encode_png, pixels_crc32, unpad_rgb};
+    use super::{Entry, ExitBy, Manifest, decode_png_rgba, encode_png, pixels_crc32, unpad_rgb};
 
     const SIZE: (u32, u32) = (3, 2);
     const STRIDE: u32 = 16;
@@ -205,6 +237,20 @@ mod tests {
             at += 12 + length;
         }
         types
+    }
+
+    #[test]
+    fn a_png_decodes_back_to_rgba() {
+        let rgb = rgb();
+        let file = encode_png(&rgb, SIZE).unwrap();
+        let (w, h, rgba) = decode_png_rgba(&file).unwrap();
+        assert_eq!((w, h), SIZE);
+        let back: Vec<u8> = rgba
+            .chunks_exact(4)
+            .flat_map(|p| [p[0], p[1], p[2]])
+            .collect();
+        assert_eq!(back, rgb);
+        assert!(rgba.chunks_exact(4).all(|p| p[3] == 255));
     }
 
     #[test]

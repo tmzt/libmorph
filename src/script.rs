@@ -130,6 +130,22 @@ pub enum Command {
     /// no whitespace, and the line has no comment. While suspended, it is
     /// delivered after the resume.
     Open(String),
+    /// `camera-qr <text>`: the running QR scan
+    /// ([`start_qr`](crate::camera::Camera::start_qr)) reads a code whose
+    /// payload is the rest of the line (spaces and `#` included; no
+    /// comment), version 1, in the centred square; a `Once` scan then
+    /// closes. Logged by length only.
+    CameraQr(String),
+    /// `camera-frame <png>`: the waiting
+    /// [`capture_frame`](crate::camera::Camera::capture_frame), or the next
+    /// one, answers with this PNG as `Rgba8` (its luma as `Gray8`; `Jpeg`
+    /// answers `Unsupported`). The path is relative to the script's file
+    /// (to the working directory for a script that is not from a file).
+    CameraFrame(PathBuf),
+    /// `camera-deny` (`settings_only: false`) and `camera-deny-forever`
+    /// (`true`): the next camera call answers
+    /// [`CameraError::PermissionDenied`](crate::camera::CameraError::PermissionDenied).
+    CameraDeny { settings_only: bool },
 }
 
 /// Why a script could not be loaded, checked or run.
@@ -183,7 +199,20 @@ impl Script {
         for (index, text) in source.lines().enumerate() {
             let line = u32::try_from(index + 1).unwrap_or(u32::MAX);
             // On an `open` line, `#` starts the URL's fragment.
-            let text = if text.split_whitespace().next() == Some("open") {
+            let first = text.split_whitespace().next();
+            // A `camera-qr` payload is the rest of the line, as it is.
+            if first == Some("camera-qr") {
+                let payload = text.trim_start()["camera-qr".len()..].trim();
+                if payload.is_empty() {
+                    return Err(ScriptError::Parse {
+                        line,
+                        message: "usage: camera-qr <text>".into(),
+                    });
+                }
+                steps.push((line, Command::CameraQr(payload.to_owned())));
+                continue;
+            }
+            let text = if first == Some("open") {
                 text
             } else {
                 text.split_once('#').map_or(text, |(code, _)| code)
@@ -285,6 +314,11 @@ pub(crate) enum Action {
     Open(String),
     LowMemory,
     TrimMemory(TrimLevel),
+    CameraQr(String),
+    CameraFrame(PathBuf),
+    CameraDeny {
+        settings_only: bool,
+    },
 }
 
 /// The static checks of the plan, section 3, with the expansion.
@@ -425,6 +459,22 @@ impl Planner {
                     return Err("`open` takes one URL, without whitespace".into());
                 }
                 self.push(line, Action::Open(url.clone()));
+            }
+            Command::CameraQr(text) => {
+                running("camera-qr", self.suspended)?;
+                if text.is_empty() {
+                    return Err("`camera-qr` takes the code's text".into());
+                }
+                self.push(line, Action::CameraQr(text.clone()));
+            }
+            Command::CameraFrame(path) => {
+                if path.as_os_str().is_empty() {
+                    return Err("`camera-frame` takes a PNG path".into());
+                }
+                self.push(line, Action::CameraFrame(path.clone()));
+            }
+            &Command::CameraDeny { settings_only } => {
+                self.push(line, Action::CameraDeny { settings_only });
             }
         }
         Ok(())
@@ -602,6 +652,22 @@ fn parse_command(words: &[&str]) -> Result<Command, String> {
             arity(&[1], "open <url>")?;
             Command::Open(args[0].to_owned())
         }
+        "camera-frame" => {
+            arity(&[1], "camera-frame <png path>")?;
+            Command::CameraFrame(PathBuf::from(args[0]))
+        }
+        "camera-deny" => {
+            arity(&[0], "camera-deny")?;
+            Command::CameraDeny {
+                settings_only: false,
+            }
+        }
+        "camera-deny-forever" => {
+            arity(&[0], "camera-deny-forever")?;
+            Command::CameraDeny {
+                settings_only: true,
+            }
+        }
         other => return Err(format!("unknown command `{other}`")),
     };
     Ok(command)
@@ -706,6 +772,46 @@ mod tests {
         let (line, message) = rejected("low-memory now");
         assert_eq!(line, 1);
         assert!(message.contains("usage: low-memory"), "{message}");
+    }
+
+    #[test]
+    fn camera_commands_parse() {
+        assert_eq!(
+            actions(
+                "camera-qr  a b\t#c  \ncamera-frame shots/f.png # a comment\ncamera-deny\ncamera-deny-forever\n"
+            ),
+            [
+                Action::CameraQr("a b\t#c".into()),
+                Action::CameraFrame("shots/f.png".into()),
+                Action::CameraDeny {
+                    settings_only: false
+                },
+                Action::CameraDeny {
+                    settings_only: true
+                },
+            ]
+        );
+        assert_eq!(
+            rejected("camera-qr   \n"),
+            (1, "usage: camera-qr <text>".into())
+        );
+        assert_eq!(
+            rejected("camera-frame\n"),
+            (1, "usage: camera-frame <png path>".into())
+        );
+        assert_eq!(
+            rejected("camera-deny now\n"),
+            (1, "usage: camera-deny".into())
+        );
+        assert_eq!(
+            rejected("suspend\ncamera-qr x\n"),
+            (2, "`camera-qr` while suspended".into())
+        );
+        // A frame and a denial may be given while suspended.
+        assert_eq!(
+            actions("suspend\ncamera-frame f.png\ncamera-deny\nresume\n").len(),
+            4
+        );
     }
 
     #[test]

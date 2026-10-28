@@ -241,3 +241,26 @@ App icons (`docs/design/20261024_03_APP_ICON_PLAN.md`). All additions.
   existing `gradle` re-export, so `gradle_project(id).icon(..)` generates
   the Android launcher, round, adaptive and monochrome icons. It adds
   `image` 0.25 (PNG only) to app build scripts.
+
+## libmorph 0.5.0 — 2026-10-28 (tag v0.5.0)
+
+The camera (docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md and its
+amendment of 2026-10-28 14:46 EDT).
+
+- **Breaking: libmobile 0.2.6 → 0.3.1.**
+- **Breaking: feature `mobile-camera` is now libmobile's in-process camera**
+  (`libmobile/camera`); the system camera app hand-off it used to enable is
+  `mobile-camera-intent` (`libmobile/camera-intent`).
+- Features `mobile-camera-capture` (`libmobile/camera-capture`) and
+  `mobile-camera-qr` (`libmobile/camera-qr`).
+- `libmorph::camera`: `Camera` (`capture_frame`, `cancel_capture`, `start_qr`,
+  `start_preview`, `stop`, `preview`, `zoom_range`, `zoom`, `set_zoom`,
+  `zoom_by`), `Facing`, `ScanId`, `CaptureId`, `CameraError`, `CameraEvent`,
+  `ZoomSource`, `PreviewOptions`, `PreviewFrame`, `CaptureOptions`,
+  `FrameFormat`, `Resolution`, `Frame`, `QrOptions`, `QrMode`,
+  `ScreenExposure`, `QrCode`, `CAPTURE_TIMEOUT`; the wgpu `Viewfinder`,
+  `ViewfinderOptions`, `Fit`. On every host; `Unsupported` off Android.
+- `MorphContext::camera`, `MorphContext::open_app_settings`.
+- `MorphApp::on_camera` (default body).
+- `script::Command::{CameraQr, CameraFrame, CameraDeny}` (`camera-qr`,
+  `camera-frame`, `camera-deny`, `camera-deny-forever`).

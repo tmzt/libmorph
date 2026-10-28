@@ -84,15 +84,23 @@ mod platform {
     use libmobile::android::link::OpenLinkError as E;
 
     pub(super) fn open(url: &str) -> Result<(), OpenLinkError> {
-        libmobile::android::link::open_link(url).map_err(|error| match error {
+        libmobile::android::link::open_link(url).map_err(from_mobile)
+    }
+
+    /// libmobile's error in libmorph's terms (also for `open_app_settings`).
+    pub(crate) fn from_mobile(error: E) -> OpenLinkError {
+        match error {
             E::BadUrl => OpenLinkError::BadUrl,
             E::NoHandler => OpenLinkError::NoHandler,
             E::NotVisible => OpenLinkError::NotVisible,
             E::Platform(message) => OpenLinkError::Platform(message),
             other => OpenLinkError::Platform(other.to_string()),
-        })
+        }
     }
 }
+
+#[cfg(all(target_os = "android", feature = "mobile"))]
+pub(crate) use platform::from_mobile;
 
 #[cfg(target_os = "macos")]
 mod platform {

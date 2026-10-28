@@ -350,6 +350,18 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
                     (_, None) => log::debug!("libmorph: an unknown service event: {event:?}"),
                 }
             }
+            // libmobile's camera, after libmorph's ids are put back: on the
+            // main loop, before input, also while suspended.
+            #[cfg(feature = "mobile-camera")]
+            MobileEvent::Camera(event) => match &mut self.shell {
+                Some(shell) => {
+                    let event = crate::camera::android_event(&mut shell.ctx.camera, event);
+                    if let Some(event) = event {
+                        shell.camera_event(&event);
+                    }
+                }
+                None => log::warn!("libmorph: a camera event before the app exists"),
+            },
             // A report before `init` is dropped: there is nothing to free.
             MobileEvent::LowMemory => match &mut self.shell {
                 Some(shell) => shell.low_memory(),

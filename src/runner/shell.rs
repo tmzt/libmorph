@@ -151,6 +151,7 @@ impl<A: MorphApp> Shell<A> {
         // Frame time does not accumulate across a suspension.
         self.last_frame = Instant::now();
         if self.lifecycle.resume() {
+            self.ctx.camera.resume();
             self.app.on_resume(&mut self.ctx);
         }
         for url in self.lifecycle.take_urls() {
@@ -184,6 +185,8 @@ impl<A: MorphApp> Shell<A> {
     pub fn detach(&mut self) {
         self.target = None;
         if self.lifecycle.suspend() {
+            self.ctx.camera.suspend();
+            self.camera_events();
             self.app.on_suspend(&mut self.ctx);
         }
         self.ctx.save_pipeline_cache();
@@ -218,6 +221,20 @@ impl<A: MorphApp> Shell<A> {
         if let Some(Target::Surface(surface, config)) = &self.target {
             surface.configure(&self.ctx.gpu.device, config);
         }
+    }
+
+    /// Deliver the camera's waiting answers to `on_camera`, oldest first.
+    /// Answers the app's own `on_camera` causes wait for the next call.
+    pub fn camera_events(&mut self) {
+        for event in self.ctx.camera.take_events() {
+            self.app.on_camera(&mut self.ctx, &event);
+        }
+    }
+
+    /// One camera event from the platform (Android), now.
+    #[cfg(all(target_os = "android", feature = "mobile-camera"))]
+    pub fn camera_event(&mut self, event: &crate::camera::CameraEvent) {
+        self.app.on_camera(&mut self.ctx, event);
     }
 
     pub fn touch(&mut self, touch: Touch) {
@@ -283,6 +300,7 @@ impl<A: MorphApp> Shell<A> {
 
     /// `update`, `render` and the overlay into `view`.
     fn draw(&mut self, view: &wgpu::TextureView) {
+        self.camera_events();
         let now = Instant::now();
         let dt = self.fixed_dt.unwrap_or(now - self.last_frame);
         self.last_frame = now;

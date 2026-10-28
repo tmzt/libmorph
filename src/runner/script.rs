@@ -8,6 +8,7 @@ use libdevice::InsetType;
 
 use super::overlay::Overlay;
 use super::shell::Shell;
+use crate::camera::ScriptFrame;
 use crate::gpu::{self, Gpu};
 use crate::screenshot::{self, Entry, ExitBy, Manifest};
 use crate::script::{Action, Report, Screenshot, Script, ScriptError, ScriptRun};
@@ -30,6 +31,7 @@ pub(crate) fn run<A: MorphApp>(script: &Script, run: ScriptRun) -> Result<Report
     let mut ctx = MorphContext::new(gpu, spec, run.args, Audio::silent());
     ctx.safe_area = SafeArea::from(spec.insets(InsetType::SafeDrawing));
     ctx.scripted = true;
+    ctx.camera.scripted();
     // The app's directories, inside the output and empty for each run.
     ctx.data_dir = crate::storage::fresh(&dir.join("storage"));
     ctx.cache_dir = crate::storage::fresh(&dir.join("cache"));
@@ -118,12 +120,50 @@ fn play<A: MorphApp>(
             Action::Open(url) => shell.open_url(url),
             Action::LowMemory => shell.low_memory(),
             Action::TrimMemory(level) => shell.trim_memory(level),
+            Action::CameraQr(text) => {
+                // The payload may be a secret: its length only.
+                log::info!(
+                    "libmorph: script line {line}: camera-qr ({} bytes)",
+                    text.len()
+                );
+                if !shell.ctx.camera.script_qr(&text) {
+                    log::warn!("libmorph: script line {line}: camera-qr with no QR scan running");
+                }
+            }
+            Action::CameraFrame(path) => {
+                let path = match script.path().and_then(Path::parent) {
+                    Some(dir) => dir.join(path),
+                    None => path,
+                };
+                let file = std::fs::read(&path).map_err(|error| {
+                    ScriptError::Io(std::io::Error::new(
+                        error.kind(),
+                        format!("camera-frame {}: {error}", path.display()),
+                    ))
+                })?;
+                let (width, height, rgba) =
+                    screenshot::decode_png_rgba(&file).map_err(|error| {
+                        ScriptError::Io(std::io::Error::other(format!(
+                            "camera-frame {}: {error}",
+                            path.display()
+                        )))
+                    })?;
+                shell.ctx.camera.script_frame(ScriptFrame {
+                    width,
+                    height,
+                    rgba,
+                });
+            }
+            Action::CameraDeny { settings_only } => shell.ctx.camera.script_deny(settings_only),
             Action::Exit => {
                 manifest.exit_by = ExitBy::Script;
                 manifest.exit_line = Some(line);
                 return Ok(());
             }
         }
+        // Camera answers to this command (and to calls the app made in
+        // its hooks) arrive now, before the next frame.
+        shell.camera_events();
         if shell.exit_requested() {
             manifest.exit_by = ExitBy::App;
             manifest.exit_line = Some(line);

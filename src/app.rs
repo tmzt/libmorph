@@ -149,6 +149,17 @@ pub trait MorphApp: Sized + 'static {
         let _ = (ctx, event);
     }
 
+    /// The camera answered ([`camera`](crate::camera)): a session opened,
+    /// closed (with the reason when it failed, such as
+    /// [`CameraError::PermissionDenied`](crate::camera::CameraError::PermissionDenied)
+    /// or [`Unsupported`](crate::camera::CameraError::Unsupported)), was
+    /// suspended or zoomed, a capture finished, or a QR code was read. On
+    /// the main thread, before input and [`update`](Self::update), so the
+    /// frame after it sees the result; after [`init`](Self::init).
+    fn on_camera(&mut self, ctx: &mut MorphContext, event: &crate::camera::CameraEvent) {
+        let _ = (ctx, event);
+    }
+
     /// The system is low on memory (Android's `onLowMemory`). Free what can
     /// be rebuilt: caches, offscreen resources, decoded data. Called once
     /// per report after [`init`](Self::init), whether or not the app is

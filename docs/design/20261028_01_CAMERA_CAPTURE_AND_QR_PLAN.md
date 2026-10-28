@@ -1,7 +1,7 @@
 ---
 title: Camera capture and QR scanning for apps
 date: 2026-10-28
-status: Draft
+status: In implementation
 covers:
   - "Passthrough features `mobile-camera-capture` and `mobile-camera-qr`
     for libmobile's `camera-capture` and `camera-qr`"
@@ -280,3 +280,12 @@ body, it wins.
    the preview on by default; the `mobile-` names).
 7. **Approved.** The plan is approved with this amendment; the status
    becomes `In implementation` with its first code commit.
+
+## Amendment — 2026-10-28 15:37 EDT: implementation has started; the document is now immutable
+
+Implementation has started with steps 1-3 and the viewfinder, on the
+branch `wt-camera-api`, built against libmobile 0.3.1 (local, through a
+gitignored `[patch]`). The branch merges into `main` once libmobile 0.3.1
+is published and `Cargo.lock` is re-resolved against it. The status is
+`In implementation`, and the document is now immutable: it changes only on
+the owner's explicit instruction.

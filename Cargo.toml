@@ -1,6 +1,6 @@
 [package]
 name = "libmorph"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Unified windowing, graphics and device-emulation shell for wgpu applications"
@@ -25,7 +25,19 @@ mobile = ["dep:libmobile"]
 # Passthrough: each one also enables `mobile`, so `libmobile/<x>` is never
 # requested without the dependency itself.
 mobile-google-auth = ["mobile", "libmobile/google-auth"]
+# The in-process camera (`ctx.camera()`: `start_preview`, `stop`, `preview`,
+# zoom; libmobile's NDK camera, no Jetpack). Adds CAMERA, asked for on the
+# first camera call, and optional `uses-feature`s to the manifest.
 mobile-camera = ["mobile", "libmobile/camera"]
+# One still frame (`ctx.camera().capture_frame`).
+mobile-camera-capture = ["mobile-camera", "libmobile/camera-capture"]
+# QR scanning with auto zoom and screen exposure (`ctx.camera().start_qr`);
+# adds rqrr through libmobile.
+mobile-camera-qr = ["mobile-camera", "libmobile/camera-qr"]
+# The system camera app hand-off (libmobile's `camera-intent`,
+# `ACTION_IMAGE_CAPTURE`; named `mobile-camera` before 0.5.0). No libmorph
+# API and its answer is not routed, as before the rename.
+mobile-camera-intent = ["mobile", "libmobile/camera-intent"]
 # The secure store's Keystore key in the TEE only, never StrongBox. Negative,
 # so turning off default features cannot turn off StrongBox; apps only.
 mobile-secure-store-no-strongbox = ["mobile", "libmobile/secure-store-no-strongbox"]
@@ -117,6 +129,8 @@ web-sys = { version = "0.3", optional = true, features = [
 
 [target.'cfg(not(any(target_os = "android", target_arch = "wasm32")))'.dev-dependencies]
 env_logger = "0.11"
+# Validates the viewfinder's WGSL in a unit test: the copy wgpu 30 uses.
+naga = { version = "30.0.1", features = ["wgsl-in"] }
 # Test key adapters (tests/secure_store.rs).
 zeroize = { version = "1.8", features = ["derive"] }
 
