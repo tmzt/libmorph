@@ -1037,3 +1037,24 @@ Plan: [Text input and the soft keyboard](docs/design/20261024_06_TEXT_INPUT_PLAN
   `Action(TextAction)`, and `Dismissed`.
 - Android receives `MobileEvent::TextChanged(text)` and forwards it to `on_text_input`.
 - Desktop handles typing, backspace, and escape while text input is active.
+
+## 2026-10-28 13:19 EDT — Camera capture and QR scanning (proposed)
+
+Plan: `docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md` (Draft),
+the companion of libmobile's plan of the same name and date. Requested by
+the owner through the flankr session: single-frame capture, a QR mode
+with auto zoom, exposure for codes on screens and pinch zoom, a feature
+per part, and the CAMERA permission asked for only when the app uses the
+camera. The Hold camera view plan is not changed.
+
+Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-28 13:43 EDT — Media request on every host (proposed)
+
+Plan: `docs/design/20261028_02_MEDIA_REQUEST_PLAN.md` (Draft), the
+companion of libmobile's plan of the same name and date. Requested by the
+owner through the flankr session: "im thinking of media-request as open
+the media selector which has a camera option", then "you can plan the
+media request in a new plan, we'll need it soon anyway".
+
+Proposed only; nothing is implemented until the owner approves.
