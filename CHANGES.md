@@ -1058,3 +1058,21 @@ the media selector which has a camera option", then "you can plan the
 media request in a new plan, we'll need it soon anyway".
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-28 16:56 EDT — camera capture and QR plan, steps 1-3 and the viewfinder: departures
+
+Plan: docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md. Built on the
+branch `wt-camera-api` against libmobile 0.3.1 and merged as libmorph 0.5.0
+(tag `v0.5.0`) once libmobile 0.3.1 was published; `Cargo.lock` resolved
+against GitHub. libmorph-build 0.3.0 follows (Rule 5.5).
+
+1. `preview()` returns a `PreviewFrame` (I420 planes shared with
+   libmobile's) rather than a Gray8/Rgba8 `Frame` (the amendment's point 3).
+2. `CameraError::Unsupported` carries a reason, as libmobile's does.
+3. The plan's steps 1-3 and the viewfinder are one commit; the example
+   (step 4) and the AGENTS.md/README updates (step 5) are not done.
+4. The scripted camera emulates suspend and resume.
+5. `open_app_settings` answers `NotVisible` on Android before the activity
+   is known.
+6. The generated manifest's CAMERA (only with a camera feature) is not yet
+   checked in an APK; the Android example crates were not rebuilt.
