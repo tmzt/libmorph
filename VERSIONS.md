@@ -264,3 +264,10 @@ amendment of 2026-10-28 14:46 EDT).
 - `MorphApp::on_camera` (default body).
 - `script::Command::{CameraQr, CameraFrame, CameraDeny}` (`camera-qr`,
   `camera-frame`, `camera-deny`, `camera-deny-forever`).
+
+## libmorph-build 0.3.0 — 2026-10-28 (tag libmorph-build-v0.3.0)
+
+- **Breaking: libmobile 0.2.6 → 0.3.1** (Rule 5.5): `libmorph_build::gradle`
+  re-exports `libmobile::gradle`, and libmobile's 0.3 renamed its `camera`
+  feature (`camera-intent` is the system camera app hand-off; `camera` is the
+  in-process camera). No other change.
