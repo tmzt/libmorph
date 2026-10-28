@@ -490,3 +490,32 @@ two items in section 7 (`examples/camera-app/`):
   libmobile.
 
 The example then names no libmobile dependency. The status stays `Hold`.
+
+## Amendment — 2026-10-28 13:35 EDT: the system camera app hand-off is `camera-intent`; libmobile's `camera` becomes the in-process camera
+
+The owner (2026-10-28), while planning single-frame capture and QR in
+libmobile and libmorph (`libmobile/docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md`
+and this repo's plan of the same name): "amend that plan and keep on Hold,
+just change it to camera-intent in the plan and record the change of the
+camera feature". The status stays `Hold`. Where this disagrees with the
+body, it wins.
+
+1. **The rename is `camera` → `camera-intent`,** not `camera` →
+   `camera-capture` (replaces section 6.1, step 1 and the covers line).
+   libmobile's feature for the system camera app hand-off
+   (`MediaStore.ACTION_IMAGE_CAPTURE`, a thumbnail as JPEG) is named after
+   the Android mechanism it uses. Every `libmobile?/camera-capture` and
+   `--features camera-capture` in this plan that means the hand-off reads
+   `camera-intent`; libmorph's own cross-platform `camera-capture` keeps
+   its name here and maps to `libmobile?/camera-intent` on Android.
+2. **libmobile's `camera` feature changes meaning:** it becomes the base of
+   the in-process NDK camera (`ACamera*`, `AImageReader`, the CAMERA
+   permission requested on first use, `uses-feature` with
+   `required=false`), with `camera-capture` (an in-process single frame)
+   and `camera-qr` (QR with auto zoom) on top, per the 2026-10-28 camera
+   capture and QR plans. Taking `camera` for the base and moving the
+   hand-off to `camera-intent` is breaking for libmobile (0.3.0), and
+   libmorph's `mobile-camera` passthrough becomes `mobile-camera-intent`
+   for the hand-off beside the new `mobile-camera`.
+3. **A later `media-request`** (the system chooser for an image, with a
+   camera entry) is a separate idea, not part of this plan or the hand-off.
