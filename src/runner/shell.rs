@@ -231,6 +231,15 @@ impl<A: MorphApp> Shell<A> {
         }
     }
 
+    /// Check the audio streams (stalls, losses, attempts due) and deliver
+    /// what changed to `on_audio`, oldest first.
+    pub fn audio_events(&mut self) {
+        self.ctx.audio.poll(Instant::now());
+        for event in self.ctx.audio.take_events() {
+            self.app.on_audio(&mut self.ctx, &event);
+        }
+    }
+
     /// Deliver the media answers waiting to `on_media`, oldest first.
     pub fn media_events(&mut self) {
         for response in self.ctx.media.take_responses() {
@@ -314,6 +323,7 @@ impl<A: MorphApp> Shell<A> {
 
     /// `update`, `render` and the overlay into `view`.
     fn draw(&mut self, view: &wgpu::TextureView) {
+        self.audio_events();
         self.camera_events();
         self.media_events();
         let now = Instant::now();

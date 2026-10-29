@@ -118,6 +118,15 @@ pub trait MorphApp: Sized + 'static {
         let _ = ctx;
     }
 
+    /// A stream was interrupted, restored or given up on (plan
+    /// `20261029_02_AUDIO_STREAM_RECOVERY_PLAN.md`). Delivered on the main
+    /// thread before [`update`](Self::update), oldest first, while the app
+    /// is resumed. [`on_capture_ready`](Self::on_capture_ready) is not
+    /// called again after a reopen: the format and the sinks are kept.
+    fn on_audio(&mut self, ctx: &mut MorphContext, event: &crate::AudioEvent) {
+        let _ = (ctx, event);
+    }
+
     /// The answer to a
     /// [`ctx.request_permissions`](MorphContext::request_permissions) call,
     /// once per request the app made. Answers to libmorph's own requests
