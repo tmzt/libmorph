@@ -1076,3 +1076,13 @@ against GitHub. libmorph-build 0.3.0 follows (Rule 5.5).
    is known.
 6. The generated manifest's CAMERA (only with a camera feature) is not yet
    checked in an APK; the Android example crates were not rebuilt.
+
+## 2026-10-28 23:43 EDT — The clipboard's text on every host (approved)
+
+Plan: `docs/design/20261028_03_CLIPBOARD_PLAN.md` (Draft), the companion
+of libmobile's plan of the same name and date. Requested through the
+flankr session for its bottom bar plan's Paste text:
+`MorphContext::clipboard_text` and `clipboard_has_text`, libmobile's
+`clipboard` on Android (`mobile-clipboard`), libdevice's on macOS, `None`
+elsewhere. Approved by the owner ("plan those in appropriate repos with
+subagent, then impl"). For libmorph 0.5.1.
