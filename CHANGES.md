@@ -1157,3 +1157,44 @@ edited. For libmorph 0.5.3, on libmobile 0.3.5 and libdevice 0.1.3;
 RoundTwo is the first user.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-29 18:00 EDT — Writing text to the clipboard: built, Mac check, departures
+
+Plan: `docs/design/20261029_01_CLIPBOARD_WRITE_PLAN.md` (In implementation),
+approved by the owner on 2026-10-29. Steps 1 to 3 are done and released as
+libmorph 0.5.3 (tag `v0.5.3`) on libmobile 0.3.5 and libdevice 0.1.3,
+resolved from git with no local patch active.
+
+Mac check (step 2), on an Apple M4:
+
+- `cargo run --example clipcopy -- --copy` logged
+  `clipcopy: set_clipboard_text: Ok(Silent)`, and
+  `test "$(pbpaste)" = libmorph-clipboard-check-29Q` exited 0.
+- With a sentinel text put on the pasteboard first, the scripted run
+  `cargo run --example clipcopy --features script -- --morph-script
+  examples/scripts/clipcopy.morph` logged
+  `libmorph: script: clipboard written` and `Ok(Silent)`, and `pbpaste`
+  still gave the sentinel afterwards. Evidence: `out/scripted-runs.md`,
+  `out/morph/20261029_01_clipcopy/`.
+- The pasteboard held an empty text before the check and was restored to
+  it afterwards.
+
+Departures (small, Rule 1.7):
+
+- Step 2: the plan's Mac check is "a click". The check was run from an
+  agent with no way to click a window, so `examples/clipcopy.rs` also
+  takes `--copy`, which copies once at start and closes the window, as
+  `examples/urlopen.rs` takes `--open-link`. A tap still copies as
+  planned; the call and its answer are the same.
+- Step 1's test "on hosts other than macOS without the feature,
+  `Unsupported` and `clipboard_can_write() == false`" cannot build a
+  `MorphContext` (it needs a GPU), so the unit test checks the no-write
+  platform module's `CAN_WRITE` constant (`false`) and its
+  `unsupported()` answer, which its `write` returns. The test is compiled
+  only on such hosts (Linux, the web, Android without
+  `mobile-clipboard`), not on the Mac.
+- The `[[example]]` entry for `clipcopy` in `Cargo.toml` went into step
+  2's commit, not step 1's, so each step's commit holds its own files.
+
+Step 4 (RoundTwo, the first user) is RoundTwo's own work; the plan stays
+In implementation until its Done when holds.
