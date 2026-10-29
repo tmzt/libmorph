@@ -111,7 +111,6 @@ impl Recovery {
     }
 
     /// The stream's error callback reported a device loss.
-    #[allow(dead_code)] // Until the error callbacks report losses (step 4).
     pub fn lost(&mut self, now: Instant, reason: String) -> Act {
         match self.state {
             AudioState::Running => {

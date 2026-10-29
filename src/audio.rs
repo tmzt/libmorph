@@ -318,8 +318,8 @@ mod stub {
 mod output {
     use std::cell::{Cell, RefCell};
     use std::fmt;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::{Arc, mpsc};
+    use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex, mpsc};
 
     use web_time::Instant;
 
@@ -327,8 +327,10 @@ mod output {
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
     use cpal::{FromSample, SampleFormat, SizedSample};
 
+    #[cfg(not(target_os = "android"))]
+    use super::capture::CaptureState;
     use super::capture::{Capture, CaptureCommand};
-    use super::mixer::{Command, Mixer};
+    use super::mixer::{Command, Mixer, MixerState};
     use super::recovery::{Act, RETRY_DELAYS, Recovery};
     use super::{
         AudioEvent, AudioSetup, AudioState, AudioStream, CaptureFormat, CaptureMode, OutputFormat,
@@ -339,9 +341,17 @@ mod output {
     /// sources it has removed. The audio callback only ever `try_recv`s and
     /// sends on unbounded channels, so neither side blocks the other.
     struct Output {
-        stream: cpal::Stream,
+        /// `None` between a reopen's close and its open, and after a reopen
+        /// that failed.
+        stream: RefCell<Option<cpal::Stream>>,
+        /// The mixer, shared by every stream opened for this output, so a
+        /// reopen keeps its voices and sources.
+        shared: Arc<Mutex<MixerState>>,
         /// Output callbacks so far, for the stall check.
         blocks: Arc<AtomicU64>,
+        /// A loss reported by the error callback ([`LOST_DEVICE`] or
+        /// [`LOST_STREAM`]), taken on the main thread.
+        lost: Arc<AtomicU8>,
         commands: mpsc::Sender<Command>,
         /// Removed sources, dropped here rather than on the audio thread.
         removed: mpsc::Receiver<Source>,
@@ -357,8 +367,16 @@ mod output {
     /// input preset; elsewhere it is cpal's.
     struct Input {
         stream: InputStream,
+        /// The capture state, shared by every stream opened for this input,
+        /// so a reopen keeps its sinks and frame count. On Android libmobile
+        /// keeps it in its callback instead.
+        #[cfg(not(target_os = "android"))]
+        shared: Arc<Mutex<CaptureState>>,
         /// Captured blocks so far, for the stall check.
         blocks: Arc<AtomicU64>,
+        /// As [`Output::lost`]. Never set on Android, where libmobile keeps
+        /// the AAudio error to its log.
+        lost: Arc<AtomicU8>,
         commands: mpsc::Sender<CaptureCommand>,
         /// Removed sinks, dropped here rather than on the audio thread.
         removed: mpsc::Receiver<Sink>,
@@ -375,9 +393,85 @@ mod output {
     }
 
     #[cfg(not(target_os = "android"))]
-    type InputStream = cpal::Stream;
+    type InputStream = RefCell<Option<cpal::Stream>>;
     #[cfg(target_os = "android")]
     type InputStream = super::aaudio::AaudioInput;
+
+    /// [`Output::lost`] and [`Input::lost`]: nothing reported.
+    const LOST_NONE: u8 = 0;
+    /// cpal's `ErrorKind::DeviceNotAvailable`.
+    const LOST_DEVICE: u8 = 1;
+    /// cpal's `ErrorKind::StreamInvalidated`.
+    const LOST_STREAM: u8 = 2;
+
+    fn lost_reason(code: u8) -> String {
+        match code {
+            LOST_DEVICE => "the device is no longer available",
+            _ => "the stream was invalidated",
+        }
+        .into()
+    }
+
+    /// A cpal error callback: logged as before, and a device loss or an
+    /// invalidated stream set in `lost` for the main thread. Xruns and other
+    /// errors are only logged.
+    fn on_error(lost: Arc<AtomicU8>, what: &'static str) -> impl FnMut(cpal::Error) + Send {
+        move |error| {
+            log::error!("libmorph: {what}: {error}");
+            let code = match error.kind() {
+                cpal::ErrorKind::DeviceNotAvailable => LOST_DEVICE,
+                cpal::ErrorKind::StreamInvalidated => LOST_STREAM,
+                _ => LOST_NONE,
+            };
+            if code != LOST_NONE {
+                lost.store(code, Ordering::Relaxed);
+            }
+        }
+    }
+
+    impl Output {
+        fn play(&self) -> Result<(), String> {
+            match &*self.stream.borrow() {
+                Some(stream) => stream.play().map_err(|e| e.to_string()),
+                None => Err("the output stream is closed".into()),
+            }
+        }
+
+        fn pause(&self) -> Result<(), String> {
+            match &*self.stream.borrow() {
+                Some(stream) => stream.pause().map_err(|e| e.to_string()),
+                None => Ok(()),
+            }
+        }
+    }
+
+    impl Input {
+        #[cfg(not(target_os = "android"))]
+        fn play(&self) -> Result<(), String> {
+            match &*self.stream.borrow() {
+                Some(stream) => stream.play().map_err(|e| e.to_string()),
+                None => Err("the capture stream is closed".into()),
+            }
+        }
+
+        #[cfg(not(target_os = "android"))]
+        fn pause(&self) -> Result<(), String> {
+            match &*self.stream.borrow() {
+                Some(stream) => stream.pause().map_err(|e| e.to_string()),
+                None => Ok(()),
+            }
+        }
+
+        #[cfg(target_os = "android")]
+        fn play(&self) -> Result<(), String> {
+            self.stream.play()
+        }
+
+        #[cfg(target_os = "android")]
+        fn pause(&self) -> Result<(), String> {
+            self.stream.pause()
+        }
+    }
 
     pub struct Audio {
         output: Option<Output>,
@@ -732,10 +826,24 @@ mod output {
             }
         }
 
-        /// Once per frame: the stall check, losses reported by the error
-        /// callbacks, and attempts that are due.
+        /// Once per frame: losses reported by the error callbacks, the
+        /// stall check, and attempts that are due.
         pub(crate) fn poll(&self, now: Instant) {
             for stream in [AudioStream::Output, AudioStream::Capture] {
+                let lost = match stream {
+                    AudioStream::Output => self.output.as_ref().map(|output| &output.lost),
+                    AudioStream::Capture => self.input.as_ref().map(|input| &input.lost),
+                }
+                .map_or(LOST_NONE, |lost| lost.swap(LOST_NONE, Ordering::Relaxed));
+                if lost != LOST_NONE {
+                    let act = match self.recovery(stream).borrow_mut().as_mut() {
+                        Some(recovery) => recovery.lost(now, lost_reason(lost)),
+                        None => Act::Nothing,
+                    };
+                    if act == Act::Reopen {
+                        self.reopen(stream, now);
+                    }
+                }
                 let Some(blocks) = self.blocks(stream) else {
                     continue;
                 };
@@ -797,9 +905,27 @@ mod output {
             }
         }
 
-        /// Not built yet (plan `20261029_02`, step 4).
+        /// Drop the old stream, then build one on the host's current default
+        /// output device with the first stream's config and sample format,
+        /// sharing its mixer, and play it.
         fn reopen_output(&self) -> Result<String, String> {
-            Err("reopening is not built yet".into())
+            let output = self.output.as_ref().ok_or("no output stream")?;
+            drop(output.stream.borrow_mut().take());
+            output.lost.store(LOST_NONE, Ordering::Relaxed);
+            let device = cpal::default_host()
+                .default_output_device()
+                .ok_or("no output device")?;
+            let stream = open_output(
+                &device,
+                output.config,
+                output.sample_format,
+                &output.shared,
+                &output.blocks,
+                &output.lost,
+            )?;
+            stream.play().map_err(|e| e.to_string())?;
+            *output.stream.borrow_mut() = Some(stream);
+            Ok(String::new())
         }
 
         /// Android: libmobile's `set_preset` with the mode last asked for.
@@ -809,21 +935,38 @@ mod output {
             input.stream.reopen()
         }
 
-        /// Not built yet (plan `20261029_02`, step 4).
+        /// As [`reopen_output`](Self::reopen_output), on the default input
+        /// device, sharing the capture state.
         #[cfg(not(target_os = "android"))]
         fn reopen_capture(&self) -> Result<String, String> {
-            Err("reopening is not built yet".into())
+            let input = self.input.as_ref().ok_or("no capture stream")?;
+            drop(input.stream.borrow_mut().take());
+            input.lost.store(LOST_NONE, Ordering::Relaxed);
+            let device = cpal::default_host()
+                .default_input_device()
+                .ok_or("no input device")?;
+            let stream = open_input(
+                &device,
+                input.config,
+                input.sample_format,
+                &input.shared,
+                &input.blocks,
+                &input.lost,
+            )?;
+            stream.play().map_err(|e| e.to_string())?;
+            *input.stream.borrow_mut() = Some(stream);
+            Ok(String::new())
         }
 
         pub(crate) fn pause(&self) {
             self.paused.set(true);
             if let Some(output) = &self.output
-                && let Err(error) = output.stream.pause()
+                && let Err(error) = output.pause()
             {
                 log::warn!("libmorph: audio pause failed: {error}");
             }
             if let Some(input) = &self.input
-                && let Err(error) = input.stream.pause()
+                && let Err(error) = input.pause()
             {
                 log::warn!("libmorph: audio capture pause failed: {error}");
             }
@@ -841,14 +984,8 @@ mod output {
             let now = Instant::now();
             for stream in [AudioStream::Output, AudioStream::Capture] {
                 let result = match stream {
-                    AudioStream::Output => self
-                        .output
-                        .as_ref()
-                        .map(|output| output.stream.play().map_err(|e| e.to_string())),
-                    AudioStream::Capture => self
-                        .input
-                        .as_ref()
-                        .map(|input| input.stream.play().map_err(|e| e.to_string())),
+                    AudioStream::Output => self.output.as_ref().map(Output::play),
+                    AudioStream::Capture => self.input.as_ref().map(Input::play),
                 };
                 let (Some(result), Some(blocks)) = (result, self.blocks(stream)) else {
                     continue;
@@ -886,6 +1023,7 @@ mod output {
             format: stream.format(),
             stream,
             blocks,
+            lost: Arc::default(),
             commands,
             removed,
         })
@@ -902,19 +1040,16 @@ mod output {
         let (commands, receiver) = mpsc::channel();
         let (returns, removed) = mpsc::channel();
         let capture = Capture::new(usize::from(config.channels), returns);
+        let shared = Arc::new(Mutex::new(CaptureState::new(capture, receiver)));
         let blocks = Arc::new(AtomicU64::new(0));
-        let counter = blocks.clone();
-        let stream = match sample_format {
-            SampleFormat::F32 => build_input::<f32>(&device, config, capture, receiver, counter),
-            SampleFormat::I16 => build_input::<i16>(&device, config, capture, receiver, counter),
-            SampleFormat::U16 => build_input::<u16>(&device, config, capture, receiver, counter),
-            SampleFormat::I32 => build_input::<i32>(&device, config, capture, receiver, counter),
-            other => return Err(format!("unsupported sample format {other:?}")),
-        }?;
+        let lost = Arc::new(AtomicU8::new(LOST_NONE));
+        let stream = open_input(&device, config, sample_format, &shared, &blocks, &lost)?;
         stream.play().map_err(|e| e.to_string())?;
         Ok(Input {
-            stream,
+            stream: RefCell::new(Some(stream)),
+            shared,
             blocks,
+            lost,
             commands,
             removed,
             format: CaptureFormat {
@@ -927,13 +1062,33 @@ mod output {
         })
     }
 
+    /// An input stream at `config` and `sample_format` feeding `shared`.
+    #[cfg(not(target_os = "android"))]
+    fn open_input(
+        device: &cpal::Device,
+        config: cpal::StreamConfig,
+        sample_format: SampleFormat,
+        shared: &Arc<Mutex<CaptureState>>,
+        blocks: &Arc<AtomicU64>,
+        lost: &Arc<AtomicU8>,
+    ) -> Result<cpal::Stream, String> {
+        let (shared, blocks, lost) = (shared.clone(), blocks.clone(), lost.clone());
+        match sample_format {
+            SampleFormat::F32 => build_input::<f32>(device, config, shared, blocks, lost),
+            SampleFormat::I16 => build_input::<i16>(device, config, shared, blocks, lost),
+            SampleFormat::U16 => build_input::<u16>(device, config, shared, blocks, lost),
+            SampleFormat::I32 => build_input::<i32>(device, config, shared, blocks, lost),
+            other => Err(format!("unsupported sample format {other:?}")),
+        }
+    }
+
     #[cfg(not(target_os = "android"))]
     fn build_input<T>(
         device: &cpal::Device,
         config: cpal::StreamConfig,
-        mut capture: Capture,
-        commands: mpsc::Receiver<CaptureCommand>,
+        shared: Arc<Mutex<CaptureState>>,
         blocks: Arc<AtomicU64>,
+        lost: Arc<AtomicU8>,
     ) -> Result<cpal::Stream, String>
     where
         T: SizedSample,
@@ -945,14 +1100,9 @@ mod output {
                 config,
                 move |data: &[T], info: &cpal::InputCallbackInfo| {
                     blocks.fetch_add(1, Ordering::Relaxed);
-                    while let Ok(command) = commands.try_recv() {
-                        capture.apply(command);
-                    }
-                    scratch.clear();
-                    scratch.extend(data.iter().map(|&sample| sample.to_sample::<f32>()));
-                    capture.deliver(&scratch, info.timestamp().capture);
+                    super::capture::take(&shared, &mut scratch, data, info.timestamp().capture);
                 },
-                |error| log::error!("libmorph: audio capture stream: {error}"),
+                on_error(lost, "audio capture stream"),
                 None,
             )
             .map_err(|e| e.to_string())
@@ -968,19 +1118,16 @@ mod output {
         let (commands, receiver) = mpsc::channel();
         let (returns, removed) = mpsc::channel();
         let mixer = Mixer::new(usize::from(config.channels), config.sample_rate, returns);
+        let shared = Arc::new(Mutex::new(MixerState::new(mixer, receiver)));
         let blocks = Arc::new(AtomicU64::new(0));
-        let counter = blocks.clone();
-        let stream = match sample_format {
-            SampleFormat::F32 => build::<f32>(&device, config, mixer, receiver, counter),
-            SampleFormat::I16 => build::<i16>(&device, config, mixer, receiver, counter),
-            SampleFormat::U16 => build::<u16>(&device, config, mixer, receiver, counter),
-            SampleFormat::I32 => build::<i32>(&device, config, mixer, receiver, counter),
-            other => return Err(format!("unsupported sample format {other:?}")),
-        }?;
+        let lost = Arc::new(AtomicU8::new(LOST_NONE));
+        let stream = open_output(&device, config, sample_format, &shared, &blocks, &lost)?;
         stream.play().map_err(|e| e.to_string())?;
         Ok(Output {
-            stream,
+            stream: RefCell::new(Some(stream)),
+            shared,
             blocks,
+            lost,
             commands,
             removed,
             device,
@@ -989,12 +1136,31 @@ mod output {
         })
     }
 
+    /// An output stream at `config` and `sample_format` playing `shared`.
+    fn open_output(
+        device: &cpal::Device,
+        config: cpal::StreamConfig,
+        sample_format: SampleFormat,
+        shared: &Arc<Mutex<MixerState>>,
+        blocks: &Arc<AtomicU64>,
+        lost: &Arc<AtomicU8>,
+    ) -> Result<cpal::Stream, String> {
+        let (shared, blocks, lost) = (shared.clone(), blocks.clone(), lost.clone());
+        match sample_format {
+            SampleFormat::F32 => build::<f32>(device, config, shared, blocks, lost),
+            SampleFormat::I16 => build::<i16>(device, config, shared, blocks, lost),
+            SampleFormat::U16 => build::<u16>(device, config, shared, blocks, lost),
+            SampleFormat::I32 => build::<i32>(device, config, shared, blocks, lost),
+            other => Err(format!("unsupported sample format {other:?}")),
+        }
+    }
+
     fn build<T>(
         device: &cpal::Device,
         config: cpal::StreamConfig,
-        mut mixer: Mixer,
-        commands: mpsc::Receiver<Command>,
+        shared: Arc<Mutex<MixerState>>,
         blocks: Arc<AtomicU64>,
+        lost: Arc<AtomicU8>,
     ) -> Result<cpal::Stream, String>
     where
         T: SizedSample + FromSample<f32>,
@@ -1005,16 +1171,9 @@ mod output {
                 config,
                 move |out: &mut [T], _| {
                     blocks.fetch_add(1, Ordering::Relaxed);
-                    while let Ok(command) = commands.try_recv() {
-                        mixer.apply(command);
-                    }
-                    scratch.resize(out.len(), 0.0);
-                    mixer.mix(&mut scratch);
-                    for (out, sample) in out.iter_mut().zip(&scratch) {
-                        *out = T::from_sample(*sample);
-                    }
+                    super::mixer::fill(&shared, &mut scratch, out);
                 },
-                |error| log::error!("libmorph: audio stream: {error}"),
+                on_error(lost, "audio stream"),
                 None,
             )
             .map_err(|e| e.to_string())
@@ -1198,6 +1357,8 @@ mod aaudio {
 #[cfg(feature = "audio")]
 mod capture {
     use std::sync::mpsc;
+    #[cfg(not(target_os = "android"))]
+    use std::sync::{Mutex, TryLockError};
 
     use super::cpal::StreamInstant;
     use super::{Captured, Sink};
@@ -1205,6 +1366,48 @@ mod capture {
     pub(crate) enum CaptureCommand {
         AddSink(u64, Sink),
         RemoveSink(u64),
+    }
+
+    /// The capture state and its commands, shared (desktop and web) by every
+    /// input stream libmorph opens in a run, so a reopen keeps the sinks.
+    #[cfg(not(target_os = "android"))]
+    pub(crate) struct CaptureState {
+        capture: Capture,
+        commands: mpsc::Receiver<CaptureCommand>,
+    }
+
+    #[cfg(not(target_os = "android"))]
+    impl CaptureState {
+        pub fn new(capture: Capture, commands: mpsc::Receiver<CaptureCommand>) -> Self {
+            Self { capture, commands }
+        }
+    }
+
+    /// One input callback: apply the waiting commands and hand `data` to the
+    /// sinks. If a reopen holds the state (the old and new streams overlap
+    /// for a callback), the block is dropped.
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn take<T>(
+        shared: &Mutex<CaptureState>,
+        scratch: &mut Vec<f32>,
+        data: &[T],
+        at: StreamInstant,
+    ) where
+        T: super::cpal::SizedSample,
+        f32: super::cpal::FromSample<T>,
+    {
+        let mut state = match shared.try_lock() {
+            Ok(state) => state,
+            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+            Err(TryLockError::WouldBlock) => return,
+        };
+        let state = &mut *state;
+        while let Ok(command) = state.commands.try_recv() {
+            state.capture.apply(command);
+        }
+        scratch.clear();
+        scratch.extend(data.iter().map(|&sample| sample.to_sample::<f32>()));
+        state.capture.deliver(scratch, at);
     }
 
     /// The input callback's state: the sinks, and where the stream is.
@@ -1351,8 +1554,9 @@ mod capture {
 
 #[cfg(feature = "audio")]
 mod mixer {
-    use std::sync::mpsc;
+    use std::sync::{Mutex, TryLockError, mpsc};
 
+    use super::cpal::{FromSample, SizedSample};
     use super::{Sound, Source};
 
     pub(crate) enum Command {
@@ -1416,6 +1620,45 @@ mod mixer {
                 self.position += self.step;
             }
             self.looping || self.position < end
+        }
+    }
+
+    /// The mixer and its commands, shared by every output stream libmorph
+    /// opens in a run, so a reopen keeps the voices and sources.
+    pub(crate) struct MixerState {
+        mixer: Mixer,
+        commands: mpsc::Receiver<Command>,
+    }
+
+    impl MixerState {
+        pub fn new(mixer: Mixer, commands: mpsc::Receiver<Command>) -> Self {
+            Self { mixer, commands }
+        }
+    }
+
+    /// One output callback: apply the waiting commands and mix into `out`.
+    /// If a reopen holds the state (the old and new streams overlap for a
+    /// callback), `out` is silence.
+    pub(crate) fn fill<T>(shared: &Mutex<MixerState>, scratch: &mut Vec<f32>, out: &mut [T])
+    where
+        T: SizedSample + FromSample<f32>,
+    {
+        let mut state = match shared.try_lock() {
+            Ok(state) => state,
+            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+            Err(TryLockError::WouldBlock) => {
+                out.fill(T::EQUILIBRIUM);
+                return;
+            }
+        };
+        let state = &mut *state;
+        while let Ok(command) = state.commands.try_recv() {
+            state.mixer.apply(command);
+        }
+        scratch.resize(out.len(), 0.0);
+        state.mixer.mix(scratch);
+        for (out, sample) in out.iter_mut().zip(scratch.iter()) {
+            *out = T::from_sample(*sample);
         }
     }
 
@@ -1623,6 +1866,45 @@ mod mixer {
             let mut out = [0.0; 1];
             mixer.mix(&mut out);
             assert_eq!(out, [0.5]);
+        }
+
+        #[test]
+        fn a_voice_plays_on_across_two_streams() {
+            use std::sync::{Arc, Mutex};
+
+            use super::{MixerState, fill};
+
+            let (commands, receiver) = mpsc::channel();
+            let shared = Arc::new(Mutex::new(MixerState::new(mixer(1, 1), receiver)));
+            // One output callback, as `build` makes it for each stream.
+            let stream = |shared: Arc<Mutex<MixerState>>| {
+                let mut scratch = Vec::new();
+                move |out: &mut [f32]| fill(&shared, &mut scratch, out)
+            };
+            commands
+                .send(Command::Play {
+                    voice: 1,
+                    sound: Sound::new(vec![0.125, 0.25, 0.375, 0.5, 0.625], 1, 1),
+                    volume: 1.0,
+                    looping: false,
+                })
+                .unwrap();
+            let mut first = stream(shared.clone());
+            let mut out = [0.0; 2];
+            first(&mut out);
+            assert_eq!(out, [0.125, 0.25]);
+            // The reopen: the first stream goes, a second plays on.
+            drop(first);
+            let mut second = stream(shared.clone());
+            second(&mut out);
+            assert_eq!(out, [0.375, 0.5]);
+            // While the state is held (streams overlapping), silence.
+            let held = shared.lock().unwrap();
+            second(&mut out);
+            assert_eq!(out, [0.0; 2]);
+            drop(held);
+            second(&mut out);
+            assert_eq!(out, [0.625, 0.0]);
         }
 
         #[test]
