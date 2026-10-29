@@ -15,6 +15,11 @@
 //! colour. The desktop has only `Default`. The first argument is the chunk
 //! length in milliseconds (default 1000).
 //!
+//! Each change in a stream's health (`MorphApp::on_audio`) is logged as
+//! `audio: <event>`, and once a second the streams' states as
+//! `audio: capture_state <state>, output_state <state>`; the S23 check
+//! `examples/android/capture_resume.sh` reads both.
+//!
 //! The screen is a scrolling spectrogram of the capture, newest at the
 //! right and low frequencies at the bottom (log-spaced from 40 Hz), and is
 //! dark red until capture is ready (on Android, until the user allows the
@@ -34,8 +39,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{fs, io, mem, thread};
 
 use libmorph::{
-    AudioSetup, CaptureFormat, CaptureMode, Captured, Frame, MorphApp, MorphContext, Permissions,
-    Touch, TouchPhase, wgpu,
+    AudioEvent, AudioSetup, CaptureFormat, CaptureMode, Captured, Frame, MorphApp, MorphContext,
+    Permissions, Touch, TouchPhase, wgpu,
 };
 
 /// What capture needs on Android, declared in `examples/android/`'s manifest.
@@ -100,12 +105,15 @@ pub struct AudioCapture {
     /// `None` until capture is ready.
     columns: Option<Arc<Mutex<Columns>>>,
     view: Spectrogram,
+    /// Time since the streams' states were last logged.
+    since_states: Duration,
 }
 
 impl MorphApp for AudioCapture {
     fn audio_setup(setup: &mut AudioSetup) {
         setup.capture = true;
-        setup.output = false;
+        // Silent (no sources), so its recovery shows in `output_state`.
+        setup.output = true;
     }
 
     fn init(ctx: &mut MorphContext) -> Self {
@@ -121,7 +129,26 @@ impl MorphApp for AudioCapture {
             asked: 0,
             columns: None,
             view: Spectrogram::new(ctx),
+            since_states: Duration::ZERO,
         }
+    }
+
+    /// Once a second, where the streams are.
+    fn update(&mut self, ctx: &mut MorphContext, dt: Duration) {
+        self.since_states += dt;
+        if self.since_states >= Duration::from_secs(1) {
+            self.since_states = Duration::ZERO;
+            log::info!(
+                "audio: capture_state {:?}, output_state {:?}",
+                ctx.audio().capture_state(),
+                ctx.audio().output_state()
+            );
+        }
+    }
+
+    /// A stream was interrupted, restored or given up on.
+    fn on_audio(&mut self, _ctx: &mut MorphContext, event: &AudioEvent) {
+        log::info!("audio: {event:?}");
     }
 
     /// The answer to a request made by a tap. If it grants the microphone,
