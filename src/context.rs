@@ -285,6 +285,35 @@ impl MorphContext {
         crate::link::open(url)
     }
 
+    /// The clipboard's text, for the app's own Paste button: the plain text
+    /// of the clipboard's first item. `None` when it holds no text, on hosts
+    /// without a clipboard call, and when the platform will not give it.
+    ///
+    /// Android: libmobile's `clipboard::read_text` (feature
+    /// `mobile-clipboard`; without it `None`); macOS: libdevice's
+    /// `clipboard::read_text`; other desktops, the web and scripted runs:
+    /// `None`. An empty text is `None`.
+    ///
+    /// Call it when the user asks to paste. On Android 12 and later the
+    /// system shows a "pasted from your clipboard" toast for text another
+    /// app copied; on Android 10 and later only the app in front (with
+    /// window focus) may read it, and a refusal is logged at debug with its
+    /// reason. libmorph never logs the text.
+    #[must_use]
+    pub fn clipboard_text(&self) -> Option<String> {
+        crate::clipboard::text(self)
+    }
+
+    /// Whether the clipboard holds text, for enabling a Paste button. On
+    /// Android it reads only the clip's description (libmobile's
+    /// `clipboard::has_text`), so no toast is shown; on macOS it reads the
+    /// text. `false` wherever [`clipboard_text`](Self::clipboard_text) is
+    /// always `None`.
+    #[must_use]
+    pub fn clipboard_has_text(&self) -> bool {
+        crate::clipboard::has_text(self)
+    }
+
     /// The camera ([`camera`](crate::camera)): preview, one still frame and
     /// QR scanning. Calls never block; answers come to
     /// [`MorphApp::on_camera`](crate::MorphApp::on_camera). On Android with

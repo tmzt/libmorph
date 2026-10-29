@@ -17,6 +17,7 @@ mod audio;
 pub mod battery;
 mod build_info;
 pub mod camera;
+mod clipboard;
 mod config;
 mod context;
 mod gpu;

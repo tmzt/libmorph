@@ -1,7 +1,7 @@
 ---
 title: The clipboard's text on every host
 date: 2026-10-28
-status: Draft
+status: In implementation
 covers:
   - "`MorphContext::clipboard_text(&self) -> Option<String>` and
     `MorphContext::clipboard_has_text(&self) -> bool`"
@@ -141,3 +141,9 @@ flankr's bottom bar plan needs, on 2026-10-28, through the flankr lead
 This plan is built with libmobile's `docs/design/20261028_03_CLIPBOARD_PLAN.md`,
 libmobile first, for libmobile 0.3.2 and libmorph 0.5.1. The status stays
 `Draft` until the first commit that implements it.
+
+## Amendment — 2026-10-28 23:49 EDT: implementation has started; the document is now immutable
+
+Step 1 (the wrapper) is the first implementing commit, built against
+libmobile's `wt-clipboard` worktree (0.3.2) and the local libdevice
+checkout until both are on GitHub.

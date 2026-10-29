@@ -637,7 +637,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1048,7 +1048,7 @@ checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 [[package]]
 name = "libdevice"
 version = "0.1.2"
-source = "git+https://github.com/tmzt/libdevice#9cbddc9c10420ac8233d25416b847b514d98c62d"
+source = "git+https://github.com/tmzt/libdevice#31cc51ae567ad6a850a2695947d27dedff9538e2"
 dependencies = [
  "log",
  "objc2 0.5.3",
@@ -1077,8 +1077,8 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libmobile"
-version = "0.3.1"
-source = "git+https://github.com/tmzt/libmobile#488a698935063cfdd879cb84b4aaf14afb1ac819"
+version = "0.3.2"
+source = "git+https://github.com/tmzt/libmobile#be20e4fa74eb6615c63530b14e4dd13ccac2978c"
 dependencies = [
  "android-activity",
  "cpal",
@@ -1096,7 +1096,7 @@ dependencies = [
 
 [[package]]
 name = "libmorph"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "block2 0.5.1",
  "cpal",
@@ -2077,7 +2077,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2893,7 +2893,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

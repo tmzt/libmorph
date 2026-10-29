@@ -1,6 +1,6 @@
 [package]
 name = "libmorph"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Unified windowing, graphics and device-emulation shell for wgpu applications"
@@ -49,6 +49,10 @@ mobile-foreground-service = ["mobile", "libmobile/foreground-service"]
 mobile-system-events = ["mobile", "libmobile/system-events"]
 # Battery optimization and app sleeping (`libmorph::battery`).
 mobile-battery = ["mobile", "libmobile/battery"]
+# The clipboard's text on Android (`ctx.clipboard_text`,
+# `ctx.clipboard_has_text`; libmobile's `clipboard`). Read only, no
+# permission.
+mobile-clipboard = ["mobile", "libmobile/clipboard"]
 # `system_events::subscribe_tokio`: libmobile's on Android, and libmorph's
 # own desktop stream. No tokio runtime is needed to send.
 tokio = ["libmobile?/tokio", "dep:tokio"]
@@ -99,8 +103,9 @@ crc32fast = { version = "1.5", optional = true }
 
 # Trackpad fingers from AppKit, at the versions winit already uses.
 [target.'cfg(target_os = "macos")'.dependencies]
-# `MorphContext::open_link`: libdevice's NSWorkspace opener, always on.
-libdevice = { git = "https://github.com/tmzt/libdevice", features = ["open-link"] }
+# `MorphContext::open_link`: libdevice's NSWorkspace opener, and
+# `MorphContext::clipboard_text`: its NSPasteboard reader, both always on.
+libdevice = { git = "https://github.com/tmzt/libdevice", features = ["open-link", "clipboard"] }
 objc2 = "0.5.2"
 objc2-foundation = { version = "0.2.2", features = ["NSEnumerator", "NSGeometry", "NSSet"] }
 objc2-app-kit = { version = "0.2.2", features = [

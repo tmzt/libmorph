@@ -271,3 +271,15 @@ amendment of 2026-10-28 14:46 EDT).
   re-exports `libmobile::gradle`, and libmobile's 0.3 renamed its `camera`
   feature (`camera-intent` is the system camera app hand-off; `camera` is the
   in-process camera). No other change.
+
+## libmorph 0.5.1 — 2026-10-28 (tag v0.5.1)
+
+The clipboard's text (`docs/design/20261028_03_CLIPBOARD_PLAN.md`). Additive.
+
+- libmobile 0.3.1 → 0.3.2 (compatible).
+- `MorphContext::clipboard_text() -> Option<String>` and
+  `MorphContext::clipboard_has_text() -> bool`, on every host: libmobile's
+  `clipboard` on Android, libdevice's `clipboard::read_text` on macOS,
+  `None` and `false` on other desktops, the web and in scripted runs.
+- Feature `mobile-clipboard` (`libmobile/clipboard`).
+- On macOS, libdevice's `clipboard` feature is turned on (no new crates).
