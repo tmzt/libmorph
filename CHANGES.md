@@ -1198,3 +1198,24 @@ Departures (small, Rule 1.7):
 
 Step 4 (RoundTwo, the first user) is RoundTwo's own work; the plan stays
 In implementation until its Done when holds.
+
+## 2026-10-29 19:07 EDT — Audio streams that recover after a resume or a lost device (proposed)
+
+Plan: `docs/design/20261029_02_AUDIO_STREAM_RECOVERY_PLAN.md` (Draft).
+Reported from RoundTwo on the S23 (Android 16) on libmorph 0.5.3: after
+the app came back to the front, `Audio::resume` logged `audio capture
+resume failed: InvalidState` (libmobile's `CaptureStream::start` on a
+stream AAudio would no longer start) and kept the dead stream, so no
+capture block reached the sinks until the app was restarted. The owner:
+"yes, plan the libmorph fix and add the mic check" (the mic check is
+RoundTwo's). On a failed start, a reported loss or a 1 s stall, capture
+and output are reopened with the same mode, format, sinks and mixer
+(Android capture through libmobile's existing `set_preset`, so no
+libmobile change), four attempts, then `Failed`; a new
+`MorphApp::on_audio` with `AudioEvent`, `capture_state()`,
+`output_state()` and `restart()` tell the app; `on_capture_ready`
+stays once per run. Checked by unit tests of the state machine and an
+adb-only script on the S23. For libmorph 0.5.4 (additive), on libmobile
+0.3.5 unchanged; RoundTwo is the first user.
+
+Proposed only; nothing is implemented until the owner approves.
