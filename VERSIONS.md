@@ -306,3 +306,20 @@ Asking the user for a photo, a video or a file
 - Feature `mobile-media-request` (`libmobile/media-request`).
 - The web build turns on the web-sys features `Blob`, `Event`, `File`,
   `FileList`, `HtmlInputElement` and `Navigator` (no new crates).
+
+## libmorph 0.5.3 — 2026-10-29 (tag v0.5.3)
+
+Writing text to the clipboard
+(`docs/design/20261029_01_CLIPBOARD_WRITE_PLAN.md`). Additive.
+
+- libmobile 0.3.4 → 0.3.5 and libdevice 0.1.2 → 0.1.3 (compatible).
+- `MorphContext::set_clipboard_text(&self, &str) -> Result<ClipboardWrite,
+  ClipboardError>` and `MorphContext::clipboard_can_write(&self) -> bool`,
+  on every host: libmobile's `clipboard::write_text` on Android under
+  `mobile-clipboard`, libdevice's `clipboard::write_text` on macOS, a log
+  line only in scripted runs, `ClipboardError::Unsupported` on other
+  desktops, the web and Android without the feature.
+- `libmorph::ClipboardWrite` (`#[non_exhaustive]`: `SystemNotice`,
+  `Silent`) and `libmorph::ClipboardError` (`#[non_exhaustive]`:
+  `Unsupported`, `Platform(String)`), with `Display` and `Error`.
+- Feature `mobile-clipboard` now also gives the write (no new feature).

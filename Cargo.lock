@@ -1096,7 +1096,7 @@ dependencies = [
 
 [[package]]
 name = "libmorph"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "block2 0.5.1",
  "cpal",
