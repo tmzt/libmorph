@@ -283,3 +283,26 @@ The clipboard's text (`docs/design/20261028_03_CLIPBOARD_PLAN.md`). Additive.
   `None` and `false` on other desktops, the web and in scripted runs.
 - Feature `mobile-clipboard` (`libmobile/clipboard`).
 - On macOS, libdevice's `clipboard` feature is turned on (no new crates).
+
+## libmorph 0.5.2 — 2026-10-29 (tag v0.5.2)
+
+Asking the user for a photo, a video or a file
+(`docs/design/20261028_02_MEDIA_REQUEST_PLAN.md`). Additive.
+
+- libmobile 0.3.2 → 0.3.4 (compatible).
+- `MorphContext::media_request(&MediaRequest) -> MediaRequestId` and
+  `MorphApp::on_media(&mut self, &mut MorphContext, &MediaResponse)` (a
+  default body), on every host: libmobile's `media-request` on Android,
+  a file input on the web, `MediaError::Unsupported` on the desktop and
+  Android without the feature; script commands `media`, `media-camera`,
+  `media-cancel`, `media-deny` and `media-deny-forever`.
+- Module `libmorph::media`: `MediaRequestId` (`id()`); `MediaKind`,
+  `CameraEntry`, `CameraPermission`, `Picker`, `Delivery`, `MediaData`
+  (`#[non_exhaustive]` enums, as libmobile's); `MediaSource` (`Picked`,
+  `Camera`); `MediaRequest` (`#[non_exhaustive]`, `Default`), `MediaItem`,
+  `MediaReply`, `MediaResponse` (`#[non_exhaustive]`); `MediaError`
+  (`#[non_exhaustive]`: libmobile's variants and `Unsupported`), with
+  `Display` and `Error`; `MEDIA_MAX_BYTES`, `MEDIA_MAX_ITEMS`.
+- Feature `mobile-media-request` (`libmobile/media-request`).
+- The web build turns on the web-sys features `Blob`, `Event`, `File`,
+  `FileList`, `HtmlInputElement` and `Navigator` (no new crates).

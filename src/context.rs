@@ -41,6 +41,7 @@ pub struct MorphContext {
     pub(crate) text_input_options: crate::TextInputOptions,
     pub(crate) keyboard_inset: f32,
     pub(crate) camera: crate::camera::CameraState,
+    pub(crate) media: crate::media::MediaState,
 }
 
 impl MorphContext {
@@ -71,6 +72,7 @@ impl MorphContext {
             text_input_options: crate::TextInputOptions::default(),
             keyboard_inset: 0.0,
             camera: crate::camera::CameraState::default(),
+            media: crate::media::MediaState::default(),
         }
     }
 
@@ -323,6 +325,27 @@ impl MorphContext {
     /// on the next frame. Scripted runs have a stand-in camera.
     pub fn camera(&mut self) -> crate::camera::Camera<'_> {
         crate::camera::Camera::new(self)
+    }
+
+    /// Ask the user for a photo, a video or a file
+    /// ([`media`](crate::media)). Returns at once; the answer comes to
+    /// [`MorphApp::on_media`](crate::MorphApp::on_media) with this id.
+    /// Android (feature `mobile-media-request`): the system chooser with an
+    /// optional camera entry, or the Photo Picker. The web: the browser's
+    /// file dialog; call it while handling a touch or key, or the browser
+    /// ignores it. The desktop and Android without the feature:
+    /// [`MediaError::Unsupported`](crate::media::MediaError::Unsupported) on
+    /// the next frame. Scripted runs: the `media` commands answer.
+    pub fn media_request(
+        &mut self,
+        request: &crate::media::MediaRequest,
+    ) -> crate::media::MediaRequestId {
+        let host = crate::media::Host {
+            cache_dir: self.cache_dir.as_deref(),
+            #[cfg(all(target_os = "android", feature = "mobile"))]
+            android: self.android.as_ref(),
+        };
+        crate::media::request(&mut self.media, host, request)
     }
 
     /// Open this app's page in the system Settings, where the user can grant

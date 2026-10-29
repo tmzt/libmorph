@@ -23,6 +23,7 @@ mod context;
 mod gpu;
 mod input;
 mod link;
+pub mod media;
 mod memory;
 mod out_dir;
 mod permission;

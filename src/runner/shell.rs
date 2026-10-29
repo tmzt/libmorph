@@ -231,6 +231,20 @@ impl<A: MorphApp> Shell<A> {
         }
     }
 
+    /// Deliver the media answers waiting to `on_media`, oldest first.
+    pub fn media_events(&mut self) {
+        for response in self.ctx.media.take_responses() {
+            self.app.on_media(&mut self.ctx, &response);
+        }
+    }
+
+    /// One media answer from the platform (Android), now.
+    #[cfg(all(target_os = "android", feature = "mobile-media-request"))]
+    pub fn media_response(&mut self, response: libmobile::media::MediaResponse) {
+        let response = self.ctx.media.android_response(response);
+        self.app.on_media(&mut self.ctx, &response);
+    }
+
     /// One camera event from the platform (Android), now.
     #[cfg(all(target_os = "android", feature = "mobile-camera"))]
     pub fn camera_event(&mut self, event: &crate::camera::CameraEvent) {
@@ -301,6 +315,7 @@ impl<A: MorphApp> Shell<A> {
     /// `update`, `render` and the overlay into `view`.
     fn draw(&mut self, view: &wgpu::TextureView) {
         self.camera_events();
+        self.media_events();
         let now = Instant::now();
         let dt = self.fixed_dt.unwrap_or(now - self.last_frame);
         self.last_frame = now;

@@ -1,7 +1,7 @@
 ---
 title: Asking the user for a photo or video, on every host
 date: 2026-10-28
-status: Draft
+status: In implementation
 covers:
   - "Passthrough feature `mobile-media-request` for libmobile's
     `media-request`"
@@ -257,3 +257,11 @@ answers that arrive before the app exists are delivered right after
 libmobile's media request (its plan 20261028_02, approved the same day).
 Its version is the next free patch at its commit. The status stays `Draft`
 until the first implementing commit (Rule 1.5).
+
+## Amendment — 2026-10-29 02:22 EDT: implementation has started; the document is now immutable
+
+Steps 1 to 4 are the first implementing commit, as libmorph 0.5.2 on
+libmobile 0.3.4 (its media request plan, built the same day), per the
+approval amendment of 2026-10-29 01:53 EDT. Step 3's browser checks and
+step 5 (the Android example and its S23 checks) are not done; step 6 is in
+its own commits. The departures are recorded in `CHANGES.md`.

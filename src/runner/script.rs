@@ -10,6 +10,7 @@ use super::overlay::Overlay;
 use super::shell::Shell;
 use crate::camera::ScriptFrame;
 use crate::gpu::{self, Gpu};
+use crate::media::{MediaSource, ScriptAnswer, ScriptFile};
 use crate::screenshot::{self, Entry, ExitBy, Manifest};
 use crate::script::{Action, Report, Screenshot, Script, ScriptError, ScriptRun};
 use crate::{Audio, MorphApp, MorphContext, MorphError, SafeArea};
@@ -32,6 +33,7 @@ pub(crate) fn run<A: MorphApp>(script: &Script, run: ScriptRun) -> Result<Report
     ctx.safe_area = SafeArea::from(spec.insets(InsetType::SafeDrawing));
     ctx.scripted = true;
     ctx.camera.scripted();
+    ctx.media.scripted();
     // The app's directories, inside the output and empty for each run.
     ctx.data_dir = crate::storage::fresh(&dir.join("storage"));
     ctx.cache_dir = crate::storage::fresh(&dir.join("cache"));
@@ -155,6 +157,46 @@ fn play<A: MorphApp>(
                 });
             }
             Action::CameraDeny { settings_only } => shell.ctx.camera.script_deny(settings_only),
+            Action::Media { paths, camera } => {
+                let mut files = Vec::with_capacity(paths.len());
+                for path in paths {
+                    let path = match script.path().and_then(Path::parent) {
+                        Some(dir) => dir.join(path),
+                        None => path,
+                    };
+                    let bytes = std::fs::read(&path).map_err(|error| {
+                        ScriptError::Io(std::io::Error::new(
+                            error.kind(),
+                            format!("media {}: {error}", path.display()),
+                        ))
+                    })?;
+                    let name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    files.push(ScriptFile { name, bytes });
+                }
+                log::info!(
+                    "libmorph: script line {line}: media ({} file(s), {} bytes)",
+                    files.len(),
+                    files.iter().map(|f| f.bytes.len()).sum::<usize>()
+                );
+                let source = if camera {
+                    MediaSource::Camera
+                } else {
+                    MediaSource::Picked
+                };
+                let cache = shell.ctx.cache_dir.clone();
+                shell
+                    .ctx
+                    .media
+                    .script_answer(ScriptAnswer::Files { files, source }, cache.as_deref());
+            }
+            Action::MediaCancel => shell.ctx.media.script_answer(ScriptAnswer::Cancel, None),
+            Action::MediaDeny { settings_only } => shell
+                .ctx
+                .media
+                .script_answer(ScriptAnswer::Deny { settings_only }, None),
             Action::Exit => {
                 manifest.exit_by = ExitBy::Script;
                 manifest.exit_line = Some(line);
@@ -164,6 +206,7 @@ fn play<A: MorphApp>(
         // Camera answers to this command (and to calls the app made in
         // its hooks) arrive now, before the next frame.
         shell.camera_events();
+        shell.media_events();
         if shell.exit_requested() {
             manifest.exit_by = ExitBy::App;
             manifest.exit_line = Some(line);

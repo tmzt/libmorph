@@ -43,6 +43,8 @@ pub fn run_android<A: MorphApp>(app: AndroidApp) {
             wants_capture: false,
             capture_request: None,
             urls: Vec::new(),
+            #[cfg(feature = "mobile-media-request")]
+            media: Vec::new(),
         },
     );
 }
@@ -76,6 +78,10 @@ struct Adapter<A> {
     /// Links that arrived before the app existed (a link that cold-started
     /// it), delivered right after `init`.
     urls: Vec<String>,
+    /// Media answers that arrived before the app existed (the process was
+    /// killed while the camera was up), delivered right after `init`.
+    #[cfg(feature = "mobile-media-request")]
+    media: Vec<libmobile::media::MediaResponse>,
 }
 
 /// The action of an intent that opens a link.
@@ -156,6 +162,10 @@ impl<A: MorphApp> Adapter<A> {
             Ok(mut shell) => {
                 for url in std::mem::take(&mut self.urls) {
                     shell.open_url(url);
+                }
+                #[cfg(feature = "mobile-media-request")]
+                for response in std::mem::take(&mut self.media) {
+                    shell.media_response(response);
                 }
                 self.shell = Some(shell);
                 if ask {
@@ -361,6 +371,13 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
                     }
                 }
                 None => log::warn!("libmorph: a camera event before the app exists"),
+            },
+            // libmobile's media answer: on the main loop, also while
+            // suspended; one before the app exists waits for `init`.
+            #[cfg(feature = "mobile-media-request")]
+            MobileEvent::Media(response) => match &mut self.shell {
+                Some(shell) => shell.media_response(response),
+                None => self.media.push(response),
             },
             // A report before `init` is dropped: there is nothing to free.
             MobileEvent::LowMemory => match &mut self.shell {

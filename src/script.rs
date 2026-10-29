@@ -146,6 +146,22 @@ pub enum Command {
     /// (`true`): the next camera call answers
     /// [`CameraError::PermissionDenied`](crate::camera::CameraError::PermissionDenied).
     CameraDeny { settings_only: bool },
+    /// `media <path> [<path> ...]` (`camera: false`) and `media-camera
+    /// <path>` (`true`): the waiting
+    /// [`media_request`](crate::MorphContext::media_request), or the next
+    /// one, answers with these files: MIME type from the extension (`png`,
+    /// `jpg`/`jpeg`, `mp4`, else none), `source` `Picked` or `Camera`, the
+    /// request's `max_items` and `max_bytes` applied; `Delivery::File` gets
+    /// copies in the run's cache directory. Paths are relative to the
+    /// script's file and have no whitespace. Logged by count and size only.
+    Media { paths: Vec<PathBuf>, camera: bool },
+    /// `media-cancel`: the waiting (or next) media request answers
+    /// [`MediaError::Cancelled`](crate::media::MediaError::Cancelled).
+    MediaCancel,
+    /// `media-deny` (`settings_only: false`) and `media-deny-forever`
+    /// (`true`): the waiting (or next) media request answers
+    /// [`MediaError::PermissionDenied`](crate::media::MediaError::PermissionDenied).
+    MediaDeny { settings_only: bool },
 }
 
 /// Why a script could not be loaded, checked or run.
@@ -319,6 +335,14 @@ pub(crate) enum Action {
     CameraDeny {
         settings_only: bool,
     },
+    Media {
+        paths: Vec<PathBuf>,
+        camera: bool,
+    },
+    MediaCancel,
+    MediaDeny {
+        settings_only: bool,
+    },
 }
 
 /// The static checks of the plan, section 3, with the expansion.
@@ -475,6 +499,22 @@ impl Planner {
             }
             &Command::CameraDeny { settings_only } => {
                 self.push(line, Action::CameraDeny { settings_only });
+            }
+            Command::Media { paths, camera } => {
+                if paths.is_empty() || paths.iter().any(|p| p.as_os_str().is_empty()) {
+                    return Err("`media` takes one or more file paths".into());
+                }
+                self.push(
+                    line,
+                    Action::Media {
+                        paths: paths.clone(),
+                        camera: *camera,
+                    },
+                );
+            }
+            Command::MediaCancel => self.push(line, Action::MediaCancel),
+            &Command::MediaDeny { settings_only } => {
+                self.push(line, Action::MediaDeny { settings_only });
             }
         }
         Ok(())
@@ -668,6 +708,38 @@ fn parse_command(words: &[&str]) -> Result<Command, String> {
                 settings_only: true,
             }
         }
+        "media" => {
+            if args.is_empty() {
+                return Err("usage: media <path> [<path> ...]".into());
+            }
+            Command::Media {
+                paths: args.iter().map(PathBuf::from).collect(),
+                camera: false,
+            }
+        }
+        "media-camera" => {
+            arity(&[1], "media-camera <path>")?;
+            Command::Media {
+                paths: vec![PathBuf::from(args[0])],
+                camera: true,
+            }
+        }
+        "media-cancel" => {
+            arity(&[0], "media-cancel")?;
+            Command::MediaCancel
+        }
+        "media-deny" => {
+            arity(&[0], "media-deny")?;
+            Command::MediaDeny {
+                settings_only: false,
+            }
+        }
+        "media-deny-forever" => {
+            arity(&[0], "media-deny-forever")?;
+            Command::MediaDeny {
+                settings_only: true,
+            }
+        }
         other => return Err(format!("unknown command `{other}`")),
     };
     Ok(command)
@@ -810,6 +882,53 @@ mod tests {
         // A frame and a denial may be given while suspended.
         assert_eq!(
             actions("suspend\ncamera-frame f.png\ncamera-deny\nresume\n").len(),
+            4
+        );
+    }
+
+    #[test]
+    fn media_commands_parse() {
+        assert_eq!(
+            actions(
+                "media a.png b/c.jpg # two\nmedia-camera shot.jpg\nmedia-cancel\nmedia-deny\nmedia-deny-forever\n"
+            ),
+            [
+                Action::Media {
+                    paths: vec!["a.png".into(), "b/c.jpg".into()],
+                    camera: false
+                },
+                Action::Media {
+                    paths: vec!["shot.jpg".into()],
+                    camera: true
+                },
+                Action::MediaCancel,
+                Action::MediaDeny {
+                    settings_only: false
+                },
+                Action::MediaDeny {
+                    settings_only: true
+                },
+            ]
+        );
+        assert_eq!(
+            rejected("media\n"),
+            (1, "usage: media <path> [<path> ...]".into())
+        );
+        assert_eq!(
+            rejected("media-camera a.jpg b.jpg\n"),
+            (1, "usage: media-camera <path>".into())
+        );
+        assert_eq!(
+            rejected("frames 1\nmedia-cancel now\n"),
+            (2, "usage: media-cancel".into())
+        );
+        assert_eq!(
+            rejected("media-deny-forever x\n"),
+            (1, "usage: media-deny-forever".into())
+        );
+        // Answers may be given while suspended.
+        assert_eq!(
+            actions("suspend\nmedia a.png\nmedia-cancel\nresume\n").len(),
             4
         );
     }

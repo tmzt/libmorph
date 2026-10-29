@@ -160,6 +160,18 @@ pub trait MorphApp: Sized + 'static {
         let _ = (ctx, event);
     }
 
+    /// A media request answered ([`media`](crate::media)): the chosen items,
+    /// or why there are none (`Cancelled`,
+    /// [`PermissionDenied`](crate::media::MediaError::PermissionDenied),
+    /// [`Unsupported`](crate::media::MediaError::Unsupported)...). On the
+    /// main thread, after [`init`](Self::init): on Android as soon as it
+    /// arrives, also while suspended (one that arrived before the app
+    /// existed comes right after `init`, with `request: None`); elsewhere
+    /// before the next frame's [`update`](Self::update).
+    fn on_media(&mut self, ctx: &mut MorphContext, response: &crate::media::MediaResponse) {
+        let _ = (ctx, response);
+    }
+
     /// The system is low on memory (Android's `onLowMemory`). Free what can
     /// be rebuilt: caches, offscreen resources, decoded data. Called once
     /// per report after [`init`](Self::init), whether or not the app is
