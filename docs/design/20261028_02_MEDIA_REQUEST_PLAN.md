@@ -244,3 +244,16 @@ feature.
    dropped today?
 4. **Script command names.** `media`, `media-camera`, `media-cancel`,
    `media-deny`, `media-deny-forever`?
+
+## Amendment — 2026-10-29 01:53 EDT: approved
+
+The owner approved the plan on 2026-10-29 ("approve media requests"). It
+is approved as written; its open questions keep the smallest choices, each
+changeable by a later amendment: (1) the desktop answers `Unsupported`
+until a desktop app needs a dialog; (2) the web's `capture` stays off; (3)
+answers that arrive before the app exists are delivered right after
+`init` (3.1); (4) the script commands are `media`, `media-camera`,
+`media-cancel`, `media-deny` and `media-deny-forever`. It builds on
+libmobile's media request (its plan 20261028_02, approved the same day).
+Its version is the next free patch at its commit. The status stays `Draft`
+until the first implementing commit (Rule 1.5).
