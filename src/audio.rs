@@ -802,7 +802,15 @@ mod output {
             Err("reopening is not built yet".into())
         }
 
-        /// Not built yet (plan `20261029_02`, steps 3 and 4).
+        /// Android: libmobile's `set_preset` with the mode last asked for.
+        #[cfg(target_os = "android")]
+        fn reopen_capture(&self) -> Result<String, String> {
+            let input = self.input.as_ref().ok_or("no capture stream")?;
+            input.stream.reopen()
+        }
+
+        /// Not built yet (plan `20261029_02`, step 4).
+        #[cfg(not(target_os = "android"))]
         fn reopen_capture(&self) -> Result<String, String> {
             Err("reopening is not built yet".into())
         }
@@ -1057,6 +1065,7 @@ mod tests {
 /// cpal does elsewhere.
 #[cfg(all(feature = "audio", target_os = "android"))]
 mod aaudio {
+    use std::cell::Cell;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
     use std::sync::mpsc;
@@ -1071,6 +1080,9 @@ mod aaudio {
     pub(crate) struct AaudioInput {
         stream: CaptureStream,
         format: CaptureFormat,
+        /// The mode the app last asked for (at open and in `set_mode`),
+        /// which a reopen asks for again.
+        asked: Cell<CaptureMode>,
     }
 
     impl AaudioInput {
@@ -1109,6 +1121,7 @@ mod aaudio {
                     channels: format.channels,
                 },
                 stream,
+                asked: Cell::new(mode),
             })
         }
 
@@ -1121,6 +1134,7 @@ mod aaudio {
         }
 
         pub fn set_mode(&self, mode: CaptureMode) {
+            self.asked.set(mode);
             match self.stream.set_preset(preset(mode)) {
                 Ok(granted) => log::info!(
                     "libmorph: audio capture: asked {mode:?}, got {:?}",
@@ -1128,6 +1142,20 @@ mod aaudio {
                 ),
                 Err(error) => log::warn!("libmorph: audio capture unavailable: {error}"),
             }
+        }
+
+        /// Close the stream, whatever its state, and open a new one with the
+        /// mode last asked for, at the same format, with the same callback
+        /// (so the sinks and the frame count are kept). libmobile starts it,
+        /// since the failed start before this marked it started; it must not
+        /// be started again. Ok carries the modes for the log line.
+        pub fn reopen(&self) -> Result<String, String> {
+            let asked = self.asked.get();
+            let granted = self
+                .stream
+                .set_preset(preset(asked))
+                .map_err(|e| e.to_string())?;
+            Ok(format!(", asked {asked:?}, got {:?}", mode_of(granted)))
         }
 
         pub fn pause(&self) -> Result<(), String> {
