@@ -1,0 +1,10 @@
+# The clipcopy example, scripted:
+#   cargo run --example clipcopy --features script -- --morph-script examples/scripts/clipcopy.morph
+# Grey until the tap, then green: the copy is only logged
+# ("libmorph: script: clipboard written"), never written to the host's
+# clipboard.
+frames 1
+screenshot waiting
+tap 540 1170
+frames 1
+screenshot copied

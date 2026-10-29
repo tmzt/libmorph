@@ -165,6 +165,9 @@ name = "audiocapture"
 name = "urlopen"
 
 [[example]]
+name = "clipcopy"
+
+[[example]]
 name = "securestore"
 required-features = ["secure-store"]
 
