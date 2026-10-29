@@ -45,6 +45,7 @@ pub use audio::{
     Source, SourceId, Voice,
 };
 pub use build_info::BuildInfo;
+pub use clipboard::{ClipboardError, ClipboardWrite};
 pub use config::{MORPH_ARGS_HELP, MorphError};
 pub use context::MorphContext;
 pub use gpu::{GpuError, LimitFailure, LimitsRequest};

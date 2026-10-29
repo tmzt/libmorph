@@ -316,6 +316,40 @@ impl MorphContext {
         crate::clipboard::has_text(self)
     }
 
+    /// Put `text` on the clipboard as plain text, replacing what was there,
+    /// for the app's own Copy button. Call it on the user's tap.
+    ///
+    /// `Ok(ClipboardWrite::SystemNotice)` when the system confirmed the
+    /// copy itself (Android 13 and later); `Ok(ClipboardWrite::Silent)`
+    /// when it did not, and the app may show its own notice. An empty
+    /// `text` is written as given. libmorph never logs the text or its
+    /// length.
+    ///
+    /// Android: libmobile's `clipboard::write_text` (feature
+    /// `mobile-clipboard`; without it [`ClipboardError::Unsupported`]);
+    /// macOS: libdevice's `clipboard::write_text`; other desktops and the
+    /// web: [`ClipboardError::Unsupported`]. Scripted runs log
+    /// `libmorph: script: clipboard written` and answer `Silent` without
+    /// touching the host's clipboard.
+    ///
+    /// [`ClipboardWrite::SystemNotice`]: crate::ClipboardWrite::SystemNotice
+    /// [`ClipboardError::Unsupported`]: crate::ClipboardError::Unsupported
+    pub fn set_clipboard_text(
+        &self,
+        text: &str,
+    ) -> Result<crate::ClipboardWrite, crate::ClipboardError> {
+        crate::clipboard::write(self, text)
+    }
+
+    /// Whether [`set_clipboard_text`](Self::set_clipboard_text) can work on
+    /// this host, for showing or hiding a Copy button. Decided at build
+    /// time: `true` on macOS, Android with `mobile-clipboard`, and scripted
+    /// runs; `false` elsewhere.
+    #[must_use]
+    pub fn clipboard_can_write(&self) -> bool {
+        crate::clipboard::can_write(self)
+    }
+
     /// The camera ([`camera`](crate::camera)): preview, one still frame and
     /// QR scanning. Calls never block; answers come to
     /// [`MorphApp::on_camera`](crate::MorphApp::on_camera). On Android with

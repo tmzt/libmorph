@@ -50,8 +50,8 @@ mobile-system-events = ["mobile", "libmobile/system-events"]
 # Battery optimization and app sleeping (`libmorph::battery`).
 mobile-battery = ["mobile", "libmobile/battery"]
 # The clipboard's text on Android (`ctx.clipboard_text`,
-# `ctx.clipboard_has_text`; libmobile's `clipboard`). Read only, no
-# permission.
+# `ctx.clipboard_has_text`, `ctx.set_clipboard_text`; libmobile's
+# `clipboard`), read and written, no permission.
 mobile-clipboard = ["mobile", "libmobile/clipboard"]
 # Passthrough: `ctx.media_request` on Android, through libmobile's chooser
 # (gallery, files and an optional camera entry) or the Photo Picker. Adds

@@ -1,7 +1,7 @@
 ---
 title: Writing text to the clipboard on every host
 date: 2026-10-29
-status: Draft
+status: In implementation
 covers:
   - "`MorphContext::set_clipboard_text(&self, text: &str) ->
     Result<ClipboardWrite, ClipboardError>`, which tells the app whether
@@ -255,3 +255,16 @@ dependency, so an app's APK gets the `writeText` Kotlin method once its
    `org.nspasteboard.ConcealedType` are open questions in their plans; a
    libmorph `set_clipboard_text_with(text, &ClipboardOptions)` would follow
    them, additively. Proposed: not now.
+
+## Amendment — 2026-10-29 17:57 EDT: approved; implementation started
+
+The owner approved the plan on 2026-10-29 ("approve all four plans and
+build them"; "push them when built, then update roundtwo"). It is approved
+as written, and its open questions take the plan's defaults: (1) no
+scripted stand-in, so a scripted `clipboard_text` stays `None` after a
+write and the log line is the evidence; (2) the web stays `Unsupported`;
+(3) no sensitive or concealed option yet. It builds on libmobile 0.3.5
+(tag `v0.3.5`) and libdevice 0.1.3 (tag `v0.1.3`), both on GitHub;
+`Cargo.lock` resolves them from git, with no local patch. Step 1 (the
+wrapper) is the first implementing commit. Implementation has started and
+the document is now immutable.
