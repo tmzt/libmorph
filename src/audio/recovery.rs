@@ -48,6 +48,9 @@ pub(crate) struct Recovery {
     /// The last error, for `Failed`.
     reason: String,
     events: Vec<AudioEvent>,
+    /// Whether a stream with no callbacks for [`STALL`] is lost. Off for
+    /// the web's output, which the browser holds until a user gesture.
+    stall: bool,
 }
 
 impl Recovery {
@@ -64,7 +67,16 @@ impl Recovery {
             lost_at: now,
             reason: String::new(),
             events: Vec::new(),
+            stall: true,
         }
+    }
+
+    /// No stall check: only failed starts and reported losses count, and a
+    /// stream that opens again is restored without waiting for a block.
+    #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
+    pub fn without_stall(mut self) -> Self {
+        self.stall = false;
+        self
     }
 
     /// The app paused: no watching, no retries. Keeps `Failed`.
@@ -134,7 +146,7 @@ impl Recovery {
             self.seen = counter;
             self.seen_at = now;
         }
-        let stalled = !moved && now.duration_since(self.seen_at) >= STALL;
+        let stalled = self.stall && !moved && now.duration_since(self.seen_at) >= STALL;
         match self.state {
             AudioState::Running if stalled => {
                 log::warn!(
@@ -144,7 +156,7 @@ impl Recovery {
                 );
                 self.loss(now, stall_reason())
             }
-            AudioState::Recovering if self.waiting && moved => {
+            AudioState::Recovering if self.waiting && (moved || !self.stall) => {
                 self.state = AudioState::Running;
                 self.waiting = false;
                 log::info!(
@@ -489,6 +501,28 @@ mod tests {
         assert_eq!(recovery.restart(t0 + ms(20_000)), Act::Reopen);
         assert_eq!(recovery.state(), AudioState::Recovering);
         assert_eq!(recovery.attempts(), 1);
+    }
+
+    #[test]
+    fn without_stall_only_losses_count() {
+        let t0 = Instant::now();
+        let mut recovery = Recovery::opened(CAPTURE, t0, 0).without_stall();
+        assert_eq!(recovery.tick(t0 + ms(60_000), 0), Act::Nothing);
+        assert_eq!(recovery.state(), AudioState::Running);
+        assert_eq!(recovery.lost(t0 + ms(60_000), "gone".into()), Act::Reopen);
+        recovery.reopened(t0 + ms(60_000), 0, Ok(()));
+        assert_eq!(recovery.tick(t0 + ms(60_010), 0), Act::Nothing);
+        assert_eq!(recovery.state(), AudioState::Running);
+        assert_eq!(
+            recovery.take_events(),
+            [
+                interrupted("gone"),
+                AudioEvent::Restored {
+                    stream: CAPTURE,
+                    attempts: 1
+                }
+            ]
+        );
     }
 
     #[test]

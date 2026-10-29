@@ -525,11 +525,16 @@ mod output {
             let now = Instant::now();
             Self {
                 output_recovery: RefCell::new(output.as_ref().map(|output| {
-                    Recovery::opened(
+                    let recovery = Recovery::opened(
                         AudioStream::Output,
                         now,
                         output.blocks.load(Ordering::Relaxed),
-                    )
+                    );
+                    // The browser runs no output callback before the page's
+                    // first user gesture, which is not a loss.
+                    #[cfg(target_arch = "wasm32")]
+                    let recovery = recovery.without_stall();
+                    recovery
                 })),
                 capture_recovery: RefCell::new(input.as_ref().map(|input| {
                     Recovery::opened(
