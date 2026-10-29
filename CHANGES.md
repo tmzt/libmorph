@@ -1139,3 +1139,21 @@ the branch `wt-next`. Not yet run in a browser or on a phone.
 8. The README's changes (the plan's row and a `mobile-media-request` row in
    its features table) are in the implementing commit, as Rule 4.3 asks for
    the row; only AGENTS.md is in step 6's own commit.
+
+## 2026-10-29 17:31 EDT — Writing text to the clipboard on every host (proposed)
+
+Plan: `docs/design/20261029_01_CLIPBOARD_WRITE_PLAN.md` (Draft), the
+companion of libmobile's and libdevice's plans of the same name and date.
+Requested through the RoundTwo session for Copy buttons on its mock
+interview results; the owner chose to plan "one in libmorph for
+ctx.set_clipboard_text (Android and macOS), each under its own rules and
+version. Then move RoundTwo's libmorph pin and add the buttons."
+`MorphContext::set_clipboard_text(&str) -> Result<ClipboardWrite,
+ClipboardError>` (`SystemNotice` on Android 13 and later, else `Silent`)
+and `clipboard_can_write()`: libmobile's write on Android through
+`mobile-clipboard`, libdevice's on macOS, logged only in scripted runs,
+`Unsupported` elsewhere. The read plan (`20261028_03`) is frozen and not
+edited. For libmorph 0.5.3, on libmobile 0.3.5 and libdevice 0.1.3;
+RoundTwo is the first user.
+
+Proposed only; nothing is implemented until the owner approves.
