@@ -1086,3 +1086,18 @@ flankr session for its bottom bar plan's Paste text:
 `clipboard` on Android (`mobile-clipboard`), libdevice's on macOS, `None`
 elsewhere. Approved by the owner ("plan those in appropriate repos with
 subagent, then impl"). For libmorph 0.5.1.
+
+## 2026-10-28 23:52 EDT — clipboard plan, steps 1 and 2: departures
+
+Plan: docs/design/20261028_03_CLIPBOARD_PLAN.md. Built on the branch
+`wt-clipboard` against libmobile's `wt-clipboard` worktree (0.3.2) and the
+local libdevice checkout (`31cc51a`, its clipboard step 1), through the
+gitignored `.cargo/config.toml`.
+
+1. Steps 1 and 2 are built together (0.5.1, the AGENTS.md lines, the
+   `VERSIONS.md` entry), on the owner's approval to plan and implement.
+2. The README has no API list, so it gains only the plan's row; the API
+   is described in AGENTS.md's Core API.
+3. `Cargo.lock` must be resolved against GitHub once libmobile 0.3.2 and
+   libdevice's clipboard are pushed; the Mac hand check (a copied line
+   comes back) is still open.
