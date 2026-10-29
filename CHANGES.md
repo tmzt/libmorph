@@ -1101,3 +1101,41 @@ gitignored `.cargo/config.toml`.
 3. `Cargo.lock` must be resolved against GitHub once libmobile 0.3.2 and
    libdevice's clipboard are pushed; the Mac hand check (a copied line
    comes back) is still open.
+
+## 2026-10-29 02:22 EDT — media request plan, steps 1-4 and 6 and its release: departures
+
+Plan: docs/design/20261028_02_MEDIA_REQUEST_PLAN.md (approved 2026-10-29
+01:53 EDT). Built as libmorph 0.5.2 (tag `v0.5.2`) on libmobile 0.3.4, on
+the branch `wt-next`. Not yet run in a browser or on a phone.
+
+1. Steps 1 to 4 are built together with the release, in one commit; step 6
+   (AGENTS.md, and the README's row) is in its own commits. Step 3's browser
+   checks (Chrome on a desktop and the S23) and step 5 (the Android example
+   and its S23 checks) are open. Step 2's "a generated manifest has the
+   provider only with it" rests on libmobile's codegen tests; no libmorph
+   APK was built.
+2. `cargo clippy -p libmorph --all-targets` does not build for
+   `aarch64-linux-android` or `wasm32-unknown-unknown` before this change
+   either (`src/config.rs`'s tests and the desktop examples); those two
+   targets are checked with `--lib`, with no warnings.
+3. `MediaError::Unsupported` is a unit variant, as the plan says, not
+   `Unsupported(&'static str)` as the camera's. On Android a call before the
+   activity is known answers `Failed("the app is not running yet")`.
+4. Android: libmobile's ids are mapped to libmorph's in a table on the
+   context; an answer to an id not in the table (another process or run)
+   has `request: None`. Answers are delivered to `on_media` as libmobile
+   gives them, also while suspended; elsewhere before the next frame's
+   `update`, and in scripted runs right after the command.
+5. The web: the web-sys feature `Navigator` is also turned on (for
+   `maxTouchPoints`). An empty `change` (no files) answers
+   `Failed("no_item")`; a file that cannot be read is
+   `Unreadable("array_buffer")`.
+6. Scripted runs: one request waits at a time; another while it waits is
+   `Busy`. An answer given with no request waiting serves the next one.
+   `Delivery::File` gets copies in `<cache_dir>/libmorph-media/<id>-<n>.<ext>`.
+   The runner reads the files (a missing one is a script I/O error, as for
+   `camera-frame`); the log has counts and byte totals.
+7. `MediaRequestId::id()` is added, as libmobile's.
+8. The README's changes (the plan's row and a `mobile-media-request` row in
+   its features table) are in the implementing commit, as Rule 4.3 asks for
+   the row; only AGENTS.md is in step 6's own commit.
