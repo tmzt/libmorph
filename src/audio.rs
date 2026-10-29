@@ -49,6 +49,55 @@ pub enum CaptureMode {
     VoicePerformance,
 }
 
+/// One of the two streams [`AudioSetup`] can open.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+pub enum AudioStream {
+    Output,
+    Capture,
+}
+
+/// Where a stream is. Read with [`Audio::output_state`] and
+/// [`Audio::capture_state`].
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+pub enum AudioState {
+    /// Not asked for in `audio_setup`, not open yet (Android before
+    /// RECORD_AUDIO), or no device; also scripted runs and the stub.
+    Closed,
+    /// Open and delivering (or being fed), as far as libmorph can tell.
+    Running,
+    /// Stopped with the app (`on_suspend`); starts again with it.
+    Paused,
+    /// Lost, and libmorph is reopening it. Sinks get no blocks meanwhile.
+    Recovering,
+    /// Every attempt failed. Nothing more is tried until
+    /// [`Audio::restart`] or the next resume of the app.
+    Failed,
+}
+
+/// A change in a stream's health, passed to
+/// [`MorphApp::on_audio`](crate::MorphApp::on_audio).
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum AudioEvent {
+    /// The stream stopped when it should run; libmorph is reopening it.
+    /// `reason` is the error or "no data for 1000 ms".
+    Interrupted { stream: AudioStream, reason: String },
+    /// Running again, at the same format. For capture, the sinks are
+    /// still attached and `Captured::frame` continues from where it
+    /// stopped; the missing time shows in `Captured::time`.
+    Restored { stream: AudioStream, attempts: u32 },
+    /// Every attempt failed. `reason` is the last error.
+    Failed { stream: AudioStream, reason: String },
+}
+
+/// When to reopen a lost stream; wired into [`Audio`] in plan
+/// `20261029_02`'s step 2.
+#[cfg(feature = "audio")]
+#[cfg_attr(not(test), allow(dead_code))]
+mod recovery;
+
 /// The capture stream's format. Samples handed to a [`Sink`] are always
 /// `f32`, whatever the device delivers.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

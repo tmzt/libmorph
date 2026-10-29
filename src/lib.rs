@@ -41,8 +41,8 @@ pub mod text_input;
 
 pub use app::{Frame, MorphApp};
 pub use audio::{
-    Audio, AudioSetup, CaptureFormat, CaptureMode, Captured, OutputFormat, Sink, SinkId, Sound,
-    Source, SourceId, Voice,
+    Audio, AudioEvent, AudioSetup, AudioState, AudioStream, CaptureFormat, CaptureMode, Captured,
+    OutputFormat, Sink, SinkId, Sound, Source, SourceId, Voice,
 };
 pub use build_info::BuildInfo;
 pub use clipboard::{ClipboardError, ClipboardWrite};

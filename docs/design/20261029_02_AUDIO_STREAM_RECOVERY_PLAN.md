@@ -1,7 +1,7 @@
 ---
 title: Audio streams that recover after a resume or a lost device
 date: 2026-10-29
-status: Draft
+status: In implementation
 covers:
   - "Reopening the capture stream, with the same mode, format and sinks,
     when starting it again on resume fails (`InvalidState`, `Disconnected`
@@ -562,3 +562,25 @@ dependency moves: libmobile stays at 0.3.5 (`67d2e8f`) and cpal at
    `audio-fail capture`) post `AudioEvent::Failed` so apps such as
    RoundTwo can test their message headless? Not in this plan unless the
    owner wants it.
+
+## Amendment — 2026-10-29 19:27 EDT: approved; implementation started, the document is now immutable
+
+The owner approved this plan on 2026-10-29: "yes", to "Approve the
+libmorph audio recovery plan to build?", having earlier said to push
+released libraries once they are built and to update RoundTwo.
+
+The open questions of section 11 take the plan's own defaults:
+
+1. libmobile's error callback: no libmobile change now. libmorph sees an
+   Android capture loss as a failed start or a stall; a
+   `CaptureStream::take_error` is left to a later libmobile plan, after
+   the S23 check.
+2. `device()` and `capture_device()` keep returning the device first
+   opened, documented as such.
+3. The thresholds are fixed (four attempts at 0, 250, 1000 and 3000 ms,
+   and a 1000 ms stall), not `AudioSetup` fields.
+4. No scripted `audio-fail` command in this plan.
+
+Implementation starts with step 1. The status is now `In
+implementation`, and from here this document changes only on the owner's
+explicit instruction.
