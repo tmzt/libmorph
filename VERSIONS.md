@@ -323,3 +323,30 @@ Writing text to the clipboard
   `Silent`) and `libmorph::ClipboardError` (`#[non_exhaustive]`:
   `Unsupported`, `Platform(String)`), with `Display` and `Error`.
 - Feature `mobile-clipboard` now also gives the write (no new feature).
+
+## libmorph 0.5.4 — 2026-10-29 (tag v0.5.4)
+
+Audio streams that recover after a resume or a lost device
+(`docs/design/20261029_02_AUDIO_STREAM_RECOVERY_PLAN.md`). Additive; no
+dependency moves (libmobile 0.3.5, cpal 0.18.2).
+
+- Fixed: a capture or output stream whose start fails on resume (Android's
+  `InvalidState`), that cpal reports lost (`DeviceNotAvailable`,
+  `StreamInvalidated`), or that delivers nothing for 1000 ms while it
+  should run (not the web's output) is reopened with the same format,
+  sinks, voices and sources: four attempts at 0, 250, 1000 and 3000 ms,
+  then `Failed`. `on_capture_ready` is still called once per run, and
+  `capture_format()` and `format()` never change.
+- `MorphApp::on_audio(&mut self, &mut MorphContext, &AudioEvent)` (a
+  default body), on the main thread before `update`, oldest first.
+- `libmorph::AudioEvent` (`#[non_exhaustive]`: `Interrupted { stream,
+  reason }`, `Restored { stream, attempts }`, `Failed { stream, reason }`),
+  `libmorph::AudioStream` (`#[non_exhaustive]`: `Output`, `Capture`) and
+  `libmorph::AudioState` (`#[non_exhaustive]`: `Closed`, `Running`,
+  `Paused`, `Recovering`, `Failed`).
+- `Audio::output_state(&self) -> AudioState`,
+  `Audio::capture_state(&self) -> AudioState` and
+  `Audio::restart(&self, AudioStream) -> bool`, on every host and in the
+  stub without `audio` (`Closed`, `false`).
+- `Audio::device()` and `capture_device()` (`audio-cpal`) are documented
+  as the device first opened, which a reopen does not change.
