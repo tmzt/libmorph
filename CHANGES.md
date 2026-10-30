@@ -1219,3 +1219,66 @@ adb-only script on the S23. For libmorph 0.5.4 (additive), on libmobile
 0.3.5 unchanged; RoundTwo is the first user.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-29 21:13 EDT — Audio streams that recover: built and released as 0.5.4, checks, departures
+
+Plan: `docs/design/20261029_02_AUDIO_STREAM_RECOVERY_PLAN.md` (In
+implementation), approved by the owner on 2026-10-29 with the plan's
+defaults for its open questions (no libmobile change; `device()` and
+`capture_device()` stay the first device; fixed thresholds; no
+`audio-fail` script command). Steps 1 to 4 and 6 are done and released
+as libmorph 0.5.4 (tag `v0.5.4`) on libmobile 0.3.5 and cpal 0.18.2,
+resolved from git with no local patch active. Gates: fmt, clippy (Mac
+`--all-targets`, also with `audio-cpal,script`; Android `aarch64-linux-android`
+with `mobile`; wasm32 with `web`; without `audio`) and `cargo test -p
+libmorph` (also with `script,audio-cpal,secure-store`), all clean.
+
+Checks:
+
+- Step 1: the nine named recovery tests pass, with a tenth for the web
+  departure below.
+- Step 5 baseline on the S23 (0.5.3 code, `out/audiocapture/20261029_01_capture_resume/`):
+  none of the three ways out reproduced `audio capture resume failed:
+  InvalidState` in eight valid cycles (all had samples on return). The
+  remaining cycles are void: the phone's screen timed out and locked
+  during the run, and nothing here may unlock it.
+- Step 5 on 0.5.4: not run. The phone stayed locked for 90 minutes
+  after the baseline, so the script was not run on this build; the
+  APK is built. Step 3's and step 4's S23 parts and step 5's Done when
+  are open until `examples/android/capture_resume.sh 20` exits 0 on an
+  unlocked phone.
+- Mac (step 4): this Mac mini has no input device, so `audiocapture`
+  records nothing, as before; its screen was locked, so no frames (and no
+  state lines) were drawn. `tone` opened its output with no error, loss or
+  reopen line.
+
+Departures (small, Rule 1.7):
+
+- Step 1's commit also adds section 2's three public types and their
+  re-export, which the state machine reports in.
+- Step 2 adds the callback counters for every stream (planned in steps 3
+  and 4), since a watched stream without its counter would read as
+  stalled.
+- The lost flag is an `AtomicU8` (device not available, or stream
+  invalidated) rather than an `AtomicBool`, so `Interrupted` carries
+  which; no callback locks or allocates.
+- Section 5's `RefCell<cpal::Stream>` is `RefCell<Option<cpal::Stream>>`,
+  since a reopen that fails leaves no stream; a start on it is a loss.
+- `restart` also answers false while the app is paused (the next resume
+  tries again), since a capture stream reopened while paused would not be
+  started and would read as a failed attempt.
+- A start that works from `Failed` on resume is `Recovering` until its
+  first block, then `Restored { attempts: 0 }`, so the app hears that the
+  failure ended.
+- The web's output has no stall check (`Recovery::without_stall`): the
+  browser runs no output callback before the page's first user gesture,
+  which would otherwise have ended in `Failed`. Reported losses still
+  count.
+- `examples/audiocapture.rs` now also opens the (silent) output, so
+  `output_state` reads `Running` as step 4's Done when expects; the S23
+  script keeps the screen on while plugged in (`svc power stayon true`,
+  restored at exit) and stops on a lock screen (exit 3), and also takes
+  `--no-build` and `--label`.
+
+Step 7 (RoundTwo, the first user) is RoundTwo's own work; the plan stays
+In implementation until steps 5 and 7 hold.
