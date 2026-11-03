@@ -368,3 +368,10 @@ The soft keyboard's options, action key and dismissal on Android
 - **Breaking:** `TextInputOptions::default()` has `autocorrect: true`, as
   the plan's defaults (libmobile's) say; it was `false`, and unused.
 
+## libmorph-build 0.4.0 — 2026-11-03 (tag libmorph-build-v0.4.0)
+
+- **Breaking: libmobile 0.3.1 → 0.4.0** (Rule 5.5): `libmorph_build::gradle`
+  re-exports `libmobile::gradle`. Its Gradle and manifest output is
+  unchanged; the Kotlin libmobile stages has the keyboard's new options.
+  No other change.
+
