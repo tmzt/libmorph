@@ -350,3 +350,21 @@ dependency moves (libmobile 0.3.5, cpal 0.18.2).
   stub without `audio` (`Closed`, `false`).
 - `Audio::device()` and `capture_device()` (`audio-cpal`) are documented
   as the device first opened, which a reopen does not change.
+
+## libmorph 0.6.0 — 2026-11-03 (tag v0.6.0)
+
+The soft keyboard's options, action key and dismissal on Android
+(`docs/design/20261024_06_TEXT_INPUT_PLAN.md`, step 1's Android path).
+
+- **Breaking: libmobile 0.3.5 → 0.4.0** (Rule 5.5).
+- **Breaking** (behaviour): on Android, `MorphContext::start_text_input`
+  now applies its `TextInputOptions` (lines, keyboard type, action key,
+  autocorrect) through libmobile's `set_text_input_with`, and the
+  keyboard's action key, or Enter on one line, is
+  `TextInputEvent::Action` with the keyboard left up; Done no longer
+  closes it. The keyboard closed by the user or the system is
+  `TextInputEvent::Dismissed`; editing stays active, so
+  `start_text_input` shows it again.
+- **Breaking:** `TextInputOptions::default()` has `autocorrect: true`, as
+  the plan's defaults (libmobile's) say; it was `false`, and unused.
+
