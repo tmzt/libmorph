@@ -1282,3 +1282,49 @@ Departures (small, Rule 1.7):
 
 Step 7 (RoundTwo, the first user) is RoundTwo's own work; the plan stays
 In implementation until steps 5 and 7 hold.
+
+## 2026-11-03 17:47 EST — Text input on Android: the keyboard's options, action key and dismissal; 0.6.0 and libmorph-build 0.4.0
+
+Plan `docs/design/20261024_06_TEXT_INPUT_PLAN.md` (In implementation),
+step 1's Android path, on the owner's word of 2026-11-03 for flankr's
+terminal view, whose keyboard key only hid the keyboard. It needed
+libmobile's half (libmobile plan 20261024_06, released there as 0.4.0).
+
+- `428d944`: `start_text_input` calls libmobile's `set_text_input_with`
+  with the options mapped field by field (`text_input::to_mobile`);
+  `MobileEvent::TextAction` is `TextInputEvent::Action` (an action
+  libmobile adds later is logged and dropped) and
+  `MobileEvent::TextInputDismissed` is `TextInputEvent::Dismissed`.
+  libmobile moves to 0.4.0 in `Cargo.lock`.
+- `befe374`: libmorph 0.6.0 (Rule 5.5 for libmobile 0.4.0, and the
+  behaviour below). `c497b82`: libmorph-build 0.4.0, the same move.
+
+Departures, small ones needed to make the plan work:
+- **`TextInputOptions::default()`'s `autocorrect` is now `true`.** The
+  plan makes libmorph's options "as in libmobile's plan", whose default
+  is `true`; the struct derived `Default`, which gave `false`, and a test
+  asserted it. It did nothing until now, so nothing changes for an app
+  that never read it; an app on the default keeps Android's suggestions,
+  as before this release.
+- **On Android, `Dismissed` leaves editing active.** The plan does not say;
+  libmobile's field keeps its text and focus after a dismissal, so
+  `text_input_active()` stays `true` and `start_text_input` shows the
+  keyboard again. On the desktop, Escape still stops editing first.
+- **The action key leaves the keyboard up** (libmobile's choice): the app
+  stops editing if it wants it closed.
+
+Checks, passed, run from outside the checkout so that the local
+`.cargo/config.toml` patches to `../libmobile` and `../libdevice` are not
+used and the lock's libmobile (`0b2929c`) is: `cargo fmt -p libmorph --
+--check`; `cargo clippy -p libmorph --all-targets` on the host with no
+features and with `mobile`, and `cargo clippy -p libmorph --target
+aarch64-linux-android --features mobile` (the lib; `--all-targets` there
+fails in `config.rs`'s tests before this work too): no warnings;
+`cargo test -p libmorph`: 145 lib tests, 150 with `mobile` (two new
+mapping tests run only with it), all pass; libmorph-build: fmt, clippy
+and its 3 tests.
+
+Open: the S23 part of step 1's **Done when** (the keyboard's text, Send
+and Back in an example's field), which flankr's terminal view also
+shows. libmobile `0b2929c` must be on libmobile's pushed main before
+this lock builds anywhere else.
