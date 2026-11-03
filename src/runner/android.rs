@@ -337,6 +337,24 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
                     shell.text_input(crate::TextInputEvent::Changed(text));
                 }
             }
+            // The action key, or Enter on one line; the keyboard stays up.
+            MobileEvent::TextAction(action) => {
+                match crate::text_input::action_from_mobile(action) {
+                    Some(action) => {
+                        if let Some(shell) = &mut self.shell {
+                            shell.text_input(crate::TextInputEvent::Action(action));
+                        }
+                    }
+                    None => log::debug!("libmorph: an unknown text action: {action:?}"),
+                }
+            }
+            // The keyboard closed; the field keeps its text, and editing
+            // stays active, so `start_text_input` shows it again.
+            MobileEvent::TextInputDismissed => {
+                if let Some(shell) = &mut self.shell {
+                    shell.text_input(crate::TextInputEvent::Dismissed);
+                }
+            }
             MobileEvent::Permissions(outcome) => self.permissions(outcome.into()),
             // A link with one of the app's schemes. Intents without data,
             // such as the launcher's, are not links.

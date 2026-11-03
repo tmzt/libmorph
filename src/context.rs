@@ -409,7 +409,11 @@ impl MorphContext {
         self.text_input_options = options.clone();
         #[cfg(all(target_os = "android", feature = "mobile"))]
         if let Some(app) = &self.android {
-            libmobile::android::set_text_input(app, Some(value));
+            libmobile::android::set_text_input_with(
+                app,
+                Some(value),
+                &crate::text_input::to_mobile(options),
+            );
         }
     }
 
