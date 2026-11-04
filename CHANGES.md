@@ -1363,3 +1363,37 @@ empty on Android, so the channels are a deep link and an intent; the scene
 is about 10 KB of Markdown, which in a link is base64 inside a path that
 `am start -d` parses twice and the app then picks back out of its own URL.
 As `--es scene_b64 <payload>` it is a key and a value.
+
+## 2026-11-04 00:28 EST — An intent's own extras: built and released as 0.6.1, its checks and departures
+
+Plan `docs/design/20261104_01_INTENT_EXTRAS_PLAN.md`, now `Implemented`.
+`85758e0` the type, the hook and the forwarding; `6d8353e` the script verb;
+`1d7104a` AGENTS.md; `b1ffcbb` the release, tagged `v0.6.1`.
+
+**One departure, and the Android target's own clippy found it.**
+`Lifecycle::open_url` and `Shell::open_url` were reachable on Android, and
+once whole intents are forwarded nothing there calls either - a link arrives
+inside its intent and `deliver_intent` fans it out. Both are narrowed to the
+script runner's cfg. Two "method is never used" warnings, on a target whose
+code the host build never compiles: *the cross-compile is not a formality
+when the change is to the platform runner.*
+
+**The fan-out lives in the shell rather than in the Android arm**, which was
+not in the plan's first shape. Keeping it there means the buffered case is
+buffered once: a deep link arriving while the app is suspended waits as one
+intent and delivers `on_intent` then `on_open_url`, where two queues would
+have delivered every link and then every intent, in neither event's order.
+One place decides what a link is, so the two hooks cannot come to disagree.
+
+**Checks** at `b1ffcbb`, with the uncommitted `.cargo/config.toml` patching
+libdevice and libmobile to the siblings (libmobile at `0b2929c`, the
+revision the lock pins): `cargo fmt -p libmorph -- --check` clean;
+`cargo clippy -p libmorph --all-targets` and again with `script`, no
+warnings; `cargo clippy -p libmorph --target aarch64-linux-android
+--features mobile`, no warnings; `cargo test -p libmorph --features script`,
+159 lib tests and every integration test, `tests/intent.rs` among them.
+
+**Not checked on a device.** No intent has gone to a phone through this yet;
+sigilweaver's scene-by-extra work is what will send one, and that reading
+belongs in its log. libmobile needed no change, as the plan said: every
+field was in 0.3.5.
