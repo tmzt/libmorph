@@ -30,6 +30,8 @@ struct Lifecycle {
     suspended: bool,
     /// Links that arrived while suspended, delivered after `on_resume`.
     urls: Vec<String>,
+    /// Intents that arrived while suspended, delivered after `on_resume`.
+    intents: Vec<crate::Intent>,
 }
 
 impl Lifecycle {
@@ -44,7 +46,10 @@ impl Lifecycle {
     }
 
     /// A link: `Some` to deliver it now, `None` if it waits for a resume.
-    #[cfg(any(test, script_runner, target_os = "android"))]
+    ///
+    /// The script runner's `open` verb alone: on Android a link arrives
+    /// inside its intent, and `deliver_intent` fans it out.
+    #[cfg(any(test, script_runner))]
     fn open_url(&mut self, url: String) -> Option<String> {
         if self.suspended {
             self.urls.push(url);
@@ -60,6 +65,27 @@ impl Lifecycle {
             Vec::new()
         } else {
             std::mem::take(&mut self.urls)
+        }
+    }
+
+    /// An intent: `Some` to deliver it now, `None` if it waits for a
+    /// resume.
+    #[cfg(any(test, script_runner, target_os = "android"))]
+    fn intent(&mut self, intent: crate::Intent) -> Option<crate::Intent> {
+        if self.suspended {
+            self.intents.push(intent);
+            None
+        } else {
+            Some(intent)
+        }
+    }
+
+    /// The intents that waited, in order, once resumed.
+    fn take_intents(&mut self) -> Vec<crate::Intent> {
+        if self.suspended {
+            Vec::new()
+        } else {
+            std::mem::take(&mut self.intents)
         }
     }
 }
@@ -157,14 +183,39 @@ impl<A: MorphApp> Shell<A> {
         for url in self.lifecycle.take_urls() {
             self.app.on_open_url(&mut self.ctx, &url);
         }
+        for intent in self.lifecycle.take_intents() {
+            self.deliver_intent(&intent);
+        }
     }
 
     /// A link the app was opened with: now, or after `on_resume` if the app
-    /// is suspended.
-    #[cfg(any(script_runner, target_os = "android"))]
+    /// is suspended. The `open` verb's, scripted runs only - Android's links
+    /// come in through [`intent`](Self::intent), which delivers the whole
+    /// event.
+    #[cfg(script_runner)]
     pub fn open_url(&mut self, url: String) {
         if let Some(url) = self.lifecycle.open_url(url) {
             self.app.on_open_url(&mut self.ctx, &url);
+        }
+    }
+
+    /// An intent that reached the app: now, or after `on_resume` if the app
+    /// is suspended.
+    #[cfg(any(script_runner, target_os = "android"))]
+    pub fn intent(&mut self, intent: crate::Intent) {
+        if let Some(intent) = self.lifecycle.intent(intent) {
+            self.deliver_intent(&intent);
+        }
+    }
+
+    /// `on_intent`, and then `on_open_url` for an intent that is a link.
+    ///
+    /// One place, so the two hooks cannot come to disagree about which
+    /// intents are links or about which order they arrive in.
+    fn deliver_intent(&mut self, intent: &crate::Intent) {
+        self.app.on_intent(&mut self.ctx, intent);
+        if let Some(url) = intent.link() {
+            self.app.on_open_url(&mut self.ctx, url);
         }
     }
 
@@ -427,6 +478,26 @@ mod tests {
         assert_eq!(life.take_urls(), ["b", "c"]);
         assert!(life.take_urls().is_empty(), "delivered once");
         assert_eq!(life.open_url("d".into()), Some("d".into()));
+    }
+
+    /// An intent that arrives while the app is away waits for the resume,
+    /// in order, and is delivered once.
+    #[test]
+    fn intents_wait_while_suspended() {
+        let named = |name: &str| crate::Intent {
+            action: Some(name.to_owned()),
+            ..crate::Intent::default()
+        };
+        let mut life = Lifecycle::default();
+        assert_eq!(life.intent(named("a")), Some(named("a")));
+        life.suspend();
+        assert_eq!(life.intent(named("b")), None);
+        assert_eq!(life.intent(named("c")), None);
+        assert!(life.take_intents().is_empty(), "still suspended");
+        assert!(life.resume());
+        assert_eq!(life.take_intents(), [named("b"), named("c")]);
+        assert!(life.take_intents().is_empty(), "delivered once");
+        assert_eq!(life.intent(named("d")), Some(named("d")));
     }
 
     #[test]

@@ -42,7 +42,7 @@ pub fn run_android<A: MorphApp>(app: AndroidApp) {
             finishing: false,
             wants_capture: false,
             capture_request: None,
-            urls: Vec::new(),
+            intents: Vec::new(),
             #[cfg(feature = "mobile-media-request")]
             media: Vec::new(),
         },
@@ -75,17 +75,14 @@ struct Adapter<A> {
     /// libmorph's own `RECORD_AUDIO` request for capture, whose answer is
     /// not passed to the app.
     capture_request: Option<PermissionRequest>,
-    /// Links that arrived before the app existed (a link that cold-started
-    /// it), delivered right after `init`.
-    urls: Vec<String>,
+    /// Intents that arrived before the app existed (the one that
+    /// cold-started it), delivered right after `init`.
+    intents: Vec<crate::Intent>,
     /// Media answers that arrived before the app existed (the process was
     /// killed while the camera was up), delivered right after `init`.
     #[cfg(feature = "mobile-media-request")]
     media: Vec<libmobile::media::MediaResponse>,
 }
-
-/// The action of an intent that opens a link.
-const ACTION_VIEW: &str = "android.intent.action.VIEW";
 
 /// What capture needs granted at runtime.
 const RECORD_AUDIO: &str = "android.permission.RECORD_AUDIO";
@@ -160,8 +157,8 @@ impl<A: MorphApp> Adapter<A> {
         });
         match Shell::start(ctx, surface, size) {
             Ok(mut shell) => {
-                for url in std::mem::take(&mut self.urls) {
-                    shell.open_url(url);
+                for intent in std::mem::take(&mut self.intents) {
+                    shell.intent(intent);
                 }
                 #[cfg(feature = "mobile-media-request")]
                 for response in std::mem::take(&mut self.media) {
@@ -356,14 +353,22 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
                 }
             }
             MobileEvent::Permissions(outcome) => self.permissions(outcome.into()),
-            // A link with one of the app's schemes. Intents without data,
-            // such as the launcher's, are not links.
-            MobileEvent::Intent(intent) if intent.action.as_deref() == Some(ACTION_VIEW) => {
-                if let Some(url) = intent.data {
-                    match &mut self.shell {
-                        Some(shell) => shell.open_url(url),
-                        None => self.urls.push(url),
-                    }
+            // Every intent, whole. What was here kept `data` for a `VIEW`
+            // action and dropped the rest, so an intent carrying only
+            // extras - `am start --es <key> <value>`, whose action is
+            // `MAIN` and which has no data at all - could not reach an app.
+            // `Shell::intent` calls `on_open_url` as well for one that is a
+            // link, so a deep link behaves exactly as it did.
+            MobileEvent::Intent(intent) => {
+                let intent = crate::Intent {
+                    action: intent.action,
+                    data: intent.data,
+                    extras: intent.extras,
+                    is_new: intent.is_new,
+                };
+                match &mut self.shell {
+                    Some(shell) => shell.intent(intent),
+                    None => self.intents.push(intent),
                 }
             }
             // The foreground service, on the main loop: also while suspended.

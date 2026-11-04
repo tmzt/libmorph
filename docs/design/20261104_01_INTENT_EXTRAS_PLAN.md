@@ -1,7 +1,7 @@
 ---
 title: An intent's own extras, delivered whole
 date: 2026-11-04
-status: Draft
+status: In implementation
 covers: >
   `MorphApp::on_intent`, which hands the app the whole intent libmobile
   already carries - its action, its data URI, every extra as a key and a
@@ -180,3 +180,17 @@ the receiving half only. No macOS equivalent - an `NSAppleEventManager` URL
 is already `on_open_url`'s, and extras have no counterpart there. And
 libmobile needs no change at all: every field this plan delivers is in
 0.3.5 already.
+
+## Amendment — 2026-11-04 00:26 EST: implementation has started
+
+Steps 1 and 2 are built, so `status` is now `In implementation` and this
+document is immutable: it changes only by amendment, and only on the owner's
+explicit instruction.
+
+One departure from section 2, found by the Android target's own clippy.
+`Lifecycle::open_url` and `Shell::open_url` were guarded
+`#[cfg(any(test, script_runner, target_os = "android"))]`, and with whole
+intents forwarded nothing on Android calls either - a link now arrives
+inside its intent and `deliver_intent` fans it out. Both are narrowed to the
+script runner's cfg rather than left as dead code on the device. No public
+item changes: `Shell` is private to the runner.

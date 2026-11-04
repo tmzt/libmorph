@@ -22,6 +22,7 @@ mod config;
 mod context;
 mod gpu;
 mod input;
+pub mod intent;
 mod link;
 pub mod media;
 mod memory;
@@ -50,6 +51,7 @@ pub use config::{MORPH_ARGS_HELP, MorphError};
 pub use context::MorphContext;
 pub use gpu::{GpuError, LimitFailure, LimitsRequest};
 pub use input::{Key, KeyStatus, Touch, TouchPhase};
+pub use intent::Intent;
 #[cfg(feature = "secure-store")]
 pub use key_store::{
     FLAG_APP_UNLOCK_REQUIRED, FLAG_DEVICE_UNLOCK_REQUIRED, KeyStoreError, SealToken, SecretKey,

@@ -146,6 +146,25 @@ pub trait MorphApp: Sized + 'static {
         let _ = (ctx, url);
     }
 
+    /// An intent reached the app, whole: a deep link, a launcher tap, or
+    /// `am start -n <pkg>/<activity> --es <key> <value>`. Its action, its
+    /// data URI, every extra as a key and a string, and whether it arrived
+    /// at an already-running instance ([`Intent`](crate::Intent)).
+    ///
+    /// Called after [`init`](Self::init), in the order the intents arrived;
+    /// one that arrives while the app is suspended comes after
+    /// [`on_resume`](Self::on_resume). A `VIEW` intent carrying a URI calls
+    /// this **first** and then [`on_open_url`](Self::on_open_url), which is
+    /// unchanged - the intent is the whole event and the link is one field
+    /// of it, so an app may read either or both. Android only, and scripted
+    /// runs (`intent <key>=<value>`).
+    ///
+    /// Every field is untrusted input: validate it, and log a key rather
+    /// than its value, since a value may be a secret.
+    fn on_intent(&mut self, ctx: &mut MorphContext, intent: &crate::Intent) {
+        let _ = (ctx, intent);
+    }
+
     /// The foreground service ([`service`](crate::service)) did something,
     /// or its notification was tapped: an app button
     /// ([`ServiceEvent::Action`]), Exit ([`ServiceEvent::Exited`], after
