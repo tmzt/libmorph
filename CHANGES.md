@@ -1328,3 +1328,38 @@ Open: the S23 part of step 1's **Done when** (the keyboard's text, Send
 and Back in an example's field), which flankr's terminal view also
 shows. libmobile `0b2929c` must be on libmobile's pushed main before
 this lock builds anywhere else.
+
+## 2026-11-04 00:20 EST — An intent's own extras, delivered whole (proposed)
+
+Plan `docs/design/20261104_01_INTENT_EXTRAS_PLAN.md`, asked for by
+sigilweaver.
+
+libmobile has carried the whole intent since 0.2.2: `IntentData` holds the
+action, the data URI, every extra as a key and a stringified value, and
+`is_new` for one that reached an already-running instance, with an
+`extra(key)` accessor and a docstring whose own example is
+`am start -n <pkg>/<activity> --es cmd refresh`.
+
+**This runner keeps one field of it.** `runner/android.rs` matches a `VIEW`
+action, takes `intent.data` and drops everything else, so an intent with no
+data never arrives, an action other than `VIEW` never arrives, and no extra
+can reach an app through libmorph at all. There is no way round it from
+outside: libmobile's intent module is push-only, and `run_android` owns the
+loop.
+
+So `MorphApp::on_intent` takes libmorph's own `Intent` - the same four
+fields, kept here because the scripted runner builds one on a desktop where
+libmobile is not compiled in - and a `VIEW` intent with a URI calls
+`on_intent` first and then `on_open_url`, unchanged. Intents that arrive
+while the app is suspended wait for the resume, which is what
+`Lifecycle::urls` already does for links. A script verb
+`intent <key>=<value>` delivers the same thing headlessly.
+
+Strictly additive, so 0.6.1 under Rule 5.4. libmobile needs no change: every
+field is in 0.3.5.
+
+**What asks for it.** sigilweaver sends a scene to the S23. `args()` is
+empty on Android, so the channels are a deep link and an intent; the scene
+is about 10 KB of Markdown, which in a link is base64 inside a path that
+`am start -d` parses twice and the app then picks back out of its own URL.
+As `--es scene_b64 <payload>` it is a key and a value.
