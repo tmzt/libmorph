@@ -1,7 +1,7 @@
 ---
 title: An intent's own extras, delivered whole
 date: 2026-11-04
-status: In implementation
+status: Implemented
 covers: >
   `MorphApp::on_intent`, which hands the app the whole intent libmobile
   already carries - its action, its data URI, every extra as a key and a
@@ -194,3 +194,29 @@ intents forwarded nothing on Android calls either - a link now arrives
 inside its intent and `deliver_intent` fans it out. Both are narrowed to the
 script runner's cfg rather than left as dead code on the device. No public
 item changes: `Shell` is private to the runner.
+
+## Amendment — 2026-11-04 00:27 EST: implemented
+
+Every step is done and its **Done when:** holds.
+
+- **Step 1** - the type, the hook and the Android forwarding: `85758e0`.
+- **Step 2** - the script verb and the scripted test: `6d8353e`.
+- **Step 3** - the documents and the release: `1d7104a` (AGENTS.md) and
+  `b1ffcbb` (0.6.1, VERSIONS.md, tag `v0.6.1`).
+
+Checked at `b1ffcbb`, with the local `.cargo/config.toml` patching libdevice
+and libmobile to the sibling checkouts (libmobile there is `0b2929c`, which
+is the revision the lock pins):
+
+- `cargo fmt -p libmorph -- --check`: clean.
+- `cargo clippy -p libmorph --all-targets`, and again with `script`: no
+  warnings.
+- `cargo clippy -p libmorph --target aarch64-linux-android --features mobile`:
+  no warnings, after the departure recorded in the amendment above. It is
+  the check that found it.
+- `cargo test -p libmorph --features script`: 159 lib tests and every
+  integration test pass, `tests/intent.rs` among them (3 tests).
+
+Not checked on a device: no intent has been sent to a phone through this.
+sigilweaver's own work is what will do that, and the reading belongs in its
+log rather than here.
