@@ -130,6 +130,14 @@ pub enum Command {
     /// no whitespace, and the line has no comment. While suspended, it is
     /// delivered after the resume.
     Open(String),
+    /// `intent <key>=<value> [<key>=<value> ...]`: an intent reaches the app
+    /// ([`MorphApp::on_intent`](crate::MorphApp::on_intent)) carrying these
+    /// extras, with no action and no data - the `am start --es <key>
+    /// <value>` case, which is what extras are for. `is_new` is `true`: a
+    /// script's intent arrives at an app that is already running. A link's
+    /// own leg is `open <url>`. While suspended, it is delivered after the
+    /// resume.
+    Intent(Vec<(String, String)>),
     /// `camera-qr <text>`: the running QR scan
     /// ([`start_qr`](crate::camera::Camera::start_qr)) reads a code whose
     /// payload is the rest of the line (spaces and `#` included; no
@@ -328,6 +336,7 @@ pub(crate) enum Action {
     Resume,
     Exit,
     Open(String),
+    Intent(Vec<(String, String)>),
     LowMemory,
     TrimMemory(TrimLevel),
     CameraQr(String),
@@ -483,6 +492,12 @@ impl Planner {
                     return Err("`open` takes one URL, without whitespace".into());
                 }
                 self.push(line, Action::Open(url.clone()));
+            }
+            Command::Intent(extras) => {
+                if extras.is_empty() {
+                    return Err("`intent` takes at least one <key>=<value>".into());
+                }
+                self.push(line, Action::Intent(extras.clone()));
             }
             Command::CameraQr(text) => {
                 running("camera-qr", self.suspended)?;
@@ -691,6 +706,23 @@ fn parse_command(words: &[&str]) -> Result<Command, String> {
         "open" => {
             arity(&[1], "open <url>")?;
             Command::Open(args[0].to_owned())
+        }
+        "intent" => {
+            const USAGE: &str = "intent <key>=<value> [<key>=<value> ...]";
+            if args.is_empty() {
+                return Err(format!("usage: {USAGE}"));
+            }
+            let mut extras = Vec::with_capacity(args.len());
+            for arg in args {
+                let (key, value) = arg
+                    .split_once('=')
+                    .ok_or_else(|| format!("`{arg}` is not <key>=<value>; usage: {USAGE}"))?;
+                if key.is_empty() {
+                    return Err(format!("an extra with no key; usage: {USAGE}"));
+                }
+                extras.push((key.to_owned(), value.to_owned()));
+            }
+            Command::Intent(extras)
         }
         "camera-frame" => {
             arity(&[1], "camera-frame <png path>")?;

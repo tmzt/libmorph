@@ -120,6 +120,13 @@ fn play<A: MorphApp>(
             Action::Suspend => shell.detach(),
             Action::Resume => shell.attach_offscreen(),
             Action::Open(url) => shell.open_url(url),
+            // A key and a value, with no action and no data: an intent that
+            // is not a link, which is the case `on_open_url` cannot carry.
+            Action::Intent(extras) => shell.intent(crate::Intent {
+                extras,
+                is_new: true,
+                ..crate::Intent::default()
+            }),
             Action::LowMemory => shell.low_memory(),
             Action::TrimMemory(level) => shell.trim_memory(level),
             Action::CameraQr(text) => {
