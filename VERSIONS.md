@@ -375,3 +375,28 @@ The soft keyboard's options, action key and dismissal on Android
   unchanged; the Kotlin libmobile stages has the keyboard's new options.
   No other change.
 
+
+## libmorph 0.6.1 — 2026-11-04 (tag v0.6.1)
+
+An intent's own extras, delivered whole
+(`docs/design/20261104_01_INTENT_EXTRAS_PLAN.md`, steps 1 and 2). Strictly
+additive: no signature, type or observable behaviour of an existing item
+changes, and an app that uses only `on_open_url` sees exactly what it saw.
+
+- Added `libmorph::Intent` (`intent::Intent`): `action: Option<String>`,
+  `data: Option<String>`, `extras: Vec<(String, String)>` and `is_new: bool`,
+  with `extra(&self, key: &str) -> Option<&str>`. `Clone`, `Debug`,
+  `Default`, `PartialEq`, `Eq`. libmorph's own type, field for field
+  libmobile's `IntentData`, because a scripted run builds one on a desktop
+  where libmobile is not compiled in.
+- Added `libmorph::intent`, the module it lives in.
+- Added `MorphApp::on_intent(&mut self, ctx, intent: &Intent)`, with a
+  default empty body. Every Android intent, whole, after `init` and in
+  order; one that arrives while suspended comes after `on_resume`. A `VIEW`
+  intent carrying a URI calls `on_intent` and then `on_open_url`.
+- Added the script command `intent <key>=<value> [<key>=<value> ...]`
+  (`script::Command::Intent`), which delivers extras with no action, no data
+  and `is_new: true`.
+- Android: the runner forwarded only a `VIEW` intent's `data` and dropped
+  every other intent and every extra. It now forwards each intent whole.
+  `on_open_url` is called for the same intents as before.
