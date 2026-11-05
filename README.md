@@ -22,7 +22,7 @@ libmorph = { git = "https://github.com/tmzt/libmorph" }
 ```
 
 ```rust
-use libmorph::{Frame, MorphApp, MorphContext};
+use libmorph::{Frame, MorphApp, MorphContext, RenderStatus};
 
 struct App;
 
@@ -31,8 +31,9 @@ impl MorphApp for App {
         App
     }
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
         // Draw to frame.view with ctx.device() and ctx.queue().
+        RenderStatus::Drawn
     }
 }
 
@@ -40,6 +41,11 @@ fn main() -> Result<(), libmorph::MorphError> {
     libmorph::run::<App>()
 }
 ```
+
+`RenderStatus::Skipped` says nothing changed: libmorph presents nothing and
+the previous frame stays on screen. `render` has a default that draws nothing,
+returns `Skipped` and logs once, so an app that constructs its own frames
+writes no dead method.
 
 Other hooks: `update`, `on_touch`, `on_suspend`, `on_resume`. `MorphContext`
 also provides the safe area, scale factor, surface size and format, the device
