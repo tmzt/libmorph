@@ -1590,3 +1590,33 @@ for anything larger than a demo before that was measured.
 0.7.0 under Rule 5.4: `render`'s signature breaks. Not 1.0, because the
 trait's applet shape - 22 defaulted methods, and no way for Rust to
 catch a misspelled override - is provisional and the plan says so.
+
+## 2026-11-05 17:16 EST — step 1 pins five declarations in two crates, not three
+
+Departure from plan `docs/design/20261105_04_OWNS_AND_THE_RENDER_STATUS_PLAN.md`,
+step 1, under Rule 1.7.
+
+The step says the git dependencies carry no tag or rev "in three
+places". There are five, and they are not all in one crate:
+
+1. `Cargo.toml`, `[dependencies] libdevice`;
+2. `Cargo.toml`, `[dependencies] libmobile` (optional);
+3. `Cargo.toml`, `[build-dependencies] libmobile` (optional, the host
+   copy for `libmobile::gradle::forward_metadata`);
+4. `Cargo.toml`, the `cfg(target_os = "macos")` `libdevice` entry that
+   adds `open-link` and `clipboard`;
+5. `crates/libmorph-build/Cargo.toml`, `libmobile` with `icons`.
+
+All five are pinned, and in one commit, which is a departure from Rule
+3.1 as well: a partial pin puts two `libmobile` sources in the graph -
+one at the default branch, one at the tag - and because libmobile
+declares `links = "libmobile"` Cargo refuses the graph outright
+("Only one package in the dependency graph may specify the same links
+value"). So no intermediate commit resolves, and none could pass Rule
+3.4's checks. The two manifests move together for that reason only.
+
+The pins are libdevice `tag = "v0.1.3"` and libmobile
+`tag = "v0.4.0"`, the tags the lock already pointed past, so no code
+changes: `git diff --stat v0.1.3..948f9247` in libdevice is
+`CHANGES.md`, `README.md` and one design document, and
+`git diff --stat v0.4.0..0b2929c1` in libmobile is `CHANGES.md`.
