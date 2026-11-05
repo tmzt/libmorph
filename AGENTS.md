@@ -1,6 +1,50 @@
-# libmorph — Agent Instructions
+# libmorph
 
-You are an expert Systems Architect and Senior Rust Developer working on **libmorph**, a unified windowing, graphics, and device-emulation shell for `wgpu` applications.
+libmorph is a windowing, graphics and device-emulation shell for `wgpu`
+applications: one `MorphApp` runs on desktop, the web and Android. What the
+crate does and how an app uses it is documented in `README.md` and the
+rustdoc, not here. This file carries the critical rules, and then what is
+specific to this project.
+
+# Critical rules for tmeade / tmzt projects
+
+These rules apply to **every project created by tmeade (GitHub: tmzt)**:
+the repositories under `~/src/` that are his own, and any new project
+started for him. They do not apply to third-party repositories, forks of
+other people's work, or upstream code vendored into a project. Their
+canonical copy is `rules/CRITICAL_RULES.md` in `~/src/rules` on the Mac
+mini (`timothys-mac-mini-1` on Tailscale), published at
+`github.com/tmzt/rules`. A `~/src/rules` on any other machine is not the
+canonical copy; every other copy, this one included if it is elsewhere, is
+derived from it (see "Where these rules live").
+
+## Where these rules live
+
+1. The canonical copy of these rules is `rules/CRITICAL_RULES.md` in the
+   public repository `github.com/tmzt/rules`, checked out at `~/src/rules`.
+   Every other copy is derived from it: `~/.claude/rules/CRITICAL_RULES.md`
+   and the start of each project's `AGENTS.md`.
+2. Any change to these rules, by an owner or an agent, from any project, is
+   made in `~/src/rules`, under that repository's own `AGENTS.md`, and then
+   copied out. A derived copy is never edited in place; where one differs
+   from the canonical copy, the canonical copy is right.
+3. The rules are language-agnostic. What differs between languages (the
+   commands for Rule 3.4, where Rule 5 keeps a version) is given here as
+   examples, and each project names its own in its `AGENTS.md`.
+
+## A project's `AGENTS.md`
+
+A project's `AGENTS.md` starts with these rules, byte for byte, then a line
+`---` and a section `# This project: <name>` that adds what is specific to
+the project: its languages and layout, its packages, and its commands for
+Rule 3.4 and Rule 5. The project section adds to the rules and is more
+specific where it applies; it does not restate or change the rules text.
+
+When a tmeade project has no `AGENTS.md` yet, create one that way, along
+with an empty `CHANGES.md`, a `docs/design/` folder, a README laid out as
+in Rule 4, and a `repowiki.toml` (see "Repowiki" below), each in its own
+commit (Rule 3.1). For a library with a public API, also add `VERSIONS.md`
+(Rule 5).
 
 ## CRITICAL RULE 0: THE CHANGES.MD PROTOCOL
 
@@ -38,6 +82,12 @@ Before writing, modifying or deleting code for a new planned work item:
    - `Superseded (by <plan>)`: replaced before implementation by the named
      plan, which carries its content forward. Nothing in it is implemented.
      It is set with an amendment naming the replacement and what moved where.
+   - `Retired (by <plan>)`: implemented, in whole or in part, and then
+     removed by the named plan; its code no longer exists. It is set with an
+     amendment naming that plan, the commit that removed the code, and the
+     last commit that still has it, so the code can be recovered from
+     history (for example `git checkout <commit> -- <paths>`). It stays
+     frozen.
 
    The front-matter `status` is the only part of a document edited in place,
    and every status change gets its own amendment.
@@ -57,7 +107,7 @@ Before writing, modifying or deleting code for a new planned work item:
    place.
 7. When implementation departs from a frozen plan:
    - small departures needed to make the plan work are recorded in an addendum
-     to this file, naming the plan, the step and the reason;
+     to `CHANGES.md`, naming the plan, the step and the reason;
    - a departure that changes behaviour or an interface others depend on is
      discussed with the owner first (Rule 2), then recorded;
    - a frozen plan is never edited to match the code. A larger change of
@@ -73,33 +123,59 @@ Before writing, modifying or deleting code for a new planned work item:
 
 ## CRITICAL RULE 3: COMMITS AND EVIDENCE
 
-1. At most one crate or subproject per commit. Repository-level files go in
-   their own commits: this file, the workspace manifest, evidence logs, tooling
-   config and scripts. The one exception is adding a crate to the workspace in
-   that crate's first commit.
+1. At most one package per commit: a Rust crate, a Go module, an npm
+   package, a Python package, or another subproject the project's
+   `AGENTS.md` names. Repository-level files go in their own commits:
+   `AGENTS.md`, the workspace manifest (a Cargo workspace, `go.work`, a
+   root `package.json` with workspaces), evidence logs, tooling config and
+   scripts. The one exception is adding a package to the workspace in that
+   package's first commit.
 2. A plan's status change and its immutable marker go in the commit that starts
    implementing it.
 3. Commits name their paths explicitly (`git add <paths>`,
    `git commit -- <paths>`), so unrelated work in progress, including another
    agent's, is never swept in. Commits already on the shared branch are never
    amended or rewritten.
-4. Before each code commit, the crate passes `cargo fmt -p <crate> -- --check`,
-   `cargo clippy -p <crate> --all-targets` with no new warnings, and
-   `cargo test -p <crate>`.
+4. Before each code commit, the changed package passes its formatter check,
+   its linter with no new warnings, and its tests. The project's `AGENTS.md`
+   names the exact commands. For example:
+
+   | Language | Formatter check | Linter | Tests |
+   | --- | --- | --- | --- |
+   | Rust | `cargo fmt -p <crate> -- --check` | `cargo clippy -p <crate> --all-targets` | `cargo test -p <crate>` |
+   | Go | `gofmt -l .` prints nothing | `go vet ./...` | `go test ./...` |
+   | TypeScript | `prettier --check .` | `eslint .` and `tsc --noEmit` | `npm test` |
+   | Python | `ruff format --check` | `ruff check` | `pytest` |
 5. Renders and other generated evidence go under the gitignored `out/`. Each
    area keeps its own log file. Entries are appended under dated headings, with
    `./`-relative links and descriptions that stand on their own without the
-   images. Earlier entries are never edited.
+   images. Earlier entries are never edited. Each run of evidence gets its
+   own directory in its area, named like the plans: `YYYYMMDD_NN_name/`, with
+   `NN` the sequence within the day (for example
+   `out/fonts/20261023_01_cap_clipping/`).
+6. Other documents under `docs/` that record findings, such as
+   `docs/FONT_<NAME>.md`, are append-only. Each addition is a section headed
+   `## YYYY-MM-DD HH:MM TZ — <subject>`, timestamped from the system clock.
+   Earlier sections are never edited; a correction is a later dated section
+   that says what it corrects.
 
-## CRITICAL RULE 4: DECISION STATUS IN THE README
+## CRITICAL RULE 4: THE README AND ITS DECISION TABLE
 
-1. `README.md` ends with an `## Architectural decisions` section: one GitHub
-   Markdown table listing every spec and plan in `docs/design/`, oldest first.
-   Nothing follows the table.
+1. `README.md` is laid out in this order, so every section has a fixed
+   place:
+   1. a short introduction: what the project is, in a paragraph or two;
+   2. the rest of the README: usage, features, building, licences and so on;
+   3. `## Architectural decisions`, last: one GitHub Markdown table listing
+      every spec and plan in `docs/design/`, oldest first. Nothing follows
+      the table.
+
+   The critical rules live in `AGENTS.md` only; the README does not repeat
+   or summarise them.
 2. Columns: **Document** (the title, as a relative link such as
    `[Camera view and capture](docs/design/20261014_01_CAMERA_VIEW_AND_CAPTURE_PLAN.md)`;
    no absolute or GitHub URLs), **Date** (from its front matter), **Status**
-   (exactly its front-matter `status`, including `Superseded (by <link>)`),
+   (exactly its front-matter `status`, including `Superseded (by <link>)`
+   and `Retired (by <link>)`),
    and **Decision** (one line: what it decides, and why it is at that status).
 3. A row is added in the commit that adds the document, and updated in the
    same commit as every status-change amendment. This is an exception to
@@ -108,23 +184,20 @@ Before writing, modifying or deleting code for a new planned work item:
 
 ## CRITICAL RULE 5: VERSIONS AND TAGS
 
-Adopted from libcontrols (its Rule 5) on the owner's instruction,
-2026-10-16; see CHANGES.md. The workspace has two crates with public APIs,
-each versioned on its own: `libmorph` (tags `v<version>`) and
-`crates/libmorph-build` (tags `libmorph-build-v<version>`).
-
-1. The commit that changes a crate's `version` in its `Cargo.toml` is tagged
-   (for example `git tag v0.2.0 <commit>`) as soon as it is committed. A tag
-   that has been pushed is never moved or deleted.
+1. The commit that changes the project's version is tagged `v<version>`
+   (for example `git tag v0.3.0 <commit>`) as soon as it is committed. A
+   tag that has been pushed is never moved or deleted. Where the version is
+   kept, for example: Rust, `version` in `Cargo.toml`; TypeScript,
+   `version` in `package.json`; Python, `version` in `pyproject.toml`; Go,
+   which keeps no version in `go.mod`, only the tag, so the version changes
+   in the commit that adds its `VERSIONS.md` entry.
 2. `VERSIONS.md` records each version change, and only version changes:
    one entry per version, appended oldest first, headed
-   `## <crate> <version> — YYYY-MM-DD (<short commit>, tag <tag>)`. The
-   entry lists the public API changes since the previous version: what was
-   added, changed or removed, with breaking changes marked **Breaking**.
-   Internal changes are not listed, and commits that do not change a version
-   get no entry. Earlier entries are never edited. An entry written in the
-   version commit itself names only the tag, since a commit cannot contain
-   its own hash.
+   `## <version> — YYYY-MM-DD (<short commit>, tag v<version>)`. The entry
+   lists the public API changes since the previous version: what was added,
+   changed or removed, with breaking changes marked **Breaking**. Internal
+   changes are not listed, and commits that do not change the version get no
+   entry. Earlier entries are never edited.
 3. The `VERSIONS.md` entry is in the same commit as the version change. This
    is an exception to Rule 3.1.
 4. While the version is `0.x`, the bump follows the public API change. A
@@ -133,324 +206,183 @@ each versioned on its own: `libmorph` (tags `v<version>`) and
    signature or type, behaviour a caller can observe changing, or a variant or
    field added to an exhaustive public enum or struct. A release whose changes
    are strictly additive, or change no public API, bumps the patch version
-   (`0.x.y` to `0.x.(y+1)`). This applies to releases after 0.1.0.
-5. The public API rule is recursive through dependencies. When a crate with
+   (`0.x.y` to `0.x.(y+1)`). This applies from the version at which a project
+   adopts these rules; earlier versions are not re-labelled.
+5. The public API rule is recursive through dependencies. When a project with
    a public API moves a dependency to a version that is not semver-compatible
    with the one it used (for a `0.x` dependency, a new minor version; from
    1.0, a new major version), its own release is not strictly additive and
    bumps its minor version under Rule 5.4 (its major version from 1.0), even
-   when its own code does not change. Every crate with a public API that
+   when its own code does not change. Every project with a public API that
    depends on it does the same when it takes that release, and so on up the
-   chain. libmorph re-exports libdevice, libmobile's types, wgpu and cpal,
-   so their incompatible bumps are libmorph's too. The `VERSIONS.md` entry
-   names the dependency with its old and new versions and marks the change
-   **Breaking**.
+   chain. The `VERSIONS.md` entry names the dependency with its old and new
+   versions and marks the change **Breaking**. A repository with no public
+   API (an application) only updates its manifest and lock file.
 
-## Architecture
+## Repowiki
 
-`libmorph` gives an app one API (`MorphApp`) across three hosts:
+Project documentation is browsed with repowiki (`~/src/repowiki`), a static
+viewer that collects each registered project's README, `docs/` and plans.
+To register a new project:
 
-| Host | Event loop owner | Surface source |
-|---|---|---|
-| Desktop (emulation) | `winit` 0.30 (`ApplicationHandler`) | `winit::window::Window` |
-| Web (`wasm32`) | `winit` 0.30 (`ApplicationHandler`) | full-screen `<canvas>` injected into the DOM |
-| Android | `libmobile::android::run` (`MobileApp`) | `libmobile::android::SurfaceTarget` |
+1. Add `repowiki.toml` at the project root:
 
-Native iOS is **not supported**. libmobile is Android-only. libdevice does have iOS *device specs*, so desktop can emulate an iPhone's geometry and safe area, but don't write native iOS or Metal-lifecycle code paths.
+   ```toml
+   # repowiki.toml
+   # Read by repowiki's collector from the repository root.
 
-### Platform Layering (libmobile and libdevice first)
+   # Landing page of the registered site.
+   default_route = "/README"
 
-**libmorph is a wrapper; it does not reach past the platform crates.**
-Owner's rule (2026-10-22): "libmorph is supposed to be a wrapper for
-libmobile so the features we added should have been in libmobile first",
-extended the same day to libdevice: "that should be extended to libdevice
-with the same rule, libmorph is a wrapper only (with a few exceptions)".
+   # Symlinked as static files, not listed in navigation. out/ is gitignored
+   # render output; its images resolve as ./out/... and stay unlisted.
+   static_dirs = ["out"]
 
-- Any Android capability (NDK or AAudio calls, Kotlin plugins, permissions,
-  intents, Keystore) is planned and built in libmobile first, with a
-  libmobile example that genuinely uses it, and released. Then libmorph is
-  amended to wrap it.
-- Any desktop platform capability (the macOS Keychain, other OS services)
-  is planned and built in libdevice first, behind a feature, and released.
-  Then libmorph wraps it. Where libmobile and libdevice both provide a
-  capability, they expose the same API, and libmorph wraps both.
-- libmorph does not call `libmobile::android::ndk` (or `android_activity`)
-  or OS frameworks to implement such a feature. It keeps only what a
-  wrapper adds: one API on every host, lifecycle handling (pausing with the
-  app, asking for permissions it needs), fan-out to several consumers, and
-  its own types so signatures do not change with or without `mobile`.
-- The exceptions are what libmorph exists to own: wgpu and GPU bring-up,
-  the winit event loop and window on desktop and the web (with device
-  emulation, input mapping and the macOS trackpad), cpal on desktop and
-  the web, and scripted runs. Any new exception is agreed with the owner
-  first.
-- Examples ask only for permissions they use.
+   [crate_resolution]
+   # Only these folders become navigation groups; docs/design/*.md is grouped
+   # as a "design" package, one entry per plan.
+   prefixes = ["docs"]
+   ```
 
-### wgpu Ownership
+   Add the folders of a workspace's other crates to `prefixes` (for example
+   `"crates"`).
+2. Append the project to `~/src/repowiki/sites.toml`:
 
-**libmorph is the only crate in the stack that depends on wgpu.** libdevice is data only and has no wgpu dependency or feature. libmobile is also wgpu-free and hands over its window through raw-window-handle 0.6. libmorph:
+   ```toml
+   [[site]]
+   source = "/Users/tmeade/src/<project>"
+   ```
 
-- performs adapter/device bring-up itself, choosing backends, limits and async strategy per host;
-- re-exports it as `pub use wgpu;` so apps write `libmorph::wgpu` and never declare their own copy;
-- can therefore bump wgpu majors without coordinating with libdevice or libmobile.
+   The site id defaults to the source's parent and own folder joined by
+   `--`; set `id` only when that would collide.
+3. Run `make serve` in `~/src/repowiki` to collect and view it.
 
-libdevice's old offscreen `Device` (instance, adapter, device, queue and color target, used by standalone tools such as librendertest) was removed upstream. It will probably come back in libmorph later as an optional feature. **Don't add it yet.**
+Documents link evidence images as `./out/<area>/<YYYYMMDD_NN_name>/...`,
+relative to the repository root, so they render in repowiki from the
+gitignored `out/` directory.
 
-### Dependencies (actual crates)
+## Voice agents
 
-Neither crate is on crates.io. `Cargo.toml` uses git dependencies only:
+Voice agents (such as flankr's general agent) read this file to talk about
+the project, and their replies are spoken.
 
-```toml
-libdevice = { git = "https://github.com/tmzt/libdevice" }
-libmobile = { git = "https://github.com/tmzt/libmobile", optional = true }
+1. Say a plan or document by the words of its name, without its date,
+   sequence number or path:
+   `docs/design/20261027_04_GENERAL_AGENT_PLANNING_PLAN.md` is "the general
+   agent planning plan".
+2. Leave out commit hashes, line numbers and timestamps unless asked for
+   them.
+
+---
+
+# This project: libmorph
+
+Rust, one Cargo workspace. The `libmorph` library is at the repository root
+(`src/`, `build.rs`, and a `Cargo.toml` that is also the workspace
+manifest), with `crates/libmorph-build` beside it. Examples are in
+`examples/`, with Android example crates under `examples/android/` and
+script files under `examples/scripts/`; integration tests are in `tests/`,
+helper scripts in `scripts/`, and specs and plans in `docs/design/`.
+Generated evidence, scripted runs' screenshots included, goes under the
+gitignored `out/`.
+
+## Packages for Rule 3.1
+
+`Cargo.toml`'s `[workspace] members`. Each one is a package, so at most one
+of them per commit:
+
+| Path | Package |
+| --- | --- |
+| `.` | `libmorph` |
+| `crates/libmorph-build` | `libmorph-build` |
+| `examples/android/audiocapture` | `libmorph-example-audiocapture-android` |
+| `examples/android/securestore` | `libmorph-example-securestore-android` |
+| `examples/android/urlopen` | `libmorph-example-urlopen-android` |
+| `examples/android/background` | `libmorph-example-background-android` |
+
+The root `Cargo.toml` is both `libmorph`'s manifest and the workspace
+manifest. A change to its `[package]`, `[features]`, `[dependencies]` or
+`[[example]]` tables is part of the `libmorph` commit; a change to its
+`[workspace]` table is repository-level and goes in its own commit, except
+when it adds a package in that package's first commit.
+
+## Commands for Rule 3.4
+
+| What | Command |
+| --- | --- |
+| Formatter | `cargo fmt -p <crate> -- --check` |
+| Linter | `cargo clippy -p <crate> --all-targets`, no new warnings |
+| Tests | `cargo test -p <crate>` |
+
+The `script` feature gates a large amount of code - the script runner, its
+offscreen target and PNG capture, and the tests that drive them - which the
+default features do not build. So the linter and the tests are run again
+with it:
+
+```sh
+cargo clippy -p libmorph --all-targets --features script
+cargo test -p libmorph --features script
 ```
 
-To build against sibling checkouts, use a local, **uncommitted** `.cargo/config.toml` (it is gitignored):
+That is how this crate has in fact been verified. A commit that touches the
+runner, a script verb, or anything an integration test drives is not
+checked by the default-feature run alone.
 
-```toml
-[patch."https://github.com/tmzt/libdevice"]
-libdevice = { path = "../libdevice" }
-```
+## Versions and tags for Rule 5
 
-Add the same kind of entry for `https://github.com/tmzt/libmobile` to work against a local libmobile.
+Two crates here have public APIs and are versioned on their own, each by
+`version` in its own `Cargo.toml`:
 
-Never commit a `path` dependency or a `Cargo.lock` that was resolved with a patch active. A patch strips the `source = "git+…"` line from the patched entry.
+| Crate | Tag |
+| --- | --- |
+| `libmorph` | `v<version>` |
+| `crates/libmorph-build` | `libmorph-build-v<version>` |
 
-**`libdevice`**: simulated-device data, built into the binary as constants, and the desktop's platform services behind features (see Platform Layering). No GPU code. libmorph re-exports it as `libmorph::libdevice`.
-- `DeviceSpec { id, name, platform, geometry: PortraitGeometry, pixel_ratio, ppi, insets: SystemInsets, cutouts, corners }`. All lengths are `u32` physical pixels of the portrait display. `ppi: f32` is the display's density; `px_per_mm()`, `mm_to_px`, `px_to_mm` and `physical_size_mm()` convert in device pixels.
-- Presets are generated by its `build.rs` from `devices.toml`. `GALAXY_S24` is first and is `DEFAULT_DEVICE`; there is also `IPHONE_15`. `DEVICES` lists them all, and `DeviceSpec::by_id` finds one. Presets are compile-time only, so a downstream crate can't add devices (apart from CLI overrides; see CLI Overrides).
-- `spec.insets(InsetType::…)` returns `Insets { top, right, bottom, left }` (`u32`, physical pixels). The combined types are derived: `SafeDrawing` (system bars ∪ cutout), `SafeGestures`, `SafeContent`, `IosSafeArea`, `CssSafeArea`. `Insets::to_logical(pixel_ratio)` converts to dp/pt/CSS px.
-- `Cutout { edge, shape, bounds }` describes cutouts (circle, capsule, notch, rect, SVG path). `Corners` gives the corner radii, with a circular or continuous shape.
-- CLI: `DeviceSpec::extract_args(args) -> (DeviceSpec, Vec<String>)` takes out `--device*` options (see CLI Overrides).
+`VERSIONS.md` records both, one entry per version change, oldest first,
+headed `## <crate> <version> — YYYY-MM-DD (<short commit>, tag <tag>)`: the
+crate is named because the file carries two of them. An entry written in
+the version commit itself names only the tag, since a commit cannot contain
+its own hash. The Android example crates are not released and get no
+entries.
 
-**`libmobile`** (Android-only runtime; its platform-free types build on any host):
-- Entry point: `libmobile::android::run(app: AndroidApp, handler: impl MobileApp)`. It owns the `android-activity` poll loop and is the only thing that drains the Kotlin bridges (insets, intents, IME text, auth, camera, permissions). Those bridge modules are private, so **winit must not run the loop on Android**.
-- `MobileApp` hooks: `event(&AndroidApp, MobileEvent)`, `input(&AndroidApp, &InputEvent) -> InputStatus`, `tick(&AndroidApp)`, `poll_timeout()`.
-- `MobileEvent::WindowDestroyed` arrives **synchronously inside the poll callback**. Drop the `wgpu::Surface` before returning from the handler.
-- `MobileEvent::Insets(Insets { safe_area: SafeArea, ime_bottom })` uses `f32` physical pixels, fields `left, top, right, bottom`. Only the newest report is delivered per tick. `safe_area` corresponds to libdevice's `InsetType::SafeDrawing`.
-- `SurfaceTarget::current(&app)` implements raw-window-handle 0.6, so pass it to wgpu's safe `create_surface`.
-- Runtime permissions: `request_permissions(&app, &[&str]) -> PermissionRequest` (one request at a time, in order), answered by `MobileEvent::Permissions(PermissionsOutcome { request, permissions })`; `permission_granted`, `should_show_rationale`. Each permission must be declared in the manifest.
-- `CaptureStream` (under `cpal`): AAudio capture with an `InputPreset`, which cpal cannot set: `open(preset, callback)`, `format()`, `preset()`, `set_preset` (reopens with the same callback and format), `start`/`stop`. Needs `RECORD_AUDIO`.
-- `secure_store` (core, plan `20261022_03_SECURE_STORE_PLAN.md`): `get(name)`, `put`, `put_with(PutOptions { unlocked_only })`, `delete`, `security_level()`, and `android::SecureStore` with the same methods. No `AndroidApp` argument: it reaches the plugin through the Application android-activity registers with `ndk-context`. Named blobs (1 to 64 of `[A-Za-z0-9._-]`, up to 64 KiB) sealed with AES-256-GCM under a non-exportable Keystore key (StrongBox unless `secure-store-no-strongbox`), kept in no-backup storage. Synchronous, any thread. `SecureStoreError::DeviceLocked` for an `unlocked_only` blob while the device is locked.
-- `key_store` (core, libmorph plan `20261022_06_KEY_STORE_PLAN.md`): the engine (`src/key_store.rs`, the same file as libdevice's) with `generate`, `public`, `with_key`, `delete` over a `Vault`, adapter keys (`SecretKey`, `SealToken`), and flags refused unless enforced; `Vault::named(namespace)` (the plugin's key space), `Vault::memory()` under `test-vault`.
-- `android::service` (feature `foreground-service`, libmobile plan `20261023_01_FOREGROUND_SERVICE_PLAN.md`): `start(&ServiceOptions)`, `update`, `update_text`, `stop`, `is_running`, `set_wake_lock`, `wake_lock_held`, from any thread; Termux-style `Controls { ongoing, exit, wake_lock_toggle, labels }`; `ServiceEvent` arrives as `MobileEvent::Service`. Declared with `Project::foreground_service(&[ServiceType])`.
-- `android::battery` (feature `battery`): `state()`, `is_ignoring_optimizations`, `request_ignore_optimizations`, `open_settings`, `open_app_details`, `open_vendor_battery`; `BatteryError`.
-- `system_events` (feature `system-events`; `tokio` adds `subscribe_tokio`): `subscribe() -> Events` (`try_next`, `next_blocking`) and `current()`, fed from any thread by the Kotlin callbacks: `Visible`, `Focused`, `Service`, `Network`, `DeviceIdle`, `BatteryExemption`.
-- Cargo features: `google-auth`, `camera`, `cpal` (cpal re-exported as `libmobile::android::cpal`, plus `CaptureStream`; needs API 28), `foreground-service`, `battery`, `system-events`, `tokio`, `test-vault`, and the negative `secure-store-no-strongbox`. No others exist.
-- The app's activity must be `dev.highbay.libmobile.MobileNativeActivity` (Gradle wiring comes from `libmobile::gradle`; see Gradle Handoff).
+libmorph re-exports libdevice, libmobile's types, wgpu and cpal, so Rule
+5.5 reaches it through all four: an incompatible bump in any of them is not
+strictly additive here either.
 
-Two crates use the name `Insets`: `libdevice::Insets` (`u32`, top/right/bottom/left) and `libmobile::Insets` (`f32` safe area plus `ime_bottom`). Both convert into libmorph's fractional `SafeArea` (`src/safe_area.rs`) through `From`, field by field, never by position:
-- `impl From<libdevice::Insets> for SafeArea` exists.
-- `impl From<libmobile::SafeArea> for SafeArea` exists under `#[cfg(feature = "mobile")]`.
+## Conventions for whoever edits the code
 
-### Cargo Features & Passthrough
-
-```toml
-[features]
-default = ["audio"]
-# cpal on desktop and the web; on Android, libmobile's copy.
-audio = ["dep:cpal", "libmobile?/cpal"]
-# The cpal re-export (`libmorph::cpal`) and the output device it opened.
-audio-cpal = ["audio"]
-mobile = ["dep:libmobile"]
-# Passthrough: each one also enables `mobile`, so `libmobile/<x>` is never
-# requested without the dependency itself.
-mobile-google-auth = ["mobile", "libmobile/google-auth"]
-mobile-camera = ["mobile", "libmobile/camera"]
-# Negative, so turning off default features cannot turn off StrongBox.
-mobile-secure-store-no-strongbox = ["mobile", "libmobile/secure-store-no-strongbox"]
-# libmorph::service and MorphApp::on_service; libmorph::system_events;
-# libmorph::battery.
-mobile-foreground-service = ["mobile", "libmobile/foreground-service"]
-mobile-system-events = ["mobile", "libmobile/system-events"]
-mobile-battery = ["mobile", "libmobile/battery"]
-# ctx.clipboard_text(), clipboard_has_text() and set_clipboard_text() on Android.
-mobile-clipboard = ["mobile", "libmobile/clipboard"]
-# ctx.media_request() on Android: libmobile's chooser (with an optional camera
-# entry) or the Photo Picker; adds its provider and <queries>, no permission.
-mobile-media-request = ["mobile", "libmobile/media-request"]
-# system_events::subscribe_tokio: libmobile's on Android, libmorph's own elsewhere.
-tokio = ["libmobile?/tokio", "dep:tokio"]
-# ctx.secure_store(): libmobile's store on Android, the Keychain on macOS.
-# ctx.secure_store() and ctx.key_store(): libmobile on Android, libdevice elsewhere.
-secure-store = ["libdevice/secure-store"]
-web = ["dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:web-sys", "wgpu/webgl"]
-# Scripted headless runs with PNG screenshots; png and crc32fast are
-# desktop-only dependencies, so this enables nothing on Android and the web.
-script = ["dep:png", "dep:crc32fast", "libdevice/test-vault"]
-```
-
-`build.rs` sets `cfg(script_runner)` when `script` is on and the target is neither Android nor wasm32. Gate runner code on `#[cfg(script_runner)]` rather than repeating the feature-and-target condition.
-
-Don't invent passthroughs for features libmobile doesn't have (e.g. `sensors`). Add one only once the upstream feature exists.
-
-wgpu's default features already include `webgpu`. `web` adds `webgl` so WebGL2 works as a fallback.
-
-cpal is owned like the NDK: libmobile owns it on Android (its `cpal` feature, re-exported as `libmobile::android::cpal`), and libmorph owns it on desktop and the web (a `cfg(not(target_os = "android"))` dependency). `src/audio.rs` aliases whichever copy applies as `audio::cpal`, and `lib.rs` re-exports that alias under `audio-cpal`. Without `audio`, neither crate depends on cpal. cpal's host backends (JACK, PulseAudio, PipeWire, ASIO) get passthroughs only when Linux or Windows is supported.
-
-Make `winit` a target-specific dependency for `cfg(not(target_os = "android"))`. On Android, `android-activity`/`ndk` come in through libmobile's re-exports (`libmobile::android::{android_activity, ndk}`). Don't declare them separately, or the JavaVM singleton gets duplicated.
-
-### Gradle Handoff (Android)
-
-libmobile publishes its generated Gradle script through `links` metadata, and Cargo passes that only to *direct* dependents. libmorph declares `links = "libmorph"`, and its `build.rs` calls `libmobile::gradle::forward_metadata()` (only under `mobile`) to republish the metadata as `DEP_LIBMORPH_GRADLE_SCRIPT` / `DEP_LIBMORPH_FEATURES`. That is why libmobile is also an optional build-dependency of libmorph, enabled by the same `dep:libmobile`.
-
-Android apps name libmorph crates only: libmorph as a dependency, and `crates/libmorph-build` as the build-dependency. libmorph-build depends only on libmobile, so it is light on the host. It re-exports `libmobile::gradle`, and `gradle_project()` presets libmorph's `links` key (`LINKS`, checked against the root manifest by a test):
-
-```toml
-[dependencies]
-libmorph = { git = "https://github.com/tmzt/libmorph", features = ["mobile"] }
-[build-dependencies]
-libmorph-build = { git = "https://github.com/tmzt/libmorph" }
-```
-
-```rust
-// build.rs
-libmorph_build::gradle_project("com.example.app")
-    .generate()
-    .expect("gradle project");
-```
-
-Both come from the same git URL, so one commit pins them together. Don't make libmorph itself the build-dependency: that would build wgpu and winit for the host. Examples inside this repository use `libmorph-build` by path.
-
-### Target Guards
-
-Put these at the top of the runner module:
-
-```rust
-#[cfg(all(target_arch = "wasm32", not(feature = "web")))]
-compile_error!("The 'web' feature must be enabled when compiling for the wasm32 target.");
-
-#[cfg(all(target_os = "android", not(feature = "mobile")))]
-compile_error!("The 'mobile' feature must be enabled when compiling for Android.");
-```
-
-### GPU Bring-up (libmorph-owned)
-
-| Host | Backends | Limits | Await strategy |
-|---|---|---|---|
-| Desktop | `PRIMARY` | `A::limits(base)`, resolved | blocking (`pollster`) is fine |
-| Android | `VULKAN \| GL` | `A::limits(base)`, resolved | blocking on the `android_main` thread is fine |
-| Web | `BROWSER_WEBGPU \| GL` | `A::limits(base)`, resolved | `wasm_bindgen_futures::spawn_local`; **never block** |
-
-`base` is `downlevel_defaults`, or `downlevel_webgl2_defaults` on any GL adapter (WebGL2, older Android), with texture sizes raised by `.using_resolution(adapter.limits())`. The app's `MorphApp::limits(base) -> LimitsRequest { required, preferred }` (default: both `base`) is resolved against the adapter by `resolve_limits` in `src/gpu.rs`:
-
-- every field of `required` the adapter can't meet is reported as `GpuError::Limits(Vec<LimitFailure { name, required, available }>)`, and bring-up fails. `required` is never clamped;
-- otherwise the device gets `preferred.or_worse_values_from(&adapter).or_better_values_from(&required)`.
-
-wgpu-types' helpers know which fields are minima (the alignments), so libmorph has no per-field code. `Gpu::new` takes `A::limits` as a `fn` pointer, so it moves into the web's `spawn_local` future. `GpuError` is `#[non_exhaustive]`.
-
-Expose whatever was granted on `MorphContext` (`ctx.limits()`) so apps can feature-detect.
-
-### Core API
-
-- **`MorphApp`**: a state-driven trait with `init`, `update` and `render`, plus hooks with default bodies:
-  - `on_touch(Touch)`. `Touch { id, phase, x, y, pressure: Option<f32> }`; pressure comes from Android, and from macOS Force Touch while the mouse is held. `TouchPhase::Cancelled` only means the contact ended without a release; libmorph gives it no further meaning.
-  - `on_hover(x, y)`: the cursor moved with no button held (desktop and web).
-  - `on_key(Key) -> KeyStatus`, on press only. `Key` is `#[non_exhaustive]`: `Character(char)`, `Escape`, `Back`. On Android, the status decides whether the system acts on Back; desktop ignores it.
-  - `on_suspend` and `on_resume`: exactly once per transition. Every exit calls `on_suspend` once, unless the app is already suspended, before the surface and the app are dropped.
-  - `const SRGB_SURFACE: bool = true`: `false` prefers a non-sRGB surface, for apps that gamma-encode in their own shaders.
-  - `const APP_ID: &str = ""`: the desktop's directory name for `data_dir()`/`cache_dir()`, 1 to 64 of `[A-Za-z0-9._-]` (empty: the executable's stem, other characters as `_`). Unused on Android.
-  - `const SECURE_STORE_ID: &str = ""`: the macOS Keychain service is `libmorph.<id>` (empty: the executable's file stem).
-  - `fn limits(base: &wgpu::Limits) -> LimitsRequest` (no `self`, called before `init`): the device limits to ask for; see GPU Bring-up.
-  - `fn audio_setup(&mut AudioSetup)` (no `self`, called before audio opens; plan `20261022_01_AUDIO_CAPTURE_PLAN.md`): `output` (default `true`), `capture` (default `false`) and `capture_mode: CaptureMode` (Android input preset). `AudioSetup` is `#[non_exhaustive]`.
-  - `on_capture_ready`: once, after `init`, when capture has opened: right after `init`, or on Android once the user allows `RECORD_AUDIO`, which libmorph asks for itself when `capture` is set. Never again after a reopen.
-  - `on_audio(&AudioEvent)` (plan `20261029_02_AUDIO_STREAM_RECOVERY_PLAN.md`, 0.5.4): `AudioEvent` (`#[non_exhaustive]`: `Interrupted { stream, reason }`, `Restored { stream, attempts }`, `Failed { stream, reason }`, with `AudioStream` `Output` or `Capture`), on the main thread before `update`, oldest first, while resumed.
-  - `on_permissions(&Permissions)`: the answer to each `ctx.request_permissions` call (plan `20261022_02_APP_PERMISSIONS_PLAN.md`); libmorph's own requests are not passed on.
-  - `on_service(&ServiceEvent)` (plan `20261023_01_FOREGROUND_SERVICE_PLAN.md`, owner-approved 2026-10-24): libmobile's `MobileEvent::Service` on the main thread (Exit, the app's buttons, wake-lock changes, `Started`, `Stopped`, `Failed`…), after `init`, also while suspended. Android with `mobile-foreground-service` only.
-  - `on_low_memory()` (plan `20261024_01_MEMORY_PRESSURE_PLAN.md`, stage 1): libmobile's `MobileEvent::LowMemory` (NativeActivity's `onLowMemory`, not `onTrimMemory`), once the app exists, suspended or not; scripted runs: `low-memory`. Never on the desktop or the web.
-  - `on_trim_memory(TrimLevel)` (the same plan, stage 2): libmobile's `MobileEvent::TrimMemory` (`onTrimMemory`), mapped to libmorph's ordered `TrimLevel` (`RunningModerate` … `Complete`); once the app exists, suspended or not; scripted runs: `trim-memory <running-moderate|running-low|running-critical|ui-hidden|background|moderate|complete>`. A process with a running foreground service is not given background levels, and Home sends it no `UiHidden`.
-  - `on_open_url(&str)` (plan `20261022_07_URL_SCHEMES_PLAN.md`): a link with a scheme the app's build script declared (`gradle_project(id).url_scheme("myapp")`, libmobile's `Project::url_scheme`). Android VIEW intents with data, after `init` (a cold-start link waits for it), in order; while suspended, after `on_resume`. Scripted runs: `open <url>`. Never log the URL past its path.
-  - `on_intent(&Intent)` (plan `20261104_01_INTENT_EXTRAS_PLAN.md`): every Android intent, whole - `Intent { action, data, extras: Vec<(String, String)>, is_new }` with `extra(key)`, libmorph's own type (field for field libmobile's `IntentData`, kept here because a scripted run builds one where libmobile is not compiled in). Where `on_open_url` carries a `VIEW` intent's URI, this carries the intent that has no URI: `am start -n <pkg>/<activity> --es <key> <value>`, whose action is `MAIN`. After `init` (a cold-start intent waits for it), in order; while suspended, after `on_resume`. A `VIEW` intent with data calls `on_intent` first and then `on_open_url`, one place deciding both (`Shell::deliver_intent`). Scripted runs: `intent <key>=<value>`. Every field is untrusted: log a key, not a value.
-- **`MorphContext`**: passed to every hook. It provides:
-  - `wgpu::Device` / `wgpu::Queue`, plus the granted `wgpu::Limits`;
-  - `device() -> &libdevice::DeviceSpec`: the emulated spec on desktop. On Android and web, it is the closest data available: the CLI or default spec, with geometry updated from the real surface;
-  - `safe_area() -> SafeArea`: libmorph's own type (`f32` physical px, top/right/bottom/left), so the signature is the same with or without `mobile`. Its source depends on the host:
-    - desktop: `SafeArea::from(spec.insets(InsetType::SafeDrawing))`;
-    - Android: `libmobile::SafeArea`, converted;
-    - web: zero for now (the browser's `env(safe-area-inset-*)` isn't reachable from wasm without CSS plumbing);
-  - `scale_factor()`: surface pixels per dp/point/CSS pixel. On desktop, `spec.pixel_ratio` scaled by surface width / device width;
-  - `px_per_mm()`: surface pixels per millimetre of the device's display, `spec.px_per_mm()` scaled the same way;
-  - `audio()`: a real handle under `audio`, a zero-sized no-op stub otherwise (plan `20261016_01_AUDIO_DEVICE_AND_SOURCES_PLAN.md`):
-    - `play`/`play_with` a `Sound` (in-memory `f32` samples, resampled), giving a `Voice` for `set_volume` and `stop`; `stop_all` stops voices only;
-    - `add_source(Source) -> SourceId` and `remove_source`: a `Box<dyn FnMut(&mut [f32]) + Send>` called on the audio thread with a zeroed, interleaved buffer at `format()`'s rate and channel count, mixed with the voices. Removed sources are sent back and dropped on the main thread;
-    - `set_master_volume(f32)` scales the whole mix before clipping to -1..1; `format() -> Option<OutputFormat { sample_rate, channels }>`;
-    - under `audio-cpal`: `device() -> Option<&impl DeviceTrait>` (the concrete `cpal::Device` is not exposed), `stream_config()`, `sample_format()`. The stream itself is never exposed;
-    - capture (`AudioSetup::capture`): `add_sink(Sink) -> SinkId` and `remove_sink`; a `Box<dyn FnMut(&Captured) + Send>` called on the audio input thread with `Captured { samples, frame, time }` (interleaved `f32` at `capture_format()`). Sinks added before capture opens are kept for it; removed ones are dropped on the main thread. `capture_mode()` and `set_capture_mode(CaptureMode)` (Android: reopens with the preset, keeping the sinks; elsewhere `Default`). On Android capture goes through libmobile's `CaptureStream`, so the `audio-cpal` capture accessors (`capture_device()`, `capture_stream_config()`, `capture_sample_format()`) are `None` there;
-    - the streams pause with the app: on Android at `Pause`/`Resume`, on desktop and web in winit's `suspended`/`resumed`. Scripted runs have no streams, so sources and sinks are never called;
-    - recovery (plan `20261029_02_AUDIO_STREAM_RECOVERY_PLAN.md`, `src/audio/recovery.rs`): a start that fails on resume, a cpal `DeviceNotAvailable`/`StreamInvalidated`, or no callback for 1000 ms while running (not on the web's output) reopens the stream with the same format, sinks and mixer (Android capture through libmobile's `set_preset` with the mode last asked for; cpal streams on the current default device with the first config), four attempts at 0/250/1000/3000 ms, then `Failed` until `restart` or the next resume. `output_state()`/`capture_state()` -> `AudioState` (`#[non_exhaustive]`: `Closed`, `Running`, `Paused`, `Recovering`, `Failed`); `restart(AudioStream) -> bool` (only from `Failed`, not while paused). `device()`/`capture_device()` stay the device first opened. Checked once per frame from `Shell::draw`;
-  - `exit()`: ask the runner to stop. On desktop and web the window closes; on Android libmorph calls `libmobile::android::finish` and the activity tears down normally;
-  - `data_dir() -> Option<&Path>` and `cache_dir()` (plan `20261023_03_APP_STORAGE_PLAN.md`): the app's persistent and cache directories, created with `create_dir_all` before `init` (`src/storage.rs`). Android: `libmobile::android::dirs::{files_dir, cache_dir}`; desktop: `libdevice::dirs::{data_dir, cache_dir}(APP_ID)` (macOS `~/Library/Application Support/<id>`, `~/Library/Caches/<id>`); scripted runs: `storage/` and `cache/` in the run's output, emptied each run; the web: `None`. A creation failure is logged at error and gives `None`.
-  - `secure_store() -> Option<&SecureStore>` (feature `secure-store`, plan `20261022_03_SECURE_STORE_PLAN.md`): named secrets with one API on every host, `Clone + Send + Sync`: `get`, `put`, `put_with(name, value, PutOptions)`, `delete`, `protection() -> Result<Protection>`. Android uses libmobile's `secure_store`; macOS uses libdevice's (the login Keychain, one generic password per blob, `unlocked_only` not enforced); scripted runs use libdevice's memory store, empty for each run. `None` on the web and other desktops;
-  - `key_store() -> Option<&Vault>` (feature `secure-store`, plan `20261022_06_KEY_STORE_PLAN.md`): the vault for the re-exported `libmorph::key_store` engine (libmobile's on Android, libdevice's elsewhere; the same file, checked by a test). Namespace `libmorph.<MorphApp::SECURE_STORE_ID>` (default: package name or executable stem). An adapter implements `SecretKey`; `generate` returns its public value, `with_key` lends the key for one call. Scripted runs get a fresh `Vault::memory()`;
-  - `open_link(&str) -> Result<(), OpenLinkError>` (plan `20261023_02_OPEN_LINK_PLAN.md`): http or https only, checked first on every host by libmorph's `check_link` (held to libmobile's and libdevice's by a test). Android: `libmobile::android::link::open_link` (`NotVisible` while hidden); macOS: `libdevice::link::open_link` (libdevice's `open-link` feature, always on for macOS builds); the web: `window.open(url, "_blank")` with `opener` set to null, `Platform("blocked")` for a blocked pop-up; other desktops: `Unsupported`. Scripted runs log `libmorph: script: open link <url cut after its path>` and open nothing. Never log a link past its path.
-  - `clipboard_text() -> Option<String>` and `clipboard_has_text() -> bool` (plan `20261028_03_CLIPBOARD_PLAN.md`): the plain text of the clipboard's first item, for the app's own Paste button; read only, and never logged. Android: libmobile's `clipboard::read_text` and `has_text` under `mobile-clipboard` (`None`/`false` without it; a refusal, such as Android 10's focus rule, is logged at debug with its reason; Android 12's "pasted" toast shows for `clipboard_text` only); macOS: libdevice's `clipboard::read_text` (its `clipboard` feature, always on for macOS builds); other desktops, the web and scripted runs: `None` and `false`. An empty text is `None`.
-  - `set_clipboard_text(&str) -> Result<ClipboardWrite, ClipboardError>` and `clipboard_can_write() -> bool` (plan `20261029_01_CLIPBOARD_WRITE_PLAN.md`, 0.5.3): plain text for the app's own Copy button, never logged. `ClipboardWrite::SystemNotice` (Android 13 and later showed its own confirmation; the app shows none) or `Silent` (the app may show its own); `ClipboardError` (`#[non_exhaustive]`: `Unsupported`, `Platform(String)`). Android: libmobile's `clipboard::write_text` under `mobile-clipboard` (`Unsupported` without it); macOS: libdevice's `clipboard::write_text`; scripted runs: `Ok(Silent)` after logging `libmorph: script: clipboard written`, the host's clipboard untouched and `clipboard_text` still `None`; other desktops and the web: `Unsupported`. `clipboard_can_write` is decided at build time.
-  - `media_request(&MediaRequest) -> MediaRequestId` and the hook `MorphApp::on_media(ctx, &MediaResponse)` (plan `20261028_02_MEDIA_REQUEST_PLAN.md`, `src/media.rs`): libmorph's own types mirroring libmobile's `media` field for field, plus `MediaError::Unsupported`. Android (`mobile-media-request`): `libmobile::android::media::request_media`, ids mapped back; `MobileEvent::Media` goes to `on_media` at once, also while suspended, and an answer before the app exists is held and delivered right after `init` (`request: None` after a process restart). CAMERA for the camera entry is libmobile's and never reaches `on_permissions`. The web: one hidden `<input type="file">` (no `capture`), `accept`/`multiple` from the request, `change`/`cancel`, bytes through `Blob::array_buffer`; a new request answers an unanswered one `Cancelled`; `Delivery::File` answers as bytes. The desktop and Android without the feature: `Unsupported` on the next frame. Scripted runs: `media <path>...`, `media-camera <path>`, `media-cancel`, `media-deny`, `media-deny-forever` answer the waiting (or next) request; `Busy` while one waits. Never log a URI, name or bytes.
-  - `request_permissions(&[&str]) -> Option<PermissionRequest>`, `permission_granted`, `should_show_rationale`: libmorph's own types over libmobile's, the same on every host. Off Android there are no runtime permissions: `None`, `true` and `false`.
-  - `build_info() -> Option<&BuildInfo { vendor, make, model }>` (plan `20261024_02_DEVICE_INFO_PLAN.md`): libmobile's `build_info()` (`Build.MANUFACTURER`, `BRAND`, `MODEL`), read once at bring-up; nothing that identifies the unit or its owner. `None` on the desktop, the web and in scripted runs.
-  - `pipeline_cache() -> Option<&wgpu::PipelineCache>` (plan `20261016_02_PIPELINE_CACHE_PLAN.md`): `Some` only on Android with Vulkan when the adapter offers `PIPELINE_CACHE`, which `Gpu::new` then requests (its `want_pipeline_cache`, `true` from the Android runner only). Apps pass it as `cache` in their pipeline descriptors, cloning it for pipelines built on another thread; a pipeline built with `cache: None` is not cached. The data is kept at `<data_dir>/libmorph/<wgpu::util::pipeline_cache_key>.bin`, loaded before `init` (`fallback: true`, so stale data gives an empty cache), and saved through a `.tmp` rename after `init`, after `on_suspend` and on exit, skipped when unchanged (`src/pipeline_cache.rs`).
-- **`libmorph::service`, `libmorph::battery`, `libmorph::system_events`** (plan `20261023_01_FOREGROUND_SERVICE_PLAN.md`): free functions, no `MorphContext`, any thread; libmorph's own types (`ServiceOptions::new`, `NotificationContent::new`, `NotificationAction::new` for the `#[non_exhaustive]` structs).
-  - `service`: `start`, `update`, `update_text`, `stop`, `is_running`, `set_wake_lock`, `wake_lock_held`. Android: libmobile's under `mobile-foreground-service` (without it `start` is `NotDeclared`); elsewhere `start` is `ServiceError::Unsupported` and the rest do nothing.
-  - `battery`: libmobile's under `mobile-battery`; `BatteryError::Unsupported` otherwise.
-  - `system_events`: `subscribe`, `current`, `subscribe_tokio` (feature `tokio`). Android: libmobile's under `mobile-system-events`. Desktop and web: libmorph's own hub, `Visible` from winit's `resumed`/`suspended` only. Scripted runs: nothing.
-- **`libmorph::script`** (plan `20261014_04_SCRIPTED_RUNS_AND_PNG_CAPTURE_PLAN.md`): scripted, headless runs.
-  - `Script::parse` / `load` / `from_commands` build a checked script from plain text: one English command per line, space-separated operands, `#` comments. Commands: `fps`, `frames`, `touch <id> <start|move|end|cancel> <x> <y> [<pressure>]`, `tap`, `drag`, `hover`, `key <escape|back|space|char|U+XXXX>`, `screenshot [<name>]`, `suspend`, `resume`, `exit`, `low-memory` (accepted while suspended), `open <url>` (on an `open` line `#` belongs to the URL), `intent <key>=<value> [...]` (no action, no data, `is_new`). Ordering mistakes (touch not down, screenshot before a frame or while suspended, duplicate names) are rejected with the line number before any GPU work. The parser builds without the feature.
-  - `script::run::<A>(&script, ScriptRun)` (`script` feature, desktop): no window or event loop, so it runs from `cargo test` and agent sandboxes. It renders into an offscreen `Rgba8UnormSrgb`/`Rgba8Unorm` texture at `spec.geometry`, with a fixed `dt` of `1 s / fps`, silent audio, the emulated safe area and, unless disabled, the overlay. It returns a `Report`.
-  - Screenshots are RGB PNGs from the `png` crate with fixed settings (level 6, adaptive filter, `sRGB` chunk, no time or text chunks). `run.json` records the device, size, format, fps, adapter, how the run ended, and each screenshot's frame, line and pixel CRC-32. Nothing in the output depends on when the run happened. The same script, app, adapter and `Cargo.lock` give byte-identical files.
-  - `OutDir::Exact(dir)`, or `OutDir::Sequenced` (default `out/morph/YYYYMMDD_NN_<script stem>/`, dated in UTC, named like the plans).
-
-### Lifecycle
-
-- **Android:** an internal `MobileApp` impl adapts libmobile's events to `MorphApp`:
-  - `WindowCreated` → create the surface from `SurfaceTarget` and configure it. On the first window, also bring up the adapter, device and queue, then call `init`.
-  - `WindowDestroyed` → drop the surface synchronously, then call `on_suspend`.
-  - `Resume` with a window → call `on_resume`.
-  - `Insets` → update the safe area.
-  - `tick` → `update` + `render`.
-  - `poll_timeout` → `Some(Duration::ZERO)` while rendering continuously.
-  - `Destroy` → shut down (no second `on_suspend` after `WindowDestroyed`).
-  - Back and Escape go to `on_key` on their first press. The status the app returns also answers that key's repeats and release (`KeyRouting`), because Android acts on Back when it comes up.
-- **Desktop:** winit `ApplicationHandler`. `resumed` creates the window and surface. `suspended` drops the surface. The device and queue persist across both. Close, `exit()`, a failure and winit's `exiting` all end in `Shell::shutdown`.
-- **Web:** `ApplicationHandler`. The async bring-up runs in `spawn_local` and its result comes back through an `EventLoopProxy` user event. Don't render until it arrives.
-
-### Emulation & Input (desktop)
-
-- Size the window from `spec.geometry` (physical pixels), shrunk to fit the primary display (`min(1, 0.9 × display width / w, 0.85 × display height / h)`) unless `--morph-window-scale <n>` gives an exact multiple. The emulated scale factor is `spec.pixel_ratio` times surface width / device width, independent of the host monitor's DPI; the safe area, overlay and `px_per_mm()` scale the same way.
-- Draw an optional overlay from `spec.cutouts` and `spec.corners` (masked corners, cutout shapes) so layouts can be checked against the real obstructions.
-- Translate winit mouse events into the same touch events that Android `InputEvent::MotionEvent` produces, so `on_touch` behaves the same on both. The left button is a single finger (id `u64::MAX`). Moving with no button held is a hover. A held touch is cancelled once when it leaves the window (by position or `CursorLeft`), and nothing more is reported until the next press.
-- Multi-finger input on desktop comes from real touch events (`WindowEvent::Touch`) and, on macOS, the trackpad, never from mouse buttons (plan `20261015_01_MAC_TRACKPAD_TOUCH_PLAN.md`):
-  - `src/runner/trackpad.rs` (macOS only, all the `objc2` code) allows indirect touches on winit's view and reads `NSTouch` fingers from gesture events through a local event monitor; `PadTouch` in `src/input.rs` turns them into touches with ids from `1 << 32`.
-  - A session starts when two or more fingers are on the pad with the cursor over the surface, reports every finger until the last one lifts, and holds the mouse off (no hover, left presses ignored, a held mouse touch cancelled once). One finger is the mouse. Focus loss and `suspended` cancel the fingers.
-  - `--morph-trackpad physical` (default) places fingers so pad distances equal distances on the device (`NSTouch::deviceSize` in points × `spec.px_per_mm()`), centred on the cursor; `fit` maps the whole pad to the surface; `off` installs nothing.
-
-### CLI Overrides
-
-Desktop only. Two separate namespaces, so they never clash:
-
-- **Device selection:** libdevice's own `--device` prefix, unchanged:
-
-  ```rust
-  let (spec, args) = libdevice::DeviceSpec::extract_args(std::env::args())?;
-  // --device iphone_15 | --device-width 720 | --device-status-bars-top 80 ...
-  ```
-
-  Append `libdevice::DEVICE_ARGS_HELP` to libmorph's help text.
-- **libmorph's own options:** `--morph-*` (e.g. `--morph-fallback-adapter`), stripped by libmorph.
-  - `--morph-script <path>` runs the script headless instead of opening a window (`MorphError::Script(ScriptError::Disabled)` without the `script` feature). `--morph-out <dir>` gives its exact output directory and is an error without `--morph-script`. Both also take `--opt=value`.
-  - `--morph-trackpad <physical|fit|off>` and `--morph-window-scale <fit|n>`; see Emulation & Input. Both are accepted on every desktop host.
-
-The order of the two passes doesn't matter. Pass the remaining `args` to the app.
-
-## Known Limitations
-
-- No native iOS.
-- Device presets are compile-time constants in libdevice's `devices.toml`, and the figures are marked ESTIMATED there. Treat emulated insets as approximate until they have been checked on hardware.
-
-## Behavioral Guidelines
-
-- **Direct & concise:** no preamble. Output code, module definitions, or architectural reasoning directly.
-- **Ground truth over this file:** before using any libdevice or libmobile API, check it against the source in `~/src/libdevice` and `~/src/libmobile`. If they disagree with this document, the source wins. Note the discrepancy.
-- **Feature-gate rigor:** gate subsystem code with `#[cfg(feature = "...")]`, and provide zero-sized stubs so `MorphContext` signatures don't change.
-- **Idiomatic Rust:** safe, concise, zero-cost abstractions.
-- **Lifecycle awareness:** never hold a surface past `WindowDestroyed` / `suspended`. Never block the wasm main thread.
-- **Complete solutions:** provide compilable code. If something is ambiguous, state the assumption in one line and pick the best option.
+- **libmorph is a wrapper.** A new platform capability is planned, built
+  and released in libmobile (Android) or libdevice (the desktop) first,
+  with an example there that genuinely uses it; libmorph is then amended to
+  wrap it. Where both crates provide a capability they expose the same API,
+  and libmorph wraps both. libmorph does not reach past them to the NDK,
+  `android-activity` or OS frameworks. What it owns is what it exists for:
+  wgpu and GPU bring-up, the winit event loop and window with device
+  emulation and input, cpal off Android, and scripted runs. A new exception
+  is agreed with the owner first.
+- **Ground truth over any document.** Before using a libdevice or libmobile
+  API, check it against the source in `~/src/libdevice` and
+  `~/src/libmobile`. Where the source disagrees with a document, this file
+  included, the source wins; note the discrepancy.
+- **Feature gating.** Gate a subsystem's code with `#[cfg(feature = "…")]`
+  and give it zero-sized stubs, so `MorphContext`'s signatures are the same
+  with the feature and without it.
+- **`cfg(script_runner)`.** `build.rs` sets it when `script` is on and the
+  target is neither Android nor wasm32. Gate runner code on
+  `#[cfg(script_runner)]` rather than repeating that condition. The runner
+  module also carries `compile_error!` guards: `web` is required on wasm32,
+  `mobile` on Android.
+- **Lifecycle hazards.** Never hold a surface past `WindowDestroyed` or
+  `suspended`. Never block the wasm main thread.
+- **Passthrough features.** Each `mobile-*` passthrough also enables
+  `mobile`, so `libmobile/<x>` is never asked for without the dependency
+  itself. Add a passthrough only once the upstream feature exists.
+- **Android dependencies.** `android-activity` and `ndk` arrive through
+  libmobile's re-exports; declared separately they duplicate the JavaVM
+  singleton. `winit` is a dependency of `cfg(not(target_os = "android"))`
+  only.
+- **Local checkouts.** Build against sibling checkouts with an
+  uncommitted `.cargo/config.toml` (it is gitignored) that patches the
+  libdevice and libmobile git URLs to paths. Never commit a `path`
+  dependency, or a `Cargo.lock` resolved with a patch active: the patch
+  strips that entry's `source = "git+…"` line.
