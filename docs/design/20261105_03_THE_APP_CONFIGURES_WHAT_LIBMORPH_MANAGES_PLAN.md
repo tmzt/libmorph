@@ -1,7 +1,7 @@
 ---
 title: The app configures what libmorph manages, and may construct its own frames
 date: 2026-11-05
-status: Draft
+status: Superseded (by 20261105_04_OWNS_AND_THE_RENDER_STATUS_PLAN.md)
 covers: >
   A first callback, `MorphApp::configure`, that runs before anything
   opens and returns a `MorphAppConfig`: per-subsystem preferences
@@ -979,3 +979,64 @@ register is" stands, with its example gate now written
 The status stays Draft. The README row is unchanged: it names the
 register's computation and where its gates live, neither of which
 moved.
+
+## Amendment — 2026-11-05 16:37 EST: superseded by the plan where the app declares what it owns
+
+Superseded by `docs/design/20261105_04_OWNS_AND_THE_RENDER_STATUS_PLAN.md`. Nothing in this plan was
+implemented. Worked out with the owner in discussion, 2026-11-05.
+
+What replaced what, and why:
+
+- `configure`, `MorphAppConfig`, `DrawingConfig`, `DrawingMode` and the
+  register of section 2.4 and its amendment are all replaced by one
+  associated const, `MorphApp::OWNS`, of a hand-rolled `Owned` flags
+  type. The owner: "it also reads clearly the MorphApp OWNS these
+  subsystems", and "we won't move anything else". A const has no
+  position in the sequence, so nothing is computed, stored or read back
+  through a register; and because the app type is monomorphized,
+  `A::OWNS.contains(Owned::FRAME)` folds at compile time and the managed
+  path compiles to what it is today with the other arm eliminated.
+  `DrawingMode::ConstructFrame` becomes the `Owned::FRAME` bit.
+- Section 2.2's `format`, `present_mode` and `max_frame_latency` fields
+  are replaced by a `wgpu_config` hook, called at every attach when
+  `FRAME` is owned, taking and returning a `wgpu::SurfaceConfiguration`
+  the way `limits` takes and returns limits. The owner: "my concern is
+  we're going to end up duplicating wgpu's configuration in morph's own
+  structs, and have to follow the upstream api changes". A managed app's
+  surface knob stays `SRGB_SURFACE`, which already covers the case
+  section 2.2 cited for `format`.
+- Section 2's argument for exhaustive `pub` fields is moot: there is no
+  struct.
+- Section 3.1's `Shell::iterate` and the pump move are not needed. The
+  pumps stay where they are and keep firing for every subsystem libmorph
+  still drives, so taking the frame cannot silence one - which was the
+  flaw that superseded `20261105_02`. `Shell` is `pub(crate)`, so where
+  the branch lives is internal.
+- Section 3.2's frame is carried forward whole: `ctx.acquire` and
+  `ctx.present` become `ctx.acquire_frame` and `ctx.present_frame`,
+  because a method reads as its verb applied to its receiver and
+  `ctx.acquire()` reads as acquiring the context. With them, the one
+  rule and its Android reasoning, the pacing and
+  overlay and scripted-run passages, and section 4's trade.
+  `SurfaceFrame` is renamed `AcquiredFrame`, to pair with `acquire_frame`
+  and
+  to stop reading as a near-synonym of the `Frame` that `render` keeps;
+  `AcquireError::Managed` becomes `NotOwned`.
+- Sections 8 and 9, the version reasoning and the pinning by tag, are
+  carried forward as the replacement's sections 9 and step 1.
+- Section 10 is carried forward: the release is still not justified by a
+  slow frame.
+
+Added there and absent here: a default body for `render`, and a
+`RenderStatus` return by which a managed app says whether the frame
+needs presenting. The owner: "the value of a return is to tell the morph
+render loop whether anything needs to be presented". The two ship as one
+break because adding `OWNS` while `render` stayed required would leave
+every owning app writing a dead method.
+
+Also settled in the same discussion and recorded there rather than here:
+a missed override is reported by a `log_once!` and not by a panic or a
+build error, because Rust cannot ask whether a method was overridden and
+the only mechanism reports against libmorph's own source at codegen
+time. A lint callable from `build.rs` is the intended answer and is out
+of scope.
