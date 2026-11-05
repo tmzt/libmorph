@@ -240,6 +240,34 @@ pub trait MorphApp: Sized + 'static {
         RenderStatus::Skipped
     }
 
+    /// Construct and present this iteration's frame. Called once per
+    /// iteration when [`OWNS`](Self::OWNS) contains [`Owned::FRAME`],
+    /// after [`update`](Self::update), in place of libmorph's acquire,
+    /// [`render`](Self::render), desktop overlay and present.
+    ///
+    /// Acquire with
+    /// [`ctx.acquire_frame()`](MorphContext::acquire_frame), or do not,
+    /// and present with
+    /// [`ctx.present_frame(frame)`](MorphContext::present_frame), or drop
+    /// the frame to skip this iteration. Presenting every iteration lets
+    /// `Fifo` pace the loop as a managed app's does; not acquiring returns
+    /// at once and the host calls the next iteration as soon as it can.
+    ///
+    /// **A frame acquired here is presented or dropped before this
+    /// returns.** Pacing, and when to call
+    /// [`ctx.device()`](MorphContext::device)`.poll(..)`, are the app's.
+    /// The desktop overlay is not drawn, because it is drawn into the
+    /// frame libmorph constructs and libmorph constructs none.
+    ///
+    /// The default draws and presents nothing, so it logs once.
+    fn construct_frame(&mut self, ctx: &mut MorphContext) {
+        let _ = ctx;
+        log_once!(
+            "libmorph: `OWNS` contains `Owned::FRAME` but construct_frame \
+             is not implemented, so no frame is drawn or presented."
+        );
+    }
+
     /// A touch, or on desktop the mouse translated into one.
     fn on_touch(&mut self, ctx: &mut MorphContext, touch: Touch) {
         let _ = (ctx, touch);

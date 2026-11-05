@@ -5,8 +5,10 @@ use std::time::Duration;
 
 use web_time::Instant;
 
+use crate::context::Target;
 use crate::gpu::Gpu;
 use crate::gpu::WgpuConfig;
+use crate::log_once::log_once;
 use crate::{Frame, MorphApp, MorphContext, MorphError, Owned, RenderStatus, Touch};
 
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
@@ -91,19 +93,9 @@ impl Lifecycle {
     }
 }
 
-/// What frames are drawn into.
-enum Target {
-    /// A platform surface, presented after each frame.
-    Surface(wgpu::Surface<'static>, wgpu::SurfaceConfiguration),
-    /// A texture for scripted runs: rendered, never presented.
-    #[cfg(script_runner)]
-    Offscreen(wgpu::Texture),
-}
-
 pub(crate) struct Shell<A> {
     pub ctx: MorphContext,
     pub app: A,
-    target: Option<Target>,
     lifecycle: Lifecycle,
     last_frame: Instant,
     /// Scripted runs: the `dt` every frame gets, instead of the clock.
@@ -141,6 +133,10 @@ impl<A: MorphApp> Shell<A> {
     }
 
     fn with_app(mut ctx: MorphContext, target: Target, fixed_dt: Option<Duration>) -> Self {
+        ctx.target = Some(target);
+        // The context is not generic over the app, so the one thing it
+        // needs from `OWNS` is read once, here, before `init`.
+        ctx.owns_frame = A::OWNS.contains(Owned::FRAME);
         let mut app = A::init(&mut ctx);
         if ctx.audio.capture_format().is_some() {
             app.on_capture_ready(&mut ctx);
@@ -151,7 +147,6 @@ impl<A: MorphApp> Shell<A> {
         Self {
             ctx,
             app,
-            target: Some(target),
             lifecycle: Lifecycle::default(),
             last_frame: Instant::now(),
             fixed_dt,
@@ -165,7 +160,7 @@ impl<A: MorphApp> Shell<A> {
     }
 
     pub fn has_surface(&self) -> bool {
-        self.target.is_some()
+        self.ctx.target.is_some()
     }
 
     /// Install a new surface: after a resume, or to replace a lost one. The
@@ -188,7 +183,7 @@ impl<A: MorphApp> Shell<A> {
     }
 
     fn install(&mut self, target: Target) {
-        self.target = Some(target);
+        self.ctx.target = Some(target);
         // Frame time does not accumulate across a suspension.
         self.last_frame = Instant::now();
         if self.lifecycle.resume() {
@@ -249,7 +244,7 @@ impl<A: MorphApp> Shell<A> {
     /// Drop the surface (it must not outlive the platform window) and tell
     /// the app, unless it already knows it is suspended.
     pub fn detach(&mut self) {
-        self.target = None;
+        self.ctx.target = None;
         if self.lifecycle.suspend() {
             self.ctx.camera.suspend();
             self.camera_events();
@@ -270,23 +265,17 @@ impl<A: MorphApp> Shell<A> {
             self.app.on_suspend(&mut self.ctx);
             self.ctx.save_pipeline_cache();
         }
-        self.target = None;
+        self.ctx.target = None;
         drop(self.app);
     }
 
     pub fn resize(&mut self, (width, height): (u32, u32)) {
-        let Some(Target::Surface(surface, config)) = &mut self.target else {
+        let Some(Target::Surface(surface, config)) = &mut self.ctx.target else {
             return;
         };
         (config.width, config.height) = (width.max(1), height.max(1));
         surface.configure(&self.ctx.gpu.device, config);
         self.ctx.surface_size = (config.width, config.height);
-    }
-
-    fn reconfigure(&mut self) {
-        if let Some(Target::Surface(surface, config)) = &self.target {
-            surface.configure(&self.ctx.gpu.device, config);
-        }
     }
 
     /// Deliver the camera's waiting answers to `on_camera`, oldest first.
@@ -343,10 +332,58 @@ impl<A: MorphApp> Shell<A> {
         self.app.on_hover(&mut self.ctx, x, y);
     }
 
+    /// One iteration: the subsystem pumps and `update`, then either
+    /// libmorph's frame or the app's.
+    ///
+    /// `A` is monomorphized, so the branch folds at compile time and a
+    /// managed app is compiled to the managed path alone.
+    pub fn frame(&mut self) -> FrameStatus {
+        if A::OWNS.contains(Owned::FRAME) {
+            self.app_frame()
+        } else {
+            self.managed_frame()
+        }
+    }
+
+    /// `Owned::FRAME`: the pumps and `update` as always, then
+    /// `construct_frame` in place of libmorph's acquire, `render`, overlay
+    /// and present.
+    fn app_frame(&mut self) -> FrameStatus {
+        if self.ctx.target.is_none() {
+            return FrameStatus::Skipped;
+        }
+        self.pump_and_update();
+        // Cleared each iteration: dropping a frame rather than presenting
+        // it is how the app skips, and must cost it nothing next time.
+        self.ctx.frame_held = false;
+        self.ctx.frame_presented = false;
+        self.app.construct_frame(&mut self.ctx);
+        if self.ctx.frame_held {
+            log_once!(
+                "libmorph: a frame acquired in construct_frame was not \
+                 presented before it returned. libmorph reconfigures the \
+                 surface between iterations, and Android drops it inside \
+                 the window-destroyed handler, so an image held across \
+                 either is outdated at best. To skip an iteration, do not \
+                 acquire."
+            );
+        }
+        // The surface, not the picture: the runner only needs to know
+        // whether it must build a new one.
+        if std::mem::take(&mut self.ctx.surface_lost) {
+            return FrameStatus::Lost;
+        }
+        if self.ctx.frame_presented {
+            FrameStatus::Presented
+        } else {
+            FrameStatus::Skipped
+        }
+    }
+
     /// Update, then render and present if the surface hands out a texture
     /// and the app says the frame needs presenting.
-    pub fn frame(&mut self) -> FrameStatus {
-        let surface = match &self.target {
+    fn managed_frame(&mut self) -> FrameStatus {
+        let surface = match &self.ctx.target {
             None => return FrameStatus::Skipped,
             Some(Target::Surface(surface, _)) => surface,
             #[cfg(script_runner)]
@@ -370,11 +407,11 @@ impl<A: MorphApp> Shell<A> {
                 return FrameStatus::Skipped;
             }
             wgpu::CurrentSurfaceTexture::Outdated => {
-                self.reconfigure();
+                self.ctx.reconfigure();
                 return FrameStatus::Skipped;
             }
             wgpu::CurrentSurfaceTexture::Lost => {
-                self.target = None;
+                self.ctx.target = None;
                 return FrameStatus::Lost;
             }
             wgpu::CurrentSurfaceTexture::Validation => {
@@ -396,19 +433,21 @@ impl<A: MorphApp> Shell<A> {
             drop(view);
             drop(texture);
             if suboptimal {
-                self.reconfigure();
+                self.ctx.reconfigure();
             }
             return FrameStatus::Skipped;
         }
         self.ctx.gpu.queue.present(texture);
         if suboptimal {
-            self.reconfigure();
+            self.ctx.reconfigure();
         }
         FrameStatus::Presented
     }
 
-    /// `update`, `render` and, if the app drew, the overlay into `view`.
-    fn draw(&mut self, view: &wgpu::TextureView) -> RenderStatus {
+    /// The per-iteration work that is libmorph's under either setting: the
+    /// subsystem pumps, then `update`. Taking the frame cannot silence a
+    /// subsystem libmorph still drives.
+    fn pump_and_update(&mut self) {
         self.audio_events();
         self.camera_events();
         self.media_events();
@@ -416,7 +455,11 @@ impl<A: MorphApp> Shell<A> {
         let dt = self.fixed_dt.unwrap_or(now - self.last_frame);
         self.last_frame = now;
         self.app.update(&mut self.ctx, dt);
+    }
 
+    /// `update`, `render` and, if the app drew, the overlay into `view`.
+    fn draw(&mut self, view: &wgpu::TextureView) -> RenderStatus {
+        self.pump_and_update();
         let frame = Frame {
             view,
             format: self.ctx.surface_format,
@@ -467,7 +510,7 @@ impl<A: MorphApp> Shell<A> {
 
     /// The offscreen texture, while attached.
     pub fn offscreen(&self) -> Option<&wgpu::Texture> {
-        match &self.target {
+        match &self.ctx.target {
             Some(Target::Offscreen(texture)) => Some(texture),
             _ => None,
         }

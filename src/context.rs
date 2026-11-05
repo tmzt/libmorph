@@ -5,8 +5,110 @@ use std::path::{Path, PathBuf};
 use libdevice::DeviceSpec;
 
 use crate::gpu::Gpu;
+use crate::log_once::log_once;
 use crate::pipeline_cache::PipelineCacheStore;
 use crate::{Audio, OpenLinkError, PermissionRequest, SafeArea, SecureStore};
+
+/// What frames are drawn into. The context's, because an app that owns the
+/// frame reaches it through [`MorphContext::acquire_frame`].
+pub(crate) enum Target {
+    /// A platform surface, presented after each frame.
+    Surface(wgpu::Surface<'static>, wgpu::SurfaceConfiguration),
+    /// A texture for scripted runs: rendered, never presented.
+    #[cfg(script_runner)]
+    Offscreen(wgpu::Texture),
+}
+
+impl std::fmt::Debug for Target {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Surface(_, config) => f
+                .debug_struct("Surface")
+                .field("size", &(config.width, config.height))
+                .field("format", &config.format)
+                .finish_non_exhaustive(),
+            #[cfg(script_runner)]
+            Self::Offscreen(_) => f.write_str("Offscreen"),
+        }
+    }
+}
+
+/// Where a frame an app acquired came from, and what presenting it means.
+enum FrameSource {
+    Surface(wgpu::SurfaceTexture),
+    /// A scripted run: there is nothing to present to.
+    #[cfg(script_runner)]
+    Offscreen,
+}
+
+/// A frame an app acquired for itself with
+/// [`MorphContext::acquire_frame`], under
+/// [`Owned::FRAME`](crate::Owned::FRAME). It owns its texture, because the
+/// app presents **or drops** it; [`Frame`](crate::Frame), which `render`
+/// is lent, borrows a view libmorph presents itself.
+pub struct AcquiredFrame {
+    pub view: wgpu::TextureView,
+    pub format: wgpu::TextureFormat,
+    /// Physical pixels.
+    pub size: (u32, u32),
+    /// The surface wants reconfiguring;
+    /// [`present_frame`](MorphContext::present_frame) does it after this
+    /// frame, as the managed path does.
+    pub suboptimal: bool,
+    source: FrameSource,
+}
+
+impl std::fmt::Debug for AcquiredFrame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AcquiredFrame")
+            .field("format", &self.format)
+            .field("size", &self.size)
+            .field("suboptimal", &self.suboptimal)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Why there is no frame to draw into this iteration.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum AcquireError {
+    /// [`OWNS`](crate::MorphApp::OWNS) does not contain
+    /// [`Owned::FRAME`](crate::Owned::FRAME), so the frame is libmorph's
+    /// and it is drawn in [`render`](crate::MorphApp::render). Logged once.
+    NotOwned,
+    /// No surface: suspended, or the window is not up yet.
+    NoSurface,
+    /// `Timeout` or `Occluded`: nothing to draw into this iteration.
+    NotReady,
+    /// The surface was outdated. libmorph has reconfigured it; acquire
+    /// again next iteration.
+    Outdated,
+    /// The surface is lost. libmorph has dropped it and the runner
+    /// recreates it before the next iteration. The app hears nothing else,
+    /// as a managed app does not today.
+    Lost,
+    /// This iteration's frame is still held: one per
+    /// [`construct_frame`](crate::MorphApp::construct_frame). Logged once.
+    Held,
+    /// wgpu reported a validation error acquiring. Logged.
+    Validation,
+}
+
+impl std::fmt::Display for AcquireError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::NotOwned => "the frame is libmorph's, not the app's",
+            Self::NoSurface => "there is no surface",
+            Self::NotReady => "the surface has no texture ready",
+            Self::Outdated => "the surface was outdated and has been reconfigured",
+            Self::Lost => "the surface is lost",
+            Self::Held => "this iteration's frame is still held",
+            Self::Validation => "wgpu reported a validation error",
+        })
+    }
+}
+
+impl std::error::Error for AcquireError {}
 
 /// Shared state for the whole run. The device and queue never change; the
 /// surface size, format, safe area and scale factor follow the host.
@@ -42,6 +144,22 @@ pub struct MorphContext {
     pub(crate) keyboard_inset: f32,
     pub(crate) camera: crate::camera::CameraState,
     pub(crate) media: crate::media::MediaState,
+    /// What frames are drawn into, while there is one.
+    pub(crate) target: Option<Target>,
+    /// `A::OWNS.contains(Owned::FRAME)`, which the context cannot read
+    /// itself: it is not generic over the app. Set once, before `init`, so
+    /// `acquire_frame` can answer `NotOwned` rather than hand a managed
+    /// app's frame to the app twice.
+    pub(crate) owns_frame: bool,
+    /// A frame acquired this iteration has not been presented. Cleared
+    /// before every `construct_frame`, so dropping a frame to skip an
+    /// iteration costs the app nothing.
+    pub(crate) frame_held: bool,
+    /// `present_frame` was called this iteration.
+    pub(crate) frame_presented: bool,
+    /// `acquire_frame` found the surface lost and dropped it; the runner
+    /// recreates it before the next iteration.
+    pub(crate) surface_lost: bool,
 }
 
 impl MorphContext {
@@ -73,6 +191,11 @@ impl MorphContext {
             keyboard_inset: 0.0,
             camera: crate::camera::CameraState::default(),
             media: crate::media::MediaState::default(),
+            target: None,
+            owns_frame: false,
+            frame_held: false,
+            frame_presented: false,
+            surface_lost: false,
         }
     }
 
@@ -438,6 +561,133 @@ impl MorphContext {
     #[must_use]
     pub fn keyboard_inset(&self) -> f32 {
         self.keyboard_inset
+    }
+
+    /// The surface's next texture, for an app whose
+    /// [`OWNS`](crate::MorphApp::OWNS) contains
+    /// [`Owned::FRAME`](crate::Owned::FRAME). At most one per
+    /// [`construct_frame`](crate::MorphApp::construct_frame).
+    ///
+    /// Present it with [`present_frame`](Self::present_frame), or drop it
+    /// to skip this iteration. **A frame acquired in `construct_frame` is
+    /// presented or dropped before `construct_frame` returns**: libmorph
+    /// reconfigures the surface between iterations, and on Android drops
+    /// it inside the window-destroyed handler before the activity takes
+    /// the window back, so an image held across either is
+    /// [`Outdated`](AcquireError::Outdated) at best and a texture of a
+    /// window that no longer exists at worst.
+    ///
+    /// On the offscreen target of a scripted run this hands back that
+    /// texture, so an app that constructs its own frames is captured the
+    /// same way a managed one is.
+    pub fn acquire_frame(&mut self) -> Result<AcquiredFrame, AcquireError> {
+        if !self.owns_frame {
+            log_once!(
+                "libmorph: MorphContext::acquire_frame needs \
+                 `const OWNS: Owned = Owned::FRAME;`. Without it the frame \
+                 is libmorph's and the app draws in render."
+            );
+            return Err(AcquireError::NotOwned);
+        }
+        if self.frame_held {
+            log_once!(
+                "libmorph: MorphContext::acquire_frame was called twice in \
+                 one construct_frame. Present or drop a frame before \
+                 acquiring the next, and do not hold one past the end of \
+                 construct_frame: libmorph reconfigures and drops the \
+                 surface between iterations."
+            );
+            return Err(AcquireError::Held);
+        }
+        let surface = match &self.target {
+            None => return Err(AcquireError::NoSurface),
+            Some(Target::Surface(surface, _)) => surface,
+            #[cfg(script_runner)]
+            Some(Target::Offscreen(texture)) => {
+                let frame = AcquiredFrame {
+                    view: texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                    format: self.surface_format,
+                    size: self.surface_size,
+                    suboptimal: false,
+                    source: FrameSource::Offscreen,
+                };
+                self.frame_held = true;
+                return Ok(frame);
+            }
+        };
+        let texture = match surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(texture) => texture,
+            wgpu::CurrentSurfaceTexture::Suboptimal(texture) => {
+                let frame = self.frame_from(texture, true);
+                self.frame_held = true;
+                return Ok(frame);
+            }
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                return Err(AcquireError::NotReady);
+            }
+            wgpu::CurrentSurfaceTexture::Outdated => {
+                self.reconfigure();
+                return Err(AcquireError::Outdated);
+            }
+            wgpu::CurrentSurfaceTexture::Lost => {
+                self.target = None;
+                self.surface_lost = true;
+                return Err(AcquireError::Lost);
+            }
+            wgpu::CurrentSurfaceTexture::Validation => {
+                log::error!("libmorph: validation error acquiring the surface texture");
+                return Err(AcquireError::Validation);
+            }
+        };
+        let frame = self.frame_from(texture, false);
+        self.frame_held = true;
+        Ok(frame)
+    }
+
+    /// Present `frame`, then reconfigure the surface if it was
+    /// suboptimal, as the managed path does. On the offscreen target of a
+    /// scripted run the present itself is a no-op.
+    ///
+    /// The device is not polled: pacing is the app's, which is the point.
+    pub fn present_frame(&mut self, frame: AcquiredFrame) {
+        let AcquiredFrame {
+            view,
+            suboptimal,
+            source,
+            ..
+        } = frame;
+        // The view borrows the texture, so it goes first.
+        drop(view);
+        match source {
+            FrameSource::Surface(texture) => self.gpu.queue.present(texture),
+            #[cfg(script_runner)]
+            FrameSource::Offscreen => {}
+        }
+        if suboptimal {
+            self.reconfigure();
+        }
+        self.frame_held = false;
+        self.frame_presented = true;
+    }
+
+    /// A surface texture, as the app sees it.
+    fn frame_from(&self, texture: wgpu::SurfaceTexture, suboptimal: bool) -> AcquiredFrame {
+        AcquiredFrame {
+            view: texture
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default()),
+            format: self.surface_format,
+            size: self.surface_size,
+            suboptimal,
+            source: FrameSource::Surface(texture),
+        }
+    }
+
+    /// Configure the surface again with the configuration it has.
+    pub(crate) fn reconfigure(&mut self) {
+        if let Some(Target::Surface(surface, config)) = &self.target {
+            surface.configure(&self.gpu.device, config);
+        }
     }
 
     /// Save the pipeline cache's data, if there is a cache and it changed.

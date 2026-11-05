@@ -49,7 +49,7 @@ pub use audio::{
 pub use build_info::BuildInfo;
 pub use clipboard::{ClipboardError, ClipboardWrite};
 pub use config::{MORPH_ARGS_HELP, MorphError};
-pub use context::MorphContext;
+pub use context::{AcquireError, AcquiredFrame, MorphContext};
 pub use gpu::{GpuError, LimitFailure, LimitsRequest};
 pub use input::{Key, KeyStatus, Touch, TouchPhase};
 pub use intent::Intent;

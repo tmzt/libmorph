@@ -1,0 +1,19 @@
+# The ownframe example, scripted (galaxy_s24, 1080x2340):
+#   cargo run --example ownframe --features script -- --morph-script examples/scripts/ownframe.morph
+# Frames 0..2 are presented and frame 3 is skipped by not acquiring, so the
+# capture after it is byte for byte the one before it: whatever was
+# presented last stayed on screen.
+frames 3
+screenshot presented
+frames 1
+screenshot after_a_skip
+# The next step of the colour, three presented frames on.
+frames 3
+screenshot stepped
+# A backgrounding, and the app picks up against the new target: the frame
+# it presents first must be drawn, since a fresh surface has no previous
+# frame to keep.
+suspend
+resume
+frames 1
+screenshot after_a_resume
