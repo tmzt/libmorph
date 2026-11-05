@@ -47,9 +47,15 @@ the previous frame stays on screen. `render` has a default that draws nothing,
 returns `Skipped` and logs once, so an app that constructs its own frames
 writes no dead method.
 
-Other hooks: `update`, `on_touch`, `on_suspend`, `on_resume`. `MorphContext`
-also provides the safe area, scale factor, surface size and format, the device
-spec and audio.
+Other hooks: `update`, `on_touch`, `on_hover`, `on_key`, `on_text_input`,
+`on_suspend`, `on_resume`, `on_capture_ready`, `on_audio`, `on_permissions`,
+`on_camera`, `on_media`, `on_open_url`, `on_intent`, `on_service`,
+`on_low_memory` and `on_trim_memory`. Every one has a default body, so an app
+writes only the ones it uses. `MorphContext` also provides the safe area,
+scale factor, surface size and format, the device spec, audio, the app's data
+and cache directories, the clipboard, the secure store and key store,
+`open_link`, `request_permissions` and `exit`. The rustdoc documents each one,
+and which hosts answer it.
 
 ```sh
 cargo run --example touch -- --device iphone_15
@@ -127,6 +133,55 @@ window's size. A managed app's one surface knob is `const SRGB_SURFACE:
 bool`, which prefers a non-sRGB surface for shaders that gamma-encode
 themselves.
 
+### Device limits
+
+libmorph brings up the adapter, device and queue itself: the primary backends
+on desktop, Vulkan or GL on Android, WebGPU falling back to WebGL2 on the web.
+It starts from wgpu's downlevel defaults - the WebGL2 downlevel defaults on any
+GL adapter, which includes older Android devices - with the texture sizes
+raised to what the adapter actually offers.
+
+An app that needs more says so before `init`:
+
+```rust
+fn limits(base: &wgpu::Limits) -> LimitsRequest {
+    let required = wgpu::Limits { max_storage_buffers_per_shader_stage: 8, ..base.clone() };
+    LimitsRequest { preferred: required.clone(), required }
+}
+```
+
+`required` is never lowered. Any field the adapter cannot meet fails bring-up
+with `GpuError::Limits`, which lists each field with what was asked for and
+what is available. `preferred` is granted as far as the adapter allows, and
+`ctx.limits()` returns what was actually granted, so an app can look at it
+rather than assume.
+
+### Input and emulation (desktop)
+
+The window is sized from the emulated device's pixels, shrunk to fit the
+display unless `--morph-window-scale <n>` asks for an exact multiple. The scale
+factor the app sees is the device's own pixel ratio adjusted for that shrink,
+independent of the host monitor's DPI; the safe area, the overlay and
+`px_per_mm()` follow it. The overlay masks the device's rounded corners and
+draws its cutouts, so a layout can be checked against the real obstructions.
+
+Mouse events become the same touch events Android sends, so `on_touch` behaves
+the same on both hosts:
+
+- the left button is a single finger, with the id `u64::MAX`;
+- moving with no button held is `on_hover`, not a touch;
+- a held touch is cancelled once when the pointer leaves the window, and
+  nothing more is reported until the next press;
+- pressure comes from Android, and on macOS from Force Touch while the button
+  is held.
+
+More than one finger comes only from real touch hardware: a touchscreen, or the
+macOS trackpad. A trackpad session starts when two or more fingers are on the
+pad with the cursor over the window, reports every finger with an id of its own
+until the last one lifts, and holds the mouse off while it runs - with one
+finger, the pad is still the mouse. Losing focus or suspending cancels the
+fingers.
+
 ### Options (desktop)
 
 | Option | |
@@ -169,6 +224,31 @@ cargo run --example touch --features script -- --morph-script examples/scripts/t
 
 From Rust, including tests: `libmorph::script::run::<App>(&script, run)`.
 
+## Lifecycle
+
+The device and queue live for the whole run. The surface does not: it exists
+only while there is a window, and on Android the window goes away whenever the
+app leaves the screen.
+
+**Android.** A new window creates and configures the surface; on the first one
+libmorph also brings up the adapter, device and queue and calls `init`. When
+the window goes away the surface is dropped at once, because Android takes it
+back synchronously, and then `on_suspend` is called. A resume with a window
+calls `on_resume`. New system insets update the safe area. Each tick is
+`update` then `render`. Shutdown calls `on_suspend` only if the window has not
+already caused it. Back and Escape reach `on_key` on their first press, and the
+status the app returns also answers that key's repeats and its release, since
+Android acts on Back when it comes up.
+
+**Desktop.** The window and surface are created on resume and dropped on
+suspend. Closing the window, `ctx.exit()`, a failure and the event loop ending
+all go through the same shutdown.
+
+**Web.** Bring-up is asynchronous, and nothing is drawn until it has finished.
+
+`on_suspend` and `on_resume` are called once per transition, and every exit
+calls `on_suspend` once unless the app is already suspended.
+
 ## Features
 
 | Feature | |
@@ -181,6 +261,13 @@ From Rust, including tests: `libmorph::script::run::<App>(&script, run)`.
 | `mobile-google-auth` | libmobile's Sign in with Google |
 | `mobile-camera` | libmobile's photo capture (to be replaced, see below) |
 | `mobile-media-request` | `ctx.media_request` through libmobile's chooser (gallery, files, an optional camera entry) or the Photo Picker; answers in `MorphApp::on_media`. The web uses a file input; the desktop answers `Unsupported` |
+| `mobile-foreground-service` | `libmorph::service`: a foreground service with its notification, controlled from any thread, and its events in `MorphApp::on_service` |
+| `mobile-system-events` | `libmorph::system_events` on Android: visibility, focus, the service, the network and Doze |
+| `mobile-battery` | `libmorph::battery`: battery optimization and app sleeping |
+| `mobile-clipboard` | The clipboard's text on Android, for `ctx.clipboard_text`, `ctx.clipboard_has_text` and `ctx.set_clipboard_text` |
+| `mobile-secure-store-no-strongbox` | Keeps the secure store's key in the TEE only, never StrongBox. Negative, so turning default features off cannot turn StrongBox off; for apps, not libraries |
+| `secure-store` | `ctx.secure_store()` and `ctx.key_store()`: named secrets and adapter keys encrypted at rest, through libmobile's Keystore stores on Android and libdevice's login Keychain on macOS |
+| `tokio` | `system_events::subscribe_tokio`, on Android and off it; nothing needs a tokio runtime to send |
 
 ## Android
 
