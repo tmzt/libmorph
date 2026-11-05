@@ -1792,3 +1792,53 @@ own dated plan.
 target is a `Target::Surface`, so it is a no-op in a scripted run and a
 script cannot resize. That is a real latent gap, recorded here rather
 than fixed, because the simulated-surface plan is where it belongs.
+
+## 2026-11-05 18:13 EST — the geometry verb, built; the simulated surface still deferred
+
+Built, at the owner's instruction: **"we'll need it to test owned frame,
+so just do the geometry part now, we'll add to libdevice as we continue
+to test"**. This supersedes the deferral of the 18:07 EST addendum for
+the small half of it; the simulated surface named there is still
+deferred and still wants its own plan.
+
+**What changed from the 18:06 EST plan.** It is not `simulate rotate`.
+The owner: *"this rotation is just swapping wh?"* - and reading
+`Adapter::resized` answered it: Android hands libmorph a size on
+`WindowResized` and libmorph assigns it, to the target and to
+`ctx.spec.geometry`. It never computes a swap. So the verb supplies that
+size - `geometry <width> <height>` - which is the input a device gives
+rather than a model of it. Two reasons the model would have been wrong:
+a turned window is not the old one reversed, because the navigation bar
+and a display cutout sit on different edges; and insets do not arrive
+with the resize at all, but on their own `MobileEvent::Insets`. A single
+`rotate` verb would have conflated two independent inputs into one
+swap. Rotation is now a script line, not a verb.
+
+Flat `geometry`, not under a `simulate` namespace, because every
+existing verb is flat and this one sets a value as `fps <n>` does.
+
+**Accepted while suspended**, where `resize` has no target and the swap
+stands alone, so the next `resume` attaches at the new size. That is the
+window-destroyed-and-recreated path; while attached it is the
+`WindowResized` path. One verb reaches both.
+
+**The latent bug, fixed.** `Shell::resize` returned early unless the
+target was a `Target::Surface`, so it had always been a no-op in a
+scripted run - a script could not resize. It now replaces the offscreen
+texture at the new size. The fix is load-bearing rather than incidental:
+with the branch disabled the new test fails inside wgpu, copying from a
+texture whose size no longer matches. That was checked by disabling it,
+not assumed.
+
+**What the test does not reach**, recorded in its own header so nobody
+reads more into it: a scripted run's target has no swapchain, so
+`surface.configure` at the new size, `wgpu_config` at the following
+attach, the format kept across the change, and a frame held over it are
+all still unverified. Plan 20261105_04 step 4's `wgpu_config`-at-attach
+**Done when:** and step 5's rotation **Done when:** therefore remain
+open; `geometry` closes the app-visible half of the latter only.
+
+**Version.** Strictly additive: a patch bump to 0.7.1 under Rule 5.4. A
+new variant on `Command`, which is `#[non_exhaustive]`; a new verb; and
+a `resize` that does something where it previously did nothing, on a
+target only the script runner has.
