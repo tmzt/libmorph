@@ -24,6 +24,7 @@ mod gpu;
 mod input;
 pub mod intent;
 mod link;
+mod log_once;
 pub mod media;
 mod memory;
 mod out_dir;
@@ -40,7 +41,7 @@ mod storage;
 pub mod system_events;
 pub mod text_input;
 
-pub use app::{Frame, MorphApp};
+pub use app::{Frame, MorphApp, Owned};
 pub use audio::{
     Audio, AudioEvent, AudioSetup, AudioState, AudioStream, CaptureFormat, CaptureMode, Captured,
     OutputFormat, Sink, SinkId, Sound, Source, SourceId, Voice,

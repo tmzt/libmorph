@@ -14,9 +14,78 @@ pub struct Frame<'a> {
     pub size: (u32, u32),
 }
 
+/// The subsystems an app takes from libmorph, as [`MorphApp::OWNS`]. A set
+/// bit means libmorph does not drive that subsystem: it does not open it,
+/// pump it, or call its managed-path hooks.
+///
+/// Hand-rolled rather than taken from a flags crate, so no foreign type
+/// sits in libmorph's public API: under Rule 5.5 that would chain this
+/// crate's version to another crate's.
+///
+/// ```
+/// # use libmorph::Owned;
+/// const OWNS: Owned = Owned::FRAME;
+/// assert!(OWNS.contains(Owned::FRAME));
+/// assert!(!Owned::empty().contains(Owned::FRAME));
+/// ```
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct Owned(u32);
+
+impl Owned {
+    /// The frame: acquiring the surface texture, drawing into it and
+    /// presenting it.
+    pub const FRAME: Self = Self(1 << 0);
+
+    /// Nothing taken: libmorph drives everything, as it does today.
+    pub const fn empty() -> Self {
+        Self(0)
+    }
+
+    /// Whether every subsystem in `other` is in this set.
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Both sets. A `const fn`, so it composes inside a `const`, which the
+    /// [`BitOr`](core::ops::BitOr) operator cannot do on stable Rust.
+    pub const fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+}
+
+impl core::ops::BitOr for Owned {
+    type Output = Self;
+
+    fn bitor(self, other: Self) -> Self {
+        self.union(other)
+    }
+}
+
 /// A libmorph application. Every hook runs on the main thread with the
 /// shared [`MorphContext`].
 pub trait MorphApp: Sized + 'static {
+    /// The subsystems this app takes from libmorph. [`Owned::empty()`] -
+    /// the default - leaves libmorph driving everything, which is every app
+    /// written so far.
+    ///
+    /// Reading it costs nothing: the app's type is monomorphized, so
+    /// `A::OWNS.contains(..)` folds at compile time and the branch not
+    /// taken is eliminated. The price is that ownership is a compile-time
+    /// property - `cfg!` works, a runtime toggle does not.
+    ///
+    /// ```
+    /// # use libmorph::Owned;
+    /// const OWNS: Owned = Owned::FRAME;
+    /// ```
+    ///
+    /// Sets compose through [`Owned::union`], which is a `const fn`:
+    ///
+    /// ```
+    /// # use libmorph::Owned;
+    /// const OWNS: Owned = Owned::FRAME.union(Owned::FRAME);
+    /// ```
+    const OWNS: Owned = Owned::empty();
+
     /// Prefer an sRGB surface format (the GPU encodes gamma on write). Set
     /// `false` for apps whose shaders gamma-encode themselves. Either way, a
     /// format already in use is kept across resume when the new surface
@@ -228,5 +297,56 @@ pub trait MorphApp: Sized + 'static {
     /// A new surface is configured after [`on_suspend`](Self::on_suspend).
     fn on_resume(&mut self, ctx: &mut MorphContext) {
         let _ = ctx;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MorphApp, Owned};
+
+    /// `union` is a `const fn`, so a set composes where `OWNS` is
+    /// written. The `BitOr` operator cannot: a trait impl is not `const`
+    /// on stable Rust (E0015, "cannot call non-const operator in
+    /// constants"), which is why `union` exists.
+    const COMPOSED: Owned = Owned::FRAME.union(Owned::FRAME).union(Owned::empty());
+
+    #[test]
+    fn a_set_composes_in_a_const() {
+        assert!(COMPOSED.contains(Owned::FRAME));
+        assert_eq!(COMPOSED, Owned::FRAME);
+    }
+
+    #[test]
+    fn the_operator_is_the_same_set_outside_a_const() {
+        assert_eq!(Owned::FRAME | Owned::FRAME, Owned::FRAME);
+        assert_eq!(Owned::empty() | Owned::FRAME, Owned::FRAME);
+    }
+
+    #[test]
+    fn empty_contains_only_itself() {
+        let empty = Owned::empty();
+        assert_eq!(empty, Owned::default(), "the default is the empty set");
+        assert!(empty.contains(empty));
+        assert!(!empty.contains(Owned::FRAME));
+        assert!(
+            Owned::FRAME.contains(empty),
+            "every set holds the empty one"
+        );
+    }
+
+    /// An app that says nothing owns nothing, so every app written before
+    /// this const existed stays on the managed path.
+    #[test]
+    fn an_app_owns_nothing_by_default() {
+        struct Quiet;
+        impl MorphApp for Quiet {
+            fn init(_ctx: &mut crate::MorphContext) -> Self {
+                unreachable!("the const is read without an instance")
+            }
+
+            fn render(&mut self, _ctx: &mut crate::MorphContext, _frame: &super::Frame<'_>) {}
+        }
+        assert_eq!(Quiet::OWNS, Owned::empty());
+        assert!(!Quiet::OWNS.contains(Owned::FRAME));
     }
 }
