@@ -1842,3 +1842,52 @@ open; `geometry` closes the app-visible half of the latter only.
 new variant on `Command`, which is `#[non_exhaustive]`; a new verb; and
 a `resize` that does something where it previously did nothing, on a
 target only the script runner has.
+
+## 2026-11-05 18:52 EST — AGENTS.md cut back to the rules; its documentation moved to the README
+
+Belongs to no plan: a documentation change at the owner's instruction,
+"remove it, AGENTS gets a small intro paragraph and then critical rules
+matching ~/src/rules, docs in README". "It" was `### Core API`, stale after
+0.7.0 and 0.7.1 - `render` returns a `RenderStatus`, `OWNS` and
+`wgpu_config` exist, and the hook list did not say so - but the instruction
+is general, and the fix is not to refresh the section. AGENTS.md is not
+where documentation lives, so a section there goes stale behind the code
+with nothing to catch it.
+
+Two commits, in this order, because Rule 3.1 gives AGENTS.md a commit of
+its own.
+
+1. `README.md` first, so nothing user-facing is lost before it is deleted.
+   Each section of AGENTS.md was checked against the README: the
+   architecture table, platform layering, wgpu ownership, the Gradle
+   handoff, the CLI overrides and the known limitations were already
+   covered, and `### Core API` is covered by `## Usage`, the two
+   subsections added in `ad0a07c` and the rustdoc. Four things were not
+   covered and are now in the README: the **lifecycle** per host (the
+   section with no README equivalent at all), **device limits**,
+   **desktop input and emulation**, and seven **features** the table had
+   no row for. The hook list now names every hook and sends the reader to
+   the rustdoc, in place of the per-hook reference.
+2. `AGENTS.md` second: a two-sentence intro, the canonical rules copied
+   byte for byte from `~/src/rules` (checked with `diff`), a `---`, and
+   `# This project: libmorph` carrying the layout, the six workspace
+   members by path and package, the Rule 3.4 commands with the
+   `--features script` runs, Rule 5's two crates and their tags, and the
+   conventions that are instructions to whoever edits the code. 456 lines
+   to 388, of which 266 are the rules.
+
+The rules in the file were a fork, including a Rule 4 titled "DECISION
+STATUS IN THE README" rather than the canonical Rule 4. It was replaced
+wholesale rather than reconciled: the rules' own "Where these rules live"
+says a derived copy is never edited in place, and where one differs from
+the canonical copy the canonical copy is right. The parts of the fork that
+really were about this project are now in the project section, where the
+canonical rules put them.
+
+The libdevice and libmobile API listings were dropped without a
+replacement. They were a transcription of two other crates' public APIs,
+the thing most certain to go stale here, and the ground-truth convention
+that survives in the project section points at `~/src/libdevice` and
+`~/src/libmobile` instead.
+
+No code changed, so Rule 3.4's trio does not apply.
