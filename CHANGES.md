@@ -1425,3 +1425,28 @@ The owner gave the synchronisation: an atomic stop signal checked
 between CPU passes, not between frames - a frame is the thing that takes
 seconds, so a stop checked at the top of one bounds the wait by exactly
 the interval that is the problem.
+
+## 2026-11-05 13:18 EST — a plan for an app that presents its own frames
+
+`docs/design/20261105_02_AN_APP_MAY_PRESENT_ITS_OWN_FRAMES_PLAN.md`,
+Draft.
+
+The owner: "I was wondering why libmorph had drawing code, my thinking
+was it handed back the wgpu device and left it at that. We probably
+built it for the simple demos like the plasma one, never intending it
+to be used for a game like this."
+
+`Shell::frame` acquires, calls `update` and `render`, and presents. For
+a demo that is the feature; for a game it is a wall, and the app cannot
+choose when to submit, how deep to let the queue get, or whether to skip
+a frame. The same boundary is why nothing in the live path ever called
+`Device::poll` - only the scripted runner did - and why an app could not
+have done it itself.
+
+`MorphApp::drawing()` returning `Drawing::Own` stops libmorph acquiring
+and presenting; it keeps the device, the window, every event and every
+JNI call. `Managed` is the default and takes the same path it does now.
+
+Deliberately smaller than `20261105_01` and independent of it: an app
+that drives its own frame can thread and pace it however it likes
+without libmorph growing a routing layer first.
