@@ -1658,3 +1658,46 @@ cannot have. Nothing was deleted.
 Also recorded: step 3 needed a line in the README's quick start, whose
 example carried the old signature. It is in its own commit under Rule
 3.1.
+
+## 2026-11-05 17:57 EST — plan 20261105_04 step 2: Owned::of replaces union and BitOr
+
+Departure from `docs/design/20261105_04_OWNS_AND_THE_RENDER_STATUS_PLAN.md`,
+which is frozen. Its section 2 declares `union` and
+`impl core::ops::BitOr for Owned`, the latter with the comment
+"const-compatible, so `FRAME | X` works in a const", and its step 2's
+**Done when:** requires `Owned::FRAME | Owned::FRAME` to be usable in a
+`const`. Both are wrong: a trait impl cannot be `const` on stable Rust,
+so `|` fails in a `const` with E0015, "cannot call non-const operator in
+constants". That was established while implementing step 2 and recorded
+in the addendum of 2026-11-05 17:27 EST, which kept `union` and left
+`BitOr` usable only outside a `const`.
+
+This is a public-interface departure, so it went to the owner first
+under Rule 1.7 rather than being decided here. Agreed with the owner,
+2026-11-05: **`Owned::of(&[..])` replaces both.**
+
+The reason it is a removal and not an addition: `MorphApp::OWNS` is a
+`const`, and it is the only place an `Owned` value is ever built -
+ownership is a compile-time property by design, so no runtime
+composition exists. A `BitOr` therefore cannot be reached anywhere it
+would be useful, and its only effect is that the first thing a reader
+tries fails with a compiler error about the constness of trait impls. A
+trap with no use case is worse than an absence.
+
+`Owned`'s surface is now three `const fn`s and one way to do each thing:
+`empty()`, the `FRAME` constant, `of(&[..])` and `contains()`. `union`
+goes with the operator, being subsumed by `of`.
+
+`of` is a `while` loop over the slice, which `const fn` allows on
+stable. Its test composes a real `const` with a duplicate and an
+`empty()` in the slice, so the folding is asserted rather than assumed,
+and `of(&[])` is checked to be the empty set. The `VERSIONS.md` entry
+for 0.7.0 records the set as shipped, and states the absent `BitOr` and
+why, because an absence that looks like an oversight invites someone to
+add it back.
+
+Checks before the commit: `cargo fmt -p libmorph -- --check` clean;
+`cargo clippy -p libmorph --all-targets` 0 warnings, and 0 with
+`--features script`, both on a forced rebuild; `cargo test -p libmorph`
+156 passed - one fewer than before, the operator's own test having gone
+with the operator - and 166 with `--features script`, every suite ok.
