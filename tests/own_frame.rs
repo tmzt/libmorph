@@ -204,3 +204,110 @@ fn one_frame_per_construct_frame() {
          presenting is not"
     );
 }
+
+// --- A scripted run is the same bytes under either setting ---------------
+
+/// The clear colour for frame `n`, so a wrong frame count shows up as a
+/// different capture rather than the same flat field.
+fn step_color(n: u64) -> wgpu::Color {
+    let step = (n % 5) as f64 / 4.0;
+    wgpu::Color {
+        r: 0.1 + 0.7 * step,
+        g: 0.35,
+        b: 0.8 - 0.6 * step,
+        a: 1.0,
+    }
+}
+
+/// The same picture, drawn the way a managed app draws it.
+struct PairManaged {
+    frames: u64,
+}
+
+impl MorphApp for PairManaged {
+    fn init(_ctx: &mut MorphContext) -> Self {
+        Self { frames: 0 }
+    }
+
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
+        clear(ctx, frame.view, step_color(self.frames));
+        self.frames += 1;
+        RenderStatus::Drawn
+    }
+}
+
+/// The same picture, drawn the way an app that owns the frame draws it.
+struct PairOwning {
+    frames: u64,
+}
+
+impl MorphApp for PairOwning {
+    const OWNS: Owned = Owned::FRAME;
+
+    fn init(_ctx: &mut MorphContext) -> Self {
+        Self { frames: 0 }
+    }
+
+    fn construct_frame(&mut self, ctx: &mut MorphContext) {
+        let Ok(frame) = ctx.acquire_frame() else {
+            return;
+        };
+        clear(ctx, &frame.view, step_color(self.frames));
+        self.frames += 1;
+        ctx.present_frame(frame);
+    }
+}
+
+/// Three captures at different frames, so the comparison is of a changing
+/// picture and not of one flat field.
+const PAIR: &str = "\
+frames 1
+screenshot first
+frames 2
+screenshot third
+frames 4
+screenshot seventh
+";
+
+#[test]
+fn the_same_script_gives_the_same_bytes_under_either_setting() {
+    let Some(managed) = run::<PairManaged>("pair-managed", PAIR) else {
+        return;
+    };
+    let Some(owning) = run::<PairOwning>("pair-owning", PAIR) else {
+        return;
+    };
+    assert_eq!(managed.screenshots.len(), 3);
+    assert_eq!(owning.screenshots.len(), 3);
+
+    let mut crcs = Vec::new();
+    for (a, b) in managed.screenshots.iter().zip(&owning.screenshots) {
+        assert_eq!(a.frame, b.frame, "the same frame");
+        assert_eq!(
+            a.pixels_crc32, b.pixels_crc32,
+            "frame {}: the pixels are the same",
+            a.frame
+        );
+        let (bytes_a, bytes_b) = (
+            std::fs::read(&a.path).unwrap(),
+            std::fs::read(&b.path).unwrap(),
+        );
+        assert_eq!(
+            bytes_a, bytes_b,
+            "frame {}: the PNG files are byte for byte the same",
+            a.frame
+        );
+        assert!(
+            bytes_a.len() > 100 && bytes_a.iter().any(|&byte| byte != 0),
+            "frame {}: something was actually drawn",
+            a.frame
+        );
+        crcs.push(a.pixels_crc32);
+    }
+    crcs.sort_unstable();
+    crcs.dedup();
+    assert_eq!(crcs.len(), 3, "the three captures are three pictures");
+
+    let _ = std::fs::remove_dir_all(managed.dir);
+    let _ = std::fs::remove_dir_all(owning.dir);
+}
