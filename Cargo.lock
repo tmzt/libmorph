@@ -1048,7 +1048,7 @@ checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 [[package]]
 name = "libdevice"
 version = "0.1.3"
-source = "git+https://github.com/tmzt/libdevice#948f9247bb2a4aaaa3b7bc7c95db67563734026c"
+source = "git+https://github.com/tmzt/libdevice?tag=v0.1.3#e4a3a15f919906b1702459ebebe9a91d62c775e6"
 dependencies = [
  "log",
  "objc2 0.5.3",
@@ -1078,7 +1078,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 [[package]]
 name = "libmobile"
 version = "0.4.0"
-source = "git+https://github.com/tmzt/libmobile#0b2929c1c34d3fdeb1c8889caa0b04bf2e7649d5"
+source = "git+https://github.com/tmzt/libmobile?tag=v0.4.0#9d22b31942f507b1a1d1e7fea6999cb4f628cbcc"
 dependencies = [
  "android-activity",
  "cpal",
