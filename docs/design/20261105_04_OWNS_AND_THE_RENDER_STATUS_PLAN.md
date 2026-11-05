@@ -1,7 +1,7 @@
 ---
 title: OWNS - an app declares the subsystems it takes, and render says whether to present
 date: 2026-11-05
-status: Draft
+status: In implementation
 covers: >
   Two changes to `MorphApp`, released together as one break. An
   associated const, `OWNS`, by which an app declares the subsystems it
@@ -538,3 +538,17 @@ the tag on that commit.
 **Done when:** `git tag --points-at HEAD` shows `v0.7.0` on the version
 commit, and the RPG game can move its `tag` to `v0.7.0` and build its
 Android and desktop targets with no change but `render`'s return.
+
+## Amendment — 2026-11-05 17:14 EST: implementation has started
+
+Implementation of this plan has started, so its `status` moves from
+`Draft` to `In implementation` and the document is now immutable under
+Rule 1.5. Nothing above this line is edited again; anything the
+implementation has to depart from is recorded as an addendum to
+`CHANGES.md` under Rule 1.7, and a change of direction becomes a new
+dated plan.
+
+The first implementing commit is the one that pins libdevice and
+libmobile by tag (step 1), which carries this amendment, the
+front-matter change, and the status in the README's decision table
+(Rule 4.3).
