@@ -147,3 +147,140 @@ it did before this plan.
   that work can be measured at all.
 - **The trait split.** Still the better long-run shape, and still open.
 - **Multiple windows.** One app, one surface, as now.
+
+## Amendment — 2026-11-05 12:27 EST: event classes move, not the app; and this is not justified by a multi-second frame
+
+Worked out with the owner in discussion, 2026-11-05. This replaces
+section 2's choice, section 3's synchronisation, and the whole of
+section 5's steps. The document's title is now wrong and is left as it
+is: the body is never rewritten, and what follows is what the plan
+means.
+
+### The correction that comes first
+
+Section 1 argues from a frame that takes seconds on an Adreno. **That
+number should not have been treated as a condition to design around.**
+Desktop to mobile on the same content is normally ten to thirty times;
+the M4 draws this frame in 2.6 ms, so a bad mobile case is of the order
+of 130 ms. The 1286 ms that prompted all of this is about five hundred
+times, which is not a degree of slowness but a different kind of thing -
+a stall, a fallback, or a measurement that is not measuring what it is
+read as.
+
+Every large reading was taken while the app was losing focus to another
+app, and a surface that is not being composited can block on
+acquisition. That alone could account for it, and would make the figure
+an artefact.
+
+So: **this plan is not justified by a multi-second frame.** It is
+justified by an app that cannot be measured, because Android kills it
+for not taking its input and the frame log never reaches the interval
+that would print a number. The cost of a frame is a separate fault with
+a separate cause, and it is the one to fix.
+
+### What the design is
+
+Not "the app runs off the loop thread". What moves is **classes of
+event**, not the app.
+
+Each thread runs its **own event loop**, the way wgpu's do, and events
+are delivered to it. A **routing atomic bitset** says which loop gets
+which class. Reading it is lock-free, which matters when every event
+consults it.
+
+Three destinations:
+
+| destination | what it takes |
+|---|---|
+| the loop thread | lifecycle, input, and everything by default |
+| a sim tick | a timer, at a fixed step |
+| a scheduled draw | frames, which may be skipped or coalesced |
+
+**The default routes everything to the loop thread**, which is what
+happens today: one thread, no contention, nothing for an app to reason
+about. A builder call requests any other arrangement, and an app that
+asks for sim and draw apart is declaring it can hand the data across.
+That is why splitting sim from draw inside libmorph is not enough on its
+own - the threads are the easy half, and ownership of the world is the
+other.
+
+### JNI stays where it is
+
+Basic JNI operations stay on the loop thread. No other thread needs
+attaching to the VM, which removes the question of scoped attachment,
+of detaching before a thread exits, and of whether `AndroidApp` is
+`Send`. It is also the strongest argument against moving the whole app,
+which would have reached for JNI from wherever it ran.
+
+### Teardown is an event, not a rendezvous
+
+Section 3 proposed a stop flag with an acknowledgement, and an earlier
+sketch proposed flipping the draw class back to the loop thread. Both
+are more than is needed.
+
+The stop is **delivered as an ordinary event** on the same mechanism as
+everything else. The draw thread quiesces - which is the absence of
+scheduled work rather than an operation it performs - and the loop
+thread then takes the real terminate. Android's own ordering is what
+makes it safe: a pause precedes a stop precedes a window going away.
+
+These are Android apps and not an SDL quit. The likely case is the app
+going to the background, and that just means the next frame is not
+drawn.
+
+**Rotation is not a special case.** It is a teardown of drawing followed
+by a setup of drawing, and the draw thread handles both as the same two
+events it already has - the same code as backgrounding, then the same
+code as a first launch.
+
+An acknowledgement is added **only if it turns out to be needed**.
+Handling the stop between CPU passes may be enough on its own, and that
+is the thing to try first.
+
+### Why ordering is preferred to a rendezvous
+
+A rendezvous is where a second ANR hides: the loop thread waiting on a
+draw thread that is mid-frame. The trade is deliberate - **a Rust crash
+can be recovered from and an ANR cannot** - so a narrow window in which
+a destroyed surface is touched is the better risk.
+
+One thing to confirm rather than assume: whether that window produces a
+Rust panic, which is recoverable, or a segfault in native code, which is
+not. It depends on whether `android-activity` frees the `ANativeWindow`
+once the handler returns or holds it until the app acknowledges. That is
+a contract question and is answerable by reading it.
+
+### Out of scope
+
+Work scheduling for a complex game - an async loop and a waker - is the
+game's and not libmorph's. Drawing that line is what keeps libmorph's
+default a single thread with nothing to reason about.
+
+### Steps
+
+Section 5's steps are replaced:
+
+**Step 0 - find the real cost.** Read what the frame timer brackets, and
+get one settled foreground number. Nothing below is worth building if
+the frame is 146 ms and the readings were an artefact of a backgrounded
+surface.
+
+**Done when:** the frame's cost on the device is a number taken while
+the app is foreground and settled, and what the timer includes is
+written down.
+
+**Step 1 - per-thread event loops and the routing bitset**, with every
+class routed to the loop thread. No behaviour changes.
+
+**Done when:** every app on libmorph runs exactly as it does now, and
+the routing is a thing that can be read and set.
+
+**Step 2 - the builder's alternate arrangement**, and a scheduled draw
+on its own loop.
+
+**Done when:** the game's frame log prints past frame 60 on the
+device with a slow frame, instead of the app being killed.
+
+**Step 3 - the sim tick on a timer.**
+
+**Done when:** a slow frame costs frames rather than a lurch in `dt`.
