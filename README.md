@@ -56,6 +56,77 @@ cargo run --example touch -- --device iphone_15
 cargo run --example tone
 ```
 
+### Owning the frame
+
+By default libmorph acquires the surface texture, calls `update` and
+`render`, and presents. An app that wants the frame says so with one const,
+and libmorph stops doing any of it:
+
+```rust
+use libmorph::{AcquireError, MorphApp, MorphContext, Owned};
+
+impl MorphApp for Game {
+    const OWNS: Owned = Owned::FRAME;
+
+    fn construct_frame(&mut self, ctx: &mut MorphContext) {
+        let frame = match ctx.acquire_frame() {
+            Ok(frame) => frame,
+            // Nothing to draw into this iteration.
+            Err(AcquireError::NotReady | AcquireError::Outdated) => return,
+            Err(error) => {
+                log::warn!("acquire: {error}");
+                return;
+            }
+        };
+        // Draw into frame.view with ctx.device() and ctx.queue(), then:
+        ctx.present_frame(frame);
+    }
+}
+```
+
+`render` is never called. `update` still is, so an app may keep its
+simulation there or do everything in `construct_frame`.
+
+**One rule: a frame is presented or dropped before `construct_frame`
+returns.** libmorph reconfigures the surface between iterations, and
+Android takes the window back synchronously when it goes away, so an image
+held across either is stale at best. To skip a frame, do not acquire one -
+nothing is presented and the previous frame stays on screen.
+
+What stays libmorph's: the device, queue and adapter; the window and its
+creation, resize and destruction; the surface and its configuration; every
+event; and every JNI call. The frame is the most an app can own, because the
+surface comes from the window the Android loop owns.
+
+`Owned::of(&[..])` combines flags in a const. There is no `BitOr`: a trait
+impl cannot be `const` on stable Rust, and `OWNS` is always a const.
+
+### Configuring the surface
+
+An app that owns the frame is also handed the surface configuration libmorph
+would have used, and returns the one to apply. It is called at every attach -
+the first window, and again after a rotation, a resume or a lost surface:
+
+```rust
+fn wgpu_config(
+    default: wgpu::SurfaceConfiguration,
+    caps: &wgpu::SurfaceCapabilities,
+) -> wgpu::SurfaceConfiguration {
+    if caps.present_modes.contains(&wgpu::PresentMode::Mailbox) {
+        return wgpu::SurfaceConfiguration {
+            present_mode: wgpu::PresentMode::Mailbox,
+            ..default
+        };
+    }
+    default
+}
+```
+
+libmorph sets `width` and `height` after it returns, since it knows the
+window's size. A managed app's one surface knob is `const SRGB_SURFACE:
+bool`, which prefers a non-sRGB surface for shaders that gamma-encode
+themselves.
+
 ### Options (desktop)
 
 | Option | |
@@ -85,8 +156,10 @@ key escape
 ```
 
 Commands: `fps`, `frames`, `touch`, `tap`, `drag`, `hover`, `key`,
-`screenshot`, `suspend`, `resume`, `exit`. The run has no window and a fixed
-frame time. Screenshots are PNG files, and `run.json` lists them. Output
+`screenshot`, `geometry`, `suspend`, `resume`, `exit`. The run has no window
+and a fixed frame time. `geometry <width> <height>` is the window reporting a
+new size, as it does when the device turns; it is accepted while suspended,
+where it sets the size the next `resume` attaches at. Screenshots are PNG files, and `run.json` lists them. Output
 goes to `out/morph/YYYYMMDD_NN_<script name>/` unless `--morph-out` is
 given. The same script on the same machine writes the same bytes.
 
