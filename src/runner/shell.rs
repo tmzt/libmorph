@@ -6,7 +6,8 @@ use std::time::Duration;
 use web_time::Instant;
 
 use crate::gpu::Gpu;
-use crate::{Frame, MorphApp, MorphContext, MorphError, RenderStatus, Touch};
+use crate::gpu::WgpuConfig;
+use crate::{Frame, MorphApp, MorphContext, MorphError, Owned, RenderStatus, Touch};
 
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use super::overlay::Overlay;
@@ -112,6 +113,18 @@ pub(crate) struct Shell<A> {
 }
 
 impl<A: MorphApp> Shell<A> {
+    /// `A::wgpu_config`, but only for an app that owns the frame: a
+    /// managed app's surface knob is `SRGB_SURFACE`, and its configuration
+    /// stays the one it had before the hook existed. `A` is
+    /// monomorphized, so this folds to one arm at compile time.
+    fn wgpu_config() -> Option<WgpuConfig> {
+        if A::OWNS.contains(Owned::FRAME) {
+            Some(A::wgpu_config)
+        } else {
+            None
+        }
+    }
+
     /// Configure the first surface, then build the app against it.
     pub fn start(
         mut ctx: MorphContext,
@@ -120,7 +133,7 @@ impl<A: MorphApp> Shell<A> {
     ) -> Result<Self, MorphError> {
         let config = ctx
             .gpu
-            .configure(&surface, size, None, A::SRGB_SURFACE)
+            .configure(&surface, size, None, A::SRGB_SURFACE, Self::wgpu_config())
             .ok_or(MorphError::NoSurfaceFormat)?;
         ctx.surface_format = config.format;
         ctx.surface_size = (config.width, config.height);
@@ -159,11 +172,13 @@ impl<A: MorphApp> Shell<A> {
     /// app hears [`MorphApp::on_resume`] only if it was suspended.
     pub fn attach(&mut self, surface: wgpu::Surface<'static>, size: (u32, u32)) {
         let previous = Some(self.ctx.surface_format);
-        let Some(config) = self
-            .ctx
-            .gpu
-            .configure(&surface, size, previous, A::SRGB_SURFACE)
-        else {
+        let Some(config) = self.ctx.gpu.configure(
+            &surface,
+            size,
+            previous,
+            A::SRGB_SURFACE,
+            Self::wgpu_config(),
+        ) else {
             log::error!("libmorph: the new surface has no presentable format");
             return;
         };

@@ -202,16 +202,23 @@ impl Gpu {
     /// Configure `surface` at `size`, keeping `previous` (the format the
     /// app's pipelines were built for) whenever the surface still offers it,
     /// else preferring an sRGB or non-sRGB format as `srgb` asks.
+    ///
+    /// `wgpu_config` is the app's
+    /// [`MorphApp::wgpu_config`](crate::MorphApp::wgpu_config), and is
+    /// `Some` only when the app owns the frame; a managed app's surface
+    /// knob is `SRGB_SURFACE` and the configuration it gets is the one it
+    /// got before the hook existed.
     pub fn configure(
         &self,
         surface: &wgpu::Surface<'_>,
         (width, height): (u32, u32),
         previous: Option<wgpu::TextureFormat>,
         srgb: bool,
+        wgpu_config: Option<WgpuConfig>,
     ) -> Option<wgpu::SurfaceConfiguration> {
         let mut config = surface.get_default_config(&self.adapter, width.max(1), height.max(1))?;
-        let formats = surface.get_capabilities(&self.adapter).formats;
-        config.format = choose_format(&formats, config.format, previous, srgb);
+        let caps = surface.get_capabilities(&self.adapter);
+        config.format = choose_format(&caps.formats, config.format, previous, srgb);
         if previous.is_some_and(|format| format != config.format) {
             log::warn!(
                 "libmorph: surface format changed from {previous:?} to {:?}; \
@@ -219,8 +226,36 @@ impl Gpu {
                 config.format
             );
         }
+        let config = apply_wgpu_config(config, &caps, wgpu_config, (width, height));
         surface.configure(&self.device, &config);
         Some(config)
+    }
+}
+
+/// An app's `wgpu_config` hook, as a `fn` pointer: an associated function
+/// with no `self`, because the first surface is configured before `init`
+/// builds the app.
+pub(crate) type WgpuConfig =
+    fn(wgpu::SurfaceConfiguration, &wgpu::SurfaceCapabilities) -> wgpu::SurfaceConfiguration;
+
+/// Hand `config` to the app's hook, if it has one, and then take `width`
+/// and `height` back: libmorph knows the window's size and a wrong one
+/// breaks the surface. With no hook the configuration is returned
+/// untouched, so a managed app's surface is configured exactly as it was
+/// before the hook existed.
+fn apply_wgpu_config(
+    config: wgpu::SurfaceConfiguration,
+    caps: &wgpu::SurfaceCapabilities,
+    hook: Option<WgpuConfig>,
+    (width, height): (u32, u32),
+) -> wgpu::SurfaceConfiguration {
+    match hook {
+        None => config,
+        Some(hook) => {
+            let mut config = hook(config, caps);
+            (config.width, config.height) = (width.max(1), height.max(1));
+            config
+        }
     }
 }
 
@@ -246,7 +281,7 @@ fn choose_format(
 
 #[cfg(test)]
 mod tests {
-    use super::choose_format;
+    use super::{apply_wgpu_config, choose_format};
     use wgpu::TextureFormat::{Bgra8Unorm, Bgra8UnormSrgb, Rgba16Float};
 
     const OFFERED: [wgpu::TextureFormat; 3] = [Bgra8UnormSrgb, Bgra8Unorm, Rgba16Float];
@@ -418,5 +453,90 @@ mod tests {
                 }]
             );
         }
+    }
+
+    /// A baseline as `get_default_config` would hand it over.
+    fn baseline() -> wgpu::SurfaceConfiguration {
+        wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: Bgra8UnormSrgb,
+            width: 1080,
+            height: 2340,
+            present_mode: wgpu::PresentMode::Fifo,
+            desired_maximum_frame_latency: 2,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            color_space: wgpu::SurfaceColorSpace::Auto,
+            view_formats: Vec::new(),
+        }
+    }
+
+    fn caps() -> wgpu::SurfaceCapabilities {
+        wgpu::SurfaceCapabilities {
+            formats: OFFERED.to_vec(),
+            present_modes: vec![wgpu::PresentMode::Fifo, wgpu::PresentMode::Mailbox],
+            alpha_modes: vec![wgpu::CompositeAlphaMode::Auto],
+            usages: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format_capabilities: Vec::new(),
+        }
+    }
+
+    /// A managed app has no hook, so the configuration it gets is the one
+    /// it got before the hook existed, field for field.
+    #[test]
+    fn no_hook_leaves_the_configuration_alone() {
+        let config = apply_wgpu_config(baseline(), &caps(), None, (1080, 2340));
+        assert_eq!(config, baseline());
+    }
+
+    /// An owning app that asks for another present mode gets it, and can
+    /// see from `caps` whether the surface offers it.
+    #[test]
+    fn a_hook_chooses_a_present_mode_from_caps() {
+        fn hook(
+            default: wgpu::SurfaceConfiguration,
+            caps: &wgpu::SurfaceCapabilities,
+        ) -> wgpu::SurfaceConfiguration {
+            let present_mode = if caps.present_modes.contains(&wgpu::PresentMode::Mailbox) {
+                wgpu::PresentMode::Mailbox
+            } else {
+                default.present_mode
+            };
+            wgpu::SurfaceConfiguration {
+                present_mode,
+                desired_maximum_frame_latency: 1,
+                ..default
+            }
+        }
+        let config = apply_wgpu_config(baseline(), &caps(), Some(hook), (1080, 2340));
+        assert_eq!(config.present_mode, wgpu::PresentMode::Mailbox);
+        assert_eq!(config.desired_maximum_frame_latency, 1);
+        assert_eq!(config.format, baseline().format, "the rest is the baseline");
+
+        // A surface that does not offer Mailbox: the hook reads caps and
+        // keeps what libmorph chose.
+        let mut only_fifo = caps();
+        only_fifo.present_modes = vec![wgpu::PresentMode::Fifo];
+        let config = apply_wgpu_config(baseline(), &only_fifo, Some(hook), (1080, 2340));
+        assert_eq!(config.present_mode, wgpu::PresentMode::Fifo);
+    }
+
+    /// The window's size is libmorph's, whatever the hook says: a wrong
+    /// one breaks the surface. Zero is raised to one, as elsewhere.
+    #[test]
+    fn libmorph_takes_the_size_back_after_the_hook() {
+        fn wrong_size(
+            default: wgpu::SurfaceConfiguration,
+            _caps: &wgpu::SurfaceCapabilities,
+        ) -> wgpu::SurfaceConfiguration {
+            wgpu::SurfaceConfiguration {
+                width: 1,
+                height: 1,
+                ..default
+            }
+        }
+        let config = apply_wgpu_config(baseline(), &caps(), Some(wrong_size), (720, 1600));
+        assert_eq!((config.width, config.height), (720, 1600));
+        let config = apply_wgpu_config(baseline(), &caps(), Some(wrong_size), (0, 0));
+        assert_eq!((config.width, config.height), (1, 1));
     }
 }

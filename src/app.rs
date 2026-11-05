@@ -136,6 +136,56 @@ pub trait MorphApp: Sized + 'static {
         LimitsRequest::base(base)
     }
 
+    /// The surface configuration to apply. Called at every attach when
+    /// [`OWNS`](Self::OWNS) contains [`Owned::FRAME`]: the first window,
+    /// and again after a rotation, a resume or a lost surface. `default` is
+    /// what libmorph would have used, with the format already chosen by
+    /// [`SRGB_SURFACE`](Self::SRGB_SURFACE) and the format in use kept
+    /// across a resume.
+    ///
+    /// libmorph overrides `width` and `height` after this returns, because
+    /// it knows the window's size and a wrong one breaks the surface.
+    ///
+    /// The baseline arrives by value and goes back by value, as
+    /// [`limits`](Self::limits) does, so there is no question of what
+    /// libmorph set before or after: it set all of it, and the app
+    /// replaced it. Associated rather than a method, because the first
+    /// attach precedes [`init`](Self::init) and there is no instance to
+    /// call it on.
+    ///
+    /// **Not called for a managed frame.** A managed app's surface knob is
+    /// `SRGB_SURFACE`, and keeping the hook to owning apps is what stops
+    /// libmorph mirroring `wgpu::SurfaceConfiguration` field by field and
+    /// tracking it upstream. **Not called offscreen** either, where there
+    /// is no surface; `SRGB_SURFACE` drives the offscreen format under
+    /// both, so a scripted run stays faithful to the device.
+    ///
+    /// `desired_maximum_frame_latency` is a request, clamped to the range
+    /// the surface reports, so asking for 1 gets 1 only if the range
+    /// allows; `caps` is in hand to check that and the present modes.
+    ///
+    /// ```
+    /// # use libmorph::wgpu;
+    /// fn wgpu_config(
+    ///     default: wgpu::SurfaceConfiguration,
+    ///     caps: &wgpu::SurfaceCapabilities,
+    /// ) -> wgpu::SurfaceConfiguration {
+    ///     let present_mode = if caps.present_modes.contains(&wgpu::PresentMode::Mailbox) {
+    ///         wgpu::PresentMode::Mailbox
+    ///     } else {
+    ///         default.present_mode
+    ///     };
+    ///     wgpu::SurfaceConfiguration { present_mode, ..default }
+    /// }
+    /// ```
+    fn wgpu_config(
+        default: wgpu::SurfaceConfiguration,
+        caps: &wgpu::SurfaceCapabilities,
+    ) -> wgpu::SurfaceConfiguration {
+        let _ = caps;
+        default
+    }
+
     /// What audio to open, before [`init`](Self::init). `setup` starts with
     /// output on and capture off; set `setup.capture` to record from the
     /// default input device, and read it through `ctx.audio()`'s
