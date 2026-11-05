@@ -173,3 +173,7 @@ required-features = ["secure-store"]
 
 [[example]]
 name = "background"
+
+# An app that takes the frame: `const OWNS: Owned = Owned::FRAME;`.
+[[example]]
+name = "ownframe"
