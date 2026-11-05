@@ -1701,3 +1701,54 @@ Checks before the commit: `cargo fmt -p libmorph -- --check` clean;
 `--features script`, both on a forced rebuild; `cargo test -p libmorph`
 156 passed - one fewer than before, the operator's own test having gone
 with the operator - and 166 with `--features script`, every suite ok.
+
+## 2026-11-05 18:06 EST — a `simulate` verb for the script runner, starting with rotation
+
+New work, at the owner's instruction: **"add simulate verb to simulate
+user actions like rotate"**. Not part of plan 20261105_04, which is
+frozen; this is its own small item and gets no design document.
+
+It exists because 20261105_04's step 5 left one **Done when:**
+unverified - an app that owns the frame "survives a rotation and a
+backgrounding". Backgrounding was verified headlessly through the
+script's `suspend`/`resume`; rotation had no verb and so could only have
+been checked on a device, which the plan's implementation deliberately
+did not touch.
+
+**The verb.** `simulate <action>`, grouped rather than a flat `rotate`,
+so the device and user actions worth simulating later - a fold, a theme,
+a locale - do not each add a top-level verb. `Command::Simulate` carries
+a `Simulation` enum, `#[non_exhaustive]`, whose only value for now is
+`Rotate`. Every existing verb is in some sense a simulation, so the
+grouping is a line drawn for what comes next rather than a description
+of what is already there; that is worth saying plainly.
+
+**What rotation does, and why it is two paths.** On Android a rotation
+reaches libmorph as `WindowResized`, and `Adapter::resized` answers it
+with `Shell::resize` at the swapped size plus a swap of the geometry the
+app reads back from `ctx.spec`. `ConfigChanged` only updates the scale
+factor. That is the common path, taken when the activity handles the
+orientation change itself. When it does not, the window is destroyed and
+recreated instead, which is `detach` then `attach`.
+
+`simulate rotate` serves both without a second verb: it swaps the
+geometry and the surface size, then calls `resize`. While the app is
+attached that replaces the target at the new size - the `WindowResized`
+path. While it is suspended `resize` has no target and does nothing, so
+the swap stands alone and the next `resume` attaches rotated - the
+destroyed-and-recreated path. So `simulate rotate` is the first, and
+`suspend` / `simulate rotate` / `resume` is the second.
+
+**A latent bug it fixes.** `Shell::resize` returns early unless the
+target is a `Target::Surface`, so it has always been a no-op in a
+scripted run: a script could not resize at all. Rotation cannot work
+without that, so `resize` now also handles `Target::Offscreen`, by
+replacing the texture at the new size - which is what a rotation does to
+an offscreen target, and is the same thing `attach_offscreen` already
+does from `ctx.surface_size`.
+
+**Version.** Strictly additive, so a patch bump to 0.7.1 under Rule 5.4:
+a new variant on `Command`, which is `#[non_exhaustive]` and so may gain
+one, a new public `Simulation` enum, a new script verb, and a `resize`
+that does something where it previously did nothing on a target only the
+script runner has.
