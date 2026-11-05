@@ -476,3 +476,28 @@ would leave every owning app writing a dead method.
   Both are the versions already in use and every commit between each tag
   and the revision the lock held is documentation only, so no code
   changes and Rule 5.5 does not apply.
+
+## libmorph 0.7.1 — 2026-11-05 (tag v0.7.1)
+
+Strictly additive under Rule 5.4.
+
+- Added the script verb `geometry <width> <height>`: the window reports a
+  new size, in physical pixels, as it does when the device turns. It
+  reaches the target and `ctx.device_spec().geometry`, which is what
+  Android's `WindowResized` does. Accepted while suspended, where it sets
+  the size the next `resume` attaches at. A turned window is not the old
+  one reversed - the navigation bar and a display cutout sit on different
+  edges - and the insets arrive on their own event, so the verb supplies
+  the size rather than asking for a rotation.
+- Added `libmorph::script::Command::Geometry { width, height }`. `Command`
+  is `#[non_exhaustive]`, so a new variant is additive.
+- `Shell::resize` now resizes a scripted run's offscreen target by
+  replacing its texture, where it previously returned early unless the
+  target was a surface and so did nothing. No public signature changes;
+  a script can now resize, which it could not before.
+
+Not covered, and unchanged: a scripted run has no swapchain, so the
+surface's own reconfiguration, `MorphApp::wgpu_config` at the following
+attach, the format kept across a change, and a frame held over one are
+not reachable from a script. That wants a target that simulates a
+swapchain.
