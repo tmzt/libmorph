@@ -11,7 +11,7 @@
 use std::sync::Mutex;
 
 use libmorph::script::{OutDir, Script, ScriptRun};
-use libmorph::{Frame, GpuError, MorphApp, MorphContext, MorphError, TrimLevel};
+use libmorph::{Frame, GpuError, MorphApp, MorphContext, MorphError, RenderStatus, TrimLevel};
 
 static EVENTS: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
 
@@ -31,8 +31,12 @@ impl MorphApp for Thrifty {
         Self
     }
 
-    fn render(&mut self, _ctx: &mut MorphContext, _frame: &Frame<'_>) {
+    fn render(&mut self, _ctx: &mut MorphContext, _frame: &Frame<'_>) -> RenderStatus {
         record("frame");
+        // The test counts frames, it does not look at them. Said
+        // explicitly rather than left to the default, so the default's
+        // log stays a signal that an app forgot to draw.
+        RenderStatus::Skipped
     }
 
     fn on_low_memory(&mut self, _ctx: &mut MorphContext) {

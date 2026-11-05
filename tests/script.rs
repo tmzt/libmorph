@@ -11,7 +11,9 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use libmorph::script::{OutDir, Script, ScriptRun};
-use libmorph::{Frame, GpuError, MorphApp, MorphContext, MorphError, Touch, TouchPhase, wgpu};
+use libmorph::{
+    Frame, GpuError, MorphApp, MorphContext, MorphError, RenderStatus, Touch, TouchPhase, wgpu,
+};
 
 static SUSPENDS: AtomicUsize = AtomicUsize::new(0);
 static RESUMES: AtomicUsize = AtomicUsize::new(0);
@@ -38,7 +40,7 @@ impl MorphApp for Probe {
         DT_NANOS.store(dt.as_nanos() as u64, Ordering::SeqCst);
     }
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
         let color = if self.touched {
             wgpu::Color::RED
         } else {
@@ -58,6 +60,7 @@ impl MorphApp for Probe {
             ..Default::default()
         });
         ctx.queue().submit([encoder.finish()]);
+        RenderStatus::Drawn
     }
 
     fn on_touch(&mut self, _ctx: &mut MorphContext, touch: Touch) {

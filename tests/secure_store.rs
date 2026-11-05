@@ -14,8 +14,8 @@ use std::time::Duration;
 
 use libmorph::script::{OutDir, Script, ScriptRun};
 use libmorph::{
-    Frame, GpuError, KeyStoreError, MorphApp, MorphContext, MorphError, Protection, SealToken,
-    SecretKey, key_store,
+    Frame, GpuError, KeyStoreError, MorphApp, MorphContext, MorphError, Protection, RenderStatus,
+    SealToken, SecretKey, key_store,
 };
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
@@ -81,7 +81,12 @@ impl MorphApp for Keeper {
 
     fn update(&mut self, _ctx: &mut MorphContext, _dt: Duration) {}
 
-    fn render(&mut self, _ctx: &mut MorphContext, _frame: &Frame<'_>) {}
+    fn render(&mut self, _ctx: &mut MorphContext, _frame: &Frame<'_>) -> RenderStatus {
+        // Nothing is drawn: this drives hooks, not pixels. Said
+        // explicitly rather than left to the default, so the default's
+        // log stays a signal that an app forgot to draw.
+        RenderStatus::Skipped
+    }
 }
 
 #[test]

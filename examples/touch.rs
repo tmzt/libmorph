@@ -8,7 +8,9 @@
 
 use std::time::Duration;
 
-use libmorph::{Frame, Key, KeyStatus, MorphApp, MorphContext, Touch, TouchPhase, wgpu};
+use libmorph::{
+    Frame, Key, KeyStatus, MorphApp, MorphContext, RenderStatus, Touch, TouchPhase, wgpu,
+};
 
 struct TouchDemo {
     touch: Option<(f32, f32)>,
@@ -36,7 +38,7 @@ impl MorphApp for TouchDemo {
         self.elapsed += dt.as_secs_f32();
     }
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
         let (width, height) = (frame.size.0 as f64, frame.size.1 as f64);
         let pulse = 0.5 + 0.5 * f64::from(self.elapsed.sin());
         let color = match self.touch {
@@ -67,6 +69,7 @@ impl MorphApp for TouchDemo {
             ..Default::default()
         });
         ctx.queue().submit([encoder.finish()]);
+        RenderStatus::Drawn
     }
 
     fn on_hover(&mut self, _ctx: &mut MorphContext, x: f32, y: f32) {

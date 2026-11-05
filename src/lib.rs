@@ -41,7 +41,7 @@ mod storage;
 pub mod system_events;
 pub mod text_input;
 
-pub use app::{Frame, MorphApp, Owned};
+pub use app::{Frame, MorphApp, Owned, RenderStatus};
 pub use audio::{
     Audio, AudioEvent, AudioSetup, AudioState, AudioStream, CaptureFormat, CaptureMode, Captured,
     OutputFormat, Sink, SinkId, Sound, Source, SourceId, Voice,

@@ -6,7 +6,7 @@ use std::time::Duration;
 use web_time::Instant;
 
 use crate::gpu::Gpu;
-use crate::{Frame, MorphApp, MorphContext, MorphError, Touch};
+use crate::{Frame, MorphApp, MorphContext, MorphError, RenderStatus, Touch};
 
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use super::overlay::Overlay;
@@ -328,7 +328,8 @@ impl<A: MorphApp> Shell<A> {
         self.app.on_hover(&mut self.ctx, x, y);
     }
 
-    /// Update, then render and present if the surface hands out a texture.
+    /// Update, then render and present if the surface hands out a texture
+    /// and the app says the frame needs presenting.
     pub fn frame(&mut self) -> FrameStatus {
         let surface = match &self.target {
             None => return FrameStatus::Skipped,
@@ -336,8 +337,15 @@ impl<A: MorphApp> Shell<A> {
             #[cfg(script_runner)]
             Some(Target::Offscreen(texture)) => {
                 let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                self.draw(&view);
-                return FrameStatus::Presented;
+                // The app's own answer, so both targets report alike. A
+                // skipped frame keeps the texture's prior contents, which
+                // is what a device's surface does; a texture nothing has
+                // written reads black, since wgpu zero-initializes it on
+                // first read.
+                return match self.draw(&view) {
+                    RenderStatus::Drawn => FrameStatus::Presented,
+                    RenderStatus::Skipped => FrameStatus::Skipped,
+                };
             }
         };
         let texture = match surface.get_current_texture() {
@@ -364,7 +372,19 @@ impl<A: MorphApp> Shell<A> {
         let view = texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        self.draw(&view);
+        let status = self.draw(&view);
+        // Nothing was drawn, so there is nothing to present: the texture
+        // goes back unpresented and the previous frame stays on screen.
+        // The surface's own business is still finished - a suboptimal
+        // swapchain is reconfigured either way, once the texture is gone.
+        if status == RenderStatus::Skipped {
+            drop(view);
+            drop(texture);
+            if suboptimal {
+                self.reconfigure();
+            }
+            return FrameStatus::Skipped;
+        }
         self.ctx.gpu.queue.present(texture);
         if suboptimal {
             self.reconfigure();
@@ -372,8 +392,8 @@ impl<A: MorphApp> Shell<A> {
         FrameStatus::Presented
     }
 
-    /// `update`, `render` and the overlay into `view`.
-    fn draw(&mut self, view: &wgpu::TextureView) {
+    /// `update`, `render` and, if the app drew, the overlay into `view`.
+    fn draw(&mut self, view: &wgpu::TextureView) -> RenderStatus {
         self.audio_events();
         self.camera_events();
         self.media_events();
@@ -387,11 +407,17 @@ impl<A: MorphApp> Shell<A> {
             format: self.ctx.surface_format,
             size: self.ctx.surface_size,
         };
-        self.app.render(&mut self.ctx, &frame);
+        let status = self.app.render(&mut self.ctx, &frame);
+        // The overlay goes over the app's frame, so a skipped one has no
+        // base under it and it is not drawn: an emulated cutout or a
+        // pressed dpad button does not appear while frames are skipped.
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-        if let Some(overlay) = &mut self.overlay {
+        if status == RenderStatus::Drawn
+            && let Some(overlay) = &mut self.overlay
+        {
             overlay.draw(&self.ctx, view);
         }
+        status
     }
 }
 

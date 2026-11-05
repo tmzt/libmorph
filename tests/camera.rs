@@ -17,7 +17,8 @@ use libmorph::camera::{
 };
 use libmorph::script::{OutDir, Report, Script, ScriptRun};
 use libmorph::{
-    Frame, GpuError, MorphApp, MorphContext, MorphError, OpenLinkError, Touch, TouchPhase, wgpu,
+    Frame, GpuError, MorphApp, MorphContext, MorphError, OpenLinkError, RenderStatus, Touch,
+    TouchPhase, wgpu,
 };
 
 fn dir(name: &str) -> PathBuf {
@@ -47,7 +48,7 @@ fn run<A: MorphApp>(script: &Script, dir: &Path, size: (u32, u32)) -> Option<Rep
     }
 }
 
-fn clear(ctx: &MorphContext, frame: &Frame<'_>) {
+fn clear(ctx: &MorphContext, frame: &Frame<'_>) -> RenderStatus {
     let mut encoder = ctx.device().create_command_encoder(&Default::default());
     encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -62,6 +63,7 @@ fn clear(ctx: &MorphContext, frame: &Frame<'_>) {
         ..Default::default()
     });
     ctx.queue().submit([encoder.finish()]);
+    RenderStatus::Drawn
 }
 
 fn png_rgb(path: &Path) -> (u32, u32, Vec<u8>) {
@@ -93,8 +95,8 @@ impl MorphApp for Scanner {
         }
     }
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
-        clear(ctx, frame);
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
+        clear(ctx, frame)
     }
 
     fn on_touch(&mut self, ctx: &mut MorphContext, touch: Touch) {
@@ -174,8 +176,8 @@ impl MorphApp for Snapper {
         Self
     }
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
-        clear(ctx, frame);
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
+        clear(ctx, frame)
     }
 
     fn on_touch(&mut self, ctx: &mut MorphContext, touch: Touch) {
@@ -250,8 +252,8 @@ impl MorphApp for Denied {
         Self
     }
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
-        clear(ctx, frame);
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
+        clear(ctx, frame)
     }
 
     fn on_touch(&mut self, ctx: &mut MorphContext, touch: Touch) {
@@ -344,7 +346,7 @@ impl MorphApp for Finder {
         Self { viewfinder }
     }
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
         let mut encoder = ctx.device().create_command_encoder(&Default::default());
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -365,6 +367,7 @@ impl MorphApp for Finder {
             self.viewfinder.draw(ctx, &mut pass, rect, &options);
         }
         ctx.queue().submit([encoder.finish()]);
+        RenderStatus::Drawn
     }
 }
 
@@ -380,8 +383,8 @@ impl MorphApp for LinearFinder {
         Self(Finder::init(ctx))
     }
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
-        self.0.render(ctx, frame);
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
+        self.0.render(ctx, frame)
     }
 }
 

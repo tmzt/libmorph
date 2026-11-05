@@ -14,10 +14,6 @@
 /// instantiation, so the trait's default speaks once for the process
 /// rather than once per app type. That is what is wanted: the message
 /// names the mistake, and repeating it per type would not.
-// The hooks whose defaults use it arrive with `render`'s own default, in
-// step 3 of the same plan; until then the crate defines it and only the
-// test below reaches it.
-#[allow(unused_macros)]
 macro_rules! log_once {
     ($($arg:tt)*) => {{
         static LOGGED: ::std::sync::atomic::AtomicBool =
@@ -28,7 +24,6 @@ macro_rules! log_once {
     }};
 }
 
-#[allow(unused_imports)]
 pub(crate) use log_once;
 
 #[cfg(test)]

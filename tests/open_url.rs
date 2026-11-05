@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use libmorph::script::{OutDir, Script, ScriptRun};
-use libmorph::{Frame, GpuError, MorphApp, MorphContext, MorphError};
+use libmorph::{Frame, GpuError, MorphApp, MorphContext, MorphError, RenderStatus};
 
 static EVENTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
@@ -29,7 +29,12 @@ impl MorphApp for Links {
 
     fn update(&mut self, _ctx: &mut MorphContext, _dt: Duration) {}
 
-    fn render(&mut self, _ctx: &mut MorphContext, _frame: &Frame<'_>) {}
+    fn render(&mut self, _ctx: &mut MorphContext, _frame: &Frame<'_>) -> RenderStatus {
+        // Nothing is drawn: this drives hooks, not pixels. Said
+        // explicitly rather than left to the default, so the default's
+        // log stays a signal that an app forgot to draw.
+        RenderStatus::Skipped
+    }
 
     fn on_open_url(&mut self, _ctx: &mut MorphContext, url: &str) {
         record(format!("open {url}"));

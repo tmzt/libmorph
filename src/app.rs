@@ -2,16 +2,27 @@
 
 use std::time::Duration;
 
+use crate::log_once::log_once;
 use crate::service::ServiceEvent;
 use crate::{AudioSetup, Key, KeyStatus, LimitsRequest, MorphContext, Permissions, Touch};
 
 /// The surface texture for one frame. libmorph presents it after
-/// [`MorphApp::render`] returns.
+/// [`MorphApp::render`] returns [`RenderStatus::Drawn`].
 pub struct Frame<'a> {
     pub view: &'a wgpu::TextureView,
     pub format: wgpu::TextureFormat,
     /// Physical pixels.
     pub size: (u32, u32),
+}
+
+/// Whether the frame [`MorphApp::render`] was given needs presenting.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum RenderStatus {
+    /// The app drew into `frame.view`; libmorph presents it.
+    Drawn,
+    /// Nothing changed. libmorph drops the texture without presenting it,
+    /// and the previous frame stays on screen.
+    Skipped,
 }
 
 /// The subsystems an app takes from libmorph, as [`MorphApp::OWNS`]. A set
@@ -152,8 +163,32 @@ pub trait MorphApp: Sized + 'static {
         let _ = (ctx, dt);
     }
 
-    /// Record and submit this frame's work to `frame.view`.
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>);
+    /// Record and submit this frame's work to `frame.view`, and say whether
+    /// anything needs presenting.
+    ///
+    /// [`RenderStatus::Skipped`] is the app's claim about its own output:
+    /// libmorph presents nothing and whatever is on screen stays there.
+    /// [`update`](Self::update) still runs on a skipped frame - a skip says
+    /// "do not present", not "do not simulate". Two things sit outside the
+    /// claim. The desktop overlay is drawn into the same frame, so it is
+    /// not presented either and a pressed dpad button does not appear
+    /// while frames are skipped. And a freshly attached surface has no
+    /// previous frame to keep, so the first frame after a surface change
+    /// must be drawn.
+    ///
+    /// The default draws nothing and returns `Skipped`. That is right for
+    /// an app whose [`OWNS`](Self::OWNS) contains [`Owned::FRAME`], where
+    /// `render` is never called; for a managed app it means nothing is
+    /// drawn at all, so it logs once.
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
+        let _ = (ctx, frame);
+        log_once!(
+            "libmorph: MorphApp::render is not implemented and the frame is \
+             managed, so nothing is drawn. Implement render, or set \
+             `const OWNS: Owned = Owned::FRAME;` and construct frames."
+        );
+        RenderStatus::Skipped
+    }
 
     /// A touch, or on desktop the mouse translated into one.
     fn on_touch(&mut self, ctx: &mut MorphContext, touch: Touch) {
@@ -343,8 +378,6 @@ mod tests {
             fn init(_ctx: &mut crate::MorphContext) -> Self {
                 unreachable!("the const is read without an instance")
             }
-
-            fn render(&mut self, _ctx: &mut crate::MorphContext, _frame: &super::Frame<'_>) {}
         }
         assert_eq!(Quiet::OWNS, Owned::empty());
         assert!(!Quiet::OWNS.contains(Owned::FRAME));

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
-use libmorph::{Frame, MorphApp, MorphContext, Touch, TouchPhase, wgpu};
+use libmorph::{Frame, MorphApp, MorphContext, RenderStatus, Touch, TouchPhase, wgpu};
 
 /// An `f32` shared with the audio thread without locking.
 #[derive(Clone, Default)]
@@ -67,7 +67,7 @@ impl MorphApp for Tone {
 
     fn update(&mut self, _ctx: &mut MorphContext, _dt: Duration) {}
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
         let level = f64::from(self.gain.get()) * (0.2 + 0.6 * f64::from(self.height)) / 0.25;
         let color = wgpu::Color {
             r: 0.05 + 0.3 * level,
@@ -89,6 +89,7 @@ impl MorphApp for Tone {
             ..Default::default()
         });
         ctx.queue().submit([encoder.finish()]);
+        RenderStatus::Drawn
     }
 
     fn on_touch(&mut self, ctx: &mut MorphContext, touch: Touch) {

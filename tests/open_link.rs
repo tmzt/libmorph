@@ -11,7 +11,8 @@ use std::sync::Mutex;
 
 use libmorph::script::{OutDir, Script, ScriptRun};
 use libmorph::{
-    Frame, GpuError, MorphApp, MorphContext, MorphError, OpenLinkError, Touch, TouchPhase,
+    Frame, GpuError, MorphApp, MorphContext, MorphError, OpenLinkError, RenderStatus, Touch,
+    TouchPhase,
 };
 
 static RESULTS: Mutex<Vec<Result<(), OpenLinkError>>> = Mutex::new(Vec::new());
@@ -23,7 +24,12 @@ impl MorphApp for Opener {
         Self
     }
 
-    fn render(&mut self, _ctx: &mut MorphContext, _frame: &Frame<'_>) {}
+    fn render(&mut self, _ctx: &mut MorphContext, _frame: &Frame<'_>) -> RenderStatus {
+        // Nothing is drawn: this drives hooks, not pixels. Said
+        // explicitly rather than left to the default, so the default's
+        // log stays a signal that an app forgot to draw.
+        RenderStatus::Skipped
+    }
 
     fn on_touch(&mut self, ctx: &mut MorphContext, touch: Touch) {
         if touch.phase == TouchPhase::Ended {

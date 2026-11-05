@@ -12,7 +12,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use libmorph::script::{OutDir, Script, ScriptRun};
-use libmorph::{Frame, GpuError, Intent, MorphApp, MorphContext, MorphError};
+use libmorph::{Frame, GpuError, Intent, MorphApp, MorphContext, MorphError, RenderStatus};
 
 static EVENTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
@@ -30,7 +30,12 @@ impl MorphApp for Intents {
 
     fn update(&mut self, _ctx: &mut MorphContext, _dt: Duration) {}
 
-    fn render(&mut self, _ctx: &mut MorphContext, _frame: &Frame<'_>) {}
+    fn render(&mut self, _ctx: &mut MorphContext, _frame: &Frame<'_>) -> RenderStatus {
+        // Nothing is drawn: this drives hooks, not pixels. Said
+        // explicitly rather than left to the default, so the default's
+        // log stays a signal that an app forgot to draw.
+        RenderStatus::Skipped
+    }
 
     /// What an app does with this: read the extras it knows by key, and
     /// ignore the rest.

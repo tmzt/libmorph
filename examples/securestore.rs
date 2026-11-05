@@ -26,8 +26,8 @@
 use std::time::Duration;
 
 use libmorph::{
-    Frame, KeyStoreError, MorphApp, MorphContext, Protection, PutOptions, SealToken, SecretKey,
-    SecureStore, Touch, TouchPhase, key_store, wgpu,
+    Frame, KeyStoreError, MorphApp, MorphContext, Protection, PutOptions, RenderStatus, SealToken,
+    SecretKey, SecureStore, Touch, TouchPhase, key_store, wgpu,
 };
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
@@ -159,7 +159,7 @@ impl MorphApp for SecureStoreApp {
 
     fn update(&mut self, _ctx: &mut MorphContext, _dt: Duration) {}
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
         let color = match self.protection {
             Some(Protection::AndroidStrongBox) => wgpu::Color {
                 r: 0.05,
@@ -194,6 +194,7 @@ impl MorphApp for SecureStoreApp {
             ..Default::default()
         });
         ctx.queue().submit([encoder.finish()]);
+        RenderStatus::Drawn
     }
 
     fn on_touch(&mut self, _ctx: &mut MorphContext, touch: Touch) {

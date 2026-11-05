@@ -16,7 +16,7 @@ use libmorph::media::{
     MediaSource,
 };
 use libmorph::script::{OutDir, Report, Script, ScriptRun};
-use libmorph::{Frame, GpuError, MorphApp, MorphContext, MorphError, wgpu};
+use libmorph::{Frame, GpuError, MorphApp, MorphContext, MorphError, RenderStatus, wgpu};
 
 fn dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("libmorph-media-{name}-{}", std::process::id()));
@@ -45,7 +45,7 @@ fn run<A: MorphApp>(script: &Script, dir: &Path) -> Option<Report> {
     }
 }
 
-fn clear(ctx: &MorphContext, frame: &Frame<'_>) {
+fn clear(ctx: &MorphContext, frame: &Frame<'_>) -> RenderStatus {
     let mut encoder = ctx.device().create_command_encoder(&Default::default());
     encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -60,6 +60,7 @@ fn clear(ctx: &MorphContext, frame: &Frame<'_>) {
         ..Default::default()
     });
     ctx.queue().submit([encoder.finish()]);
+    RenderStatus::Drawn
 }
 
 /// What the apps saw, one test at a time.
@@ -109,8 +110,8 @@ impl MorphApp for Asker {
         }
     }
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
-        clear(ctx, frame);
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
+        clear(ctx, frame)
     }
 
     fn on_media(&mut self, ctx: &mut MorphContext, response: &MediaResponse) {
@@ -183,8 +184,8 @@ impl MorphApp for Once {
         Self
     }
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
-        clear(ctx, frame);
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
+        clear(ctx, frame)
     }
 
     fn on_media(&mut self, _ctx: &mut MorphContext, response: &MediaResponse) {

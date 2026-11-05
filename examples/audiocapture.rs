@@ -40,7 +40,7 @@ use std::{fs, io, mem, thread};
 
 use libmorph::{
     AudioEvent, AudioSetup, CaptureFormat, CaptureMode, Captured, Frame, MorphApp, MorphContext,
-    Permissions, Touch, TouchPhase, wgpu,
+    Permissions, RenderStatus, Touch, TouchPhase, wgpu,
 };
 
 /// What capture needs on Android, declared in `examples/android/`'s manifest.
@@ -196,7 +196,7 @@ impl MorphApp for AudioCapture {
         self.columns = Some(columns);
     }
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
         match &self.columns {
             Some(columns) => {
                 self.view.upload(ctx, columns);
@@ -205,6 +205,7 @@ impl MorphApp for AudioCapture {
             }
             None => clear(ctx, frame),
         }
+        RenderStatus::Drawn
     }
 
     /// Before capture is ready, a tap asks for the microphone again; after,

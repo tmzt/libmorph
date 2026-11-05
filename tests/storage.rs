@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use libmorph::script::{OutDir, Script, ScriptRun};
-use libmorph::{Frame, GpuError, MorphApp, MorphContext, MorphError};
+use libmorph::{Frame, GpuError, MorphApp, MorphContext, MorphError, RenderStatus};
 
 /// What `init` saw: each directory and the names in it.
 type Seen = (Option<PathBuf>, Vec<String>, Option<PathBuf>, Vec<String>);
@@ -49,7 +49,12 @@ impl MorphApp for Keeper {
         Self
     }
 
-    fn render(&mut self, _ctx: &mut MorphContext, _frame: &Frame<'_>) {}
+    fn render(&mut self, _ctx: &mut MorphContext, _frame: &Frame<'_>) -> RenderStatus {
+        // Nothing is drawn: this drives hooks, not pixels. Said
+        // explicitly rather than left to the default, so the default's
+        // log stays a signal that an app forgot to draw.
+        RenderStatus::Skipped
+    }
 }
 
 #[test]

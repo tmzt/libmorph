@@ -46,7 +46,9 @@ use libmorph::service::{
     ServiceType,
 };
 use libmorph::system_events::{self, SystemEvent};
-use libmorph::{Frame, MorphApp, MorphContext, PermissionRequest, Permissions, battery, wgpu};
+use libmorph::{
+    Frame, MorphApp, MorphContext, PermissionRequest, Permissions, RenderStatus, battery, wgpu,
+};
 
 const POST_NOTIFICATIONS: &str = "android.permission.POST_NOTIFICATIONS";
 /// As declared in the Android build script; only the kind matters at start.
@@ -242,7 +244,7 @@ impl MorphApp for Background {
         Self { request }
     }
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
         let mut encoder = ctx.device().create_command_encoder(&Default::default());
         encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -262,6 +264,7 @@ impl MorphApp for Background {
             ..Default::default()
         });
         ctx.queue().submit([encoder.finish()]);
+        RenderStatus::Drawn
     }
 
     fn on_permissions(&mut self, _ctx: &mut MorphContext, answer: &Permissions) {

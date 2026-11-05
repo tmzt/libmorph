@@ -22,7 +22,7 @@
 
 use std::time::Duration;
 
-use libmorph::{Frame, MorphApp, MorphContext, Touch, TouchPhase, wgpu};
+use libmorph::{Frame, MorphApp, MorphContext, RenderStatus, Touch, TouchPhase, wgpu};
 
 /// What a tap copies.
 const TEXT: &str = "libmorph-clipboard-check-29Q";
@@ -48,7 +48,7 @@ impl MorphApp for ClipCopy {
 
     fn update(&mut self, _ctx: &mut MorphContext, _dt: Duration) {}
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
         let (r, g, b) = match self.copied {
             None => (0.2, 0.2, 0.2),
             Some(true) => (0.1, 0.6, 0.2),
@@ -68,6 +68,7 @@ impl MorphApp for ClipCopy {
             ..Default::default()
         });
         ctx.queue().submit([encoder.finish()]);
+        RenderStatus::Drawn
     }
 
     fn on_touch(&mut self, ctx: &mut MorphContext, touch: Touch) {

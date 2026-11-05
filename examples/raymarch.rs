@@ -14,7 +14,9 @@
 use std::time::Duration;
 
 use libmorph::wgpu::util::DeviceExt;
-use libmorph::{Frame, LimitsRequest, MorphApp, MorphContext, Touch, TouchPhase, wgpu};
+use libmorph::{
+    Frame, LimitsRequest, MorphApp, MorphContext, RenderStatus, Touch, TouchPhase, wgpu,
+};
 
 /// Storage buffers the shader binds in the fragment stage.
 const STORAGE_BUFFERS: u32 = 8;
@@ -195,7 +197,7 @@ impl MorphApp for Raymarch {
         }
     }
 
-    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) {
+    fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
         let encode = if frame.format.is_srgb() { 0.0 } else { 1.0 };
         let (width, height) = frame.size;
         let uniforms = [
@@ -223,6 +225,7 @@ impl MorphApp for Raymarch {
             pass.draw(0..3, 0..1);
         }
         ctx.queue().submit([encoder.finish()]);
+        RenderStatus::Drawn
     }
 
     fn on_touch(&mut self, _ctx: &mut MorphContext, touch: Touch) {

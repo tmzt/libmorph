@@ -656,7 +656,7 @@ fn fill_page(window: &Window) {
 mod tests {
     use super::run_script;
     use crate::config::Launch;
-    use crate::{Frame, MorphApp, MorphContext};
+    use crate::{Frame, MorphApp, MorphContext, RenderStatus};
 
     struct Never;
 
@@ -665,7 +665,9 @@ mod tests {
             unreachable!("no GPU work before the script is loaded")
         }
 
-        fn render(&mut self, _ctx: &mut MorphContext, _frame: &Frame<'_>) {}
+        fn render(&mut self, _ctx: &mut MorphContext, _frame: &Frame<'_>) -> RenderStatus {
+            unreachable!("no GPU work before the script is loaded")
+        }
     }
 
     #[cfg(not(script_runner))]
