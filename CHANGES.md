@@ -1397,3 +1397,31 @@ warnings; `cargo clippy -p libmorph --target aarch64-linux-android
 sigilweaver's scene-by-extra work is what will send one, and that reading
 belongs in its log. libmobile needed no change, as the plan said: every
 field was in 0.3.5.
+
+## 2026-11-05 12:04 EST — a plan for an app that outlives a slow frame
+
+`docs/design/20261105_01_THE_APP_RUNS_OFF_THE_LOOP_THREAD_PLAN.md`,
+Draft.
+
+`libmobile::android::run` polls, pumps input and calls `tick` in one
+iteration, and `tick` is where a `MorphApp` both simulates and draws.
+So no input is consumed while a frame is drawn - and Android does not
+watch frame times, it watches whether an app takes its input. A slow
+frame is therefore not reported as slowness but as an ANR, and the
+process goes.
+
+A game on libmorph is hitting this on an Adreno 740. It also hides its
+own cause: that app's frame log prints at frames 1, 2 and then every
+60, and it dies before the sixtieth, so the number that would say how
+slow the frame is never appears.
+
+The plan moves the **app** to its own thread rather than splitting the
+draw out of `MorphApp`. Splitting the trait is the better long-run
+shape and is a breaking change to every app on libmorph; moving the app
+leaves the trait alone, confines the change to `Adapter`, and needs
+nothing from libmobile, which already calls `tick`.
+
+The owner gave the synchronisation: an atomic stop signal checked
+between CPU passes, not between frames - a frame is the thing that takes
+seconds, so a stop checked at the top of one bounds the wait by exactly
+the interval that is the problem.
