@@ -1620,3 +1620,41 @@ The pins are libdevice `tag = "v0.1.3"` and libmobile
 changes: `git diff --stat v0.1.3..948f9247` in libdevice is
 `CHANGES.md`, `README.md` and one design document, and
 `git diff --stat v0.4.0..0b2929c1` in libmobile is `CHANGES.md`.
+
+## 2026-11-05 17:27 EST — step 2's const operator, and step 3's count of render impls
+
+Two departures from plan
+`docs/design/20261105_04_OWNS_AND_THE_RENDER_STATUS_PLAN.md`, under
+Rule 1.7.
+
+**Step 2: `Owned::FRAME | Owned::FRAME` is not usable in a `const`.**
+The step's **Done when** asks for it, and the plan's sketch marks the
+`BitOr` impl "const-compatible". It cannot be: a trait impl is not
+`const` on stable Rust, so the operator in a `const` is E0015,
+"cannot call non-const operator in constants ... note: impl defined
+here, but it is not `const`". `Owned::union` is a `const fn` and is
+the const path - `const OWNS: Owned = Owned::FRAME.union(Owned::X);` -
+and the operator is for everywhere else. Both are in the public API as
+the plan writes them and both are tested; only the **Done when**'s
+claim about the operator does not hold. With one flag built, nothing
+needs to compose yet.
+
+**Step 3: sixteen render impls draw, not seventeen.** The repo has 25
+`MorphApp::render` impls. Sixteen draw and return `Drawn`: the eight
+examples, the five in `tests/camera.rs`, the two in `tests/media.rs`
+and the one in `tests/script.rs`. Eight under `tests/` draw nothing
+and now say `RenderStatus::Skipped` explicitly, as the step requires,
+so the default's log stays a signal:
+`tests/clipboard.rs` (two), `tests/intent.rs`,
+`tests/low_memory.rs`, `tests/open_link.rs`, `tests/open_url.rs`,
+`tests/secure_store.rs` and `tests/storage.rs`.
+
+The 25th is the `Never` stub in `src/runner/winit.rs`'s own test
+module, which the step's seventeen must be counting. Its `init` is
+`unreachable!`, so the app is never built and its `render` is never
+reached; it is `unreachable!` too rather than claiming a status it
+cannot have. Nothing was deleted.
+
+Also recorded: step 3 needed a line in the README's quick start, whose
+example carried the old signature. It is in its own commit under Rule
+3.1.
