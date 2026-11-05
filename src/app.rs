@@ -57,18 +57,26 @@ impl Owned {
         self.0 & other.0 == other.0
     }
 
-    /// Both sets. A `const fn`, so it composes inside a `const`, which the
-    /// [`BitOr`](core::ops::BitOr) operator cannot do on stable Rust.
-    pub const fn union(self, other: Self) -> Self {
-        Self(self.0 | other.0)
-    }
-}
-
-impl core::ops::BitOr for Owned {
-    type Output = Self;
-
-    fn bitor(self, other: Self) -> Self {
-        self.union(other)
+    /// Every subsystem in `flags`, for an app that takes more than one.
+    ///
+    /// A `const fn`, because [`MorphApp::OWNS`] is always a `const` and
+    /// that is the only place an `Owned` is built. There is deliberately
+    /// no `BitOr`: a trait impl cannot be `const` on stable Rust, so `|`
+    /// would fail with E0015 at every site that matters.
+    ///
+    /// ```
+    /// # use libmorph::Owned;
+    /// const OWNS: Owned = Owned::of(&[Owned::FRAME]);
+    /// assert!(OWNS.contains(Owned::FRAME));
+    /// ```
+    pub const fn of(flags: &[Self]) -> Self {
+        let mut bits = 0;
+        let mut i = 0;
+        while i < flags.len() {
+            bits |= flags[i].0;
+            i += 1;
+        }
+        Self(bits)
     }
 }
 
@@ -89,11 +97,11 @@ pub trait MorphApp: Sized + 'static {
     /// const OWNS: Owned = Owned::FRAME;
     /// ```
     ///
-    /// Sets compose through [`Owned::union`], which is a `const fn`:
+    /// An app taking more than one uses [`Owned::of`]:
     ///
     /// ```
     /// # use libmorph::Owned;
-    /// const OWNS: Owned = Owned::FRAME.union(Owned::FRAME);
+    /// const OWNS: Owned = Owned::of(&[Owned::FRAME]);
     /// ```
     const OWNS: Owned = Owned::empty();
 
@@ -417,22 +425,19 @@ pub trait MorphApp: Sized + 'static {
 mod tests {
     use super::{MorphApp, Owned};
 
-    /// `union` is a `const fn`, so a set composes where `OWNS` is
-    /// written. The `BitOr` operator cannot: a trait impl is not `const`
-    /// on stable Rust (E0015, "cannot call non-const operator in
-    /// constants"), which is why `union` exists.
-    const COMPOSED: Owned = Owned::FRAME.union(Owned::FRAME).union(Owned::empty());
+    /// `of` is a `const fn`, so a set composes where `OWNS` is actually
+    /// written - which is the only place one is built. A `BitOr` could
+    /// not: a trait impl is not `const` on stable Rust (E0015, "cannot
+    /// call non-const operator in constants"), so `|` would fail at every
+    /// site that matters, which is why there is none.
+    const COMPOSED: Owned = Owned::of(&[Owned::FRAME, Owned::empty(), Owned::FRAME]);
+    const NOTHING: Owned = Owned::of(&[]);
 
     #[test]
     fn a_set_composes_in_a_const() {
         assert!(COMPOSED.contains(Owned::FRAME));
-        assert_eq!(COMPOSED, Owned::FRAME);
-    }
-
-    #[test]
-    fn the_operator_is_the_same_set_outside_a_const() {
-        assert_eq!(Owned::FRAME | Owned::FRAME, Owned::FRAME);
-        assert_eq!(Owned::empty() | Owned::FRAME, Owned::FRAME);
+        assert_eq!(COMPOSED, Owned::FRAME, "duplicates and empties fold away");
+        assert_eq!(NOTHING, Owned::empty(), "no flags is the empty set");
     }
 
     #[test]
