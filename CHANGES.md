@@ -1450,3 +1450,68 @@ JNI call. `Managed` is the default and takes the same path it does now.
 Deliberately smaller than `20261105_01` and independent of it: an app
 that drives its own frame can thread and pace it however it likes
 without libmorph growing a routing layer first.
+
+## 2026-11-05 14:19 EST — a plan for configuring what libmorph manages, superseding 20261105_02
+
+`docs/design/20261105_03_THE_APP_CONFIGURES_WHAT_LIBMORPH_MANAGES_PLAN.md`,
+Draft. `20261105_02_AN_APP_MAY_PRESENT_ITS_OWN_FRAMES_PLAN.md` is
+Superseded by it before implementation, with an amendment saying what
+moved where; its README row is updated in the same commit (Rule 4.3).
+`20261105_01` stays Draft and is not touched.
+
+The owner's question was why libmorph had drawing code at all when it
+was meant to hand back the wgpu device and leave the frame to the app.
+`Shell::frame` acquires, `draw` pumps audio, camera and media events and
+calls `update` and `render`, and `frame` presents - libmorph owns all of
+it, which is right for the plasma demo and wrong for a game, which cannot
+choose when to submit, how deep to let the queue get, or whether to skip
+a frame. The same boundary is why nothing in the live path at `e60bf90`
+called `Device::poll` and why an app could not have: it never held the
+texture.
+
+The plan: a first callback `MorphApp::configure` runs before anything
+opens and returns a `MorphAppConfig`, per-subsystem preferences with
+`None` meaning no opinion. Its one subsystem here is drawing:
+`DrawingConfig { format, present_mode, max_frame_latency, mode }`, where
+`mode` is `Managed` (today's path) or `ConstructFrame` (the app acquires
+through `ctx.acquire()` and presents through `ctx.present(frame)` from a
+new `construct_frame` hook; `render` stays required and is not called).
+Configuration and ownership are two axes, so ownership is a field of the
+config, not its shape - an earlier draft that put the surface fields
+inside the variant is recorded as rejected. The ordering rule does the
+rest: a managed subsystem is opened, pumped and called; an owned one is
+none of those; no precedence rules, no conflict panics, no detecting an
+overridden default method, which stable Rust cannot do.
+
+Reviewing the concept changed four things. The subsystems register is a
+struct of named bools computed once from the config, not a bitset: it is
+read on one thread, there are four subsystems, and the gate goes inside
+each subsystem's own entry point rather than at its callers; it has one
+field, `drawing`, because a field nothing can set cannot be tested, and
+audio adds its own when its plan gives it a source. `max_frame_latency`
+is added to `DrawingConfig`: it is wgpu's `desired_maximum_frame_latency`,
+applies under both modes, and is exactly "how deep to let the queue
+get". The config structs are exhaustive with `pub` fields so an app can
+write them with `..Default::default()`, which `#[non_exhaustive]` forbids
+from another crate; each later field is a minor bump under Rule 5.4, and
+that is the strongest reason this is 0.7.0 and not 1.0. And
+`ctx.acquire`/`ctx.present` hand out one frame rather than the surface,
+so a `ConstructFrame` app runs under the scripted runner's offscreen
+target unchanged - the game's desktop captures depend on that.
+
+Also stated: a frame acquired in `construct_frame` is presented or dropped
+before it returns (libmorph reconfigures and Android takes the window
+back between iterations); pacing is the app's and the loop's rate is the
+host's; the desktop overlay is not drawn under `ConstructFrame`; `limits`
+is called unconditionally because the GPU is managed in a sense no flag
+expresses; `audio_setup` is unchanged and audio is out of scope; the
+pumps leave `draw` for `Shell::iterate`, which is the one observable
+change (they now run on an iteration whose acquire fails) and the one
+thing that trips Rule 5.4 - without it the rule would say 0.6.2, and
+0.7.0 is chosen anyway and said so. libdevice and libmobile are pinned by
+tag (`v0.1.3`, `v0.4.0`, in all three manifest entries) as step 1,
+because Rule 5.5 needs a dependency move to be a commit; the lock moves
+each back one to three docs-only commits and no code.
+
+Not justified by a slow frame: the game's 266 ms on an Adreno 740 is
+steady, and what froze it was a blocking readback of its own.

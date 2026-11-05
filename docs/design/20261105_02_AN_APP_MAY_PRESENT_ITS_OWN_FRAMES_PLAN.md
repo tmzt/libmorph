@@ -1,7 +1,7 @@
 ---
 title: An app may present its own frames - libmorph keeps the device, the events and the JNI
 date: 2026-11-05
-status: Draft
+status: Superseded (by 20261105_03_THE_APP_CONFIGURES_WHAT_LIBMORPH_MANAGES_PLAN.md)
 covers: >
   A way for an app to take the frame: libmorph still opens the device,
   owns the window, delivers every event and makes every JNI call, but
@@ -156,3 +156,44 @@ and the thing that actually stopped it was a blocking readback it had
 left in itself - not libmorph owning the frame. This is justified by the
 boundary being in the wrong place for anything larger than a demo, which
 was true before that frame was ever measured.
+
+## Amendment — 2026-11-05 14:19 EST: superseded by the plan that configures what libmorph manages
+
+Superseded by
+`docs/design/20261105_03_THE_APP_CONFIGURES_WHAT_LIBMORPH_MANAGES_PLAN.md`.
+Nothing in this plan was implemented. What moved where:
+
+- section 1 (why) is its section 1, with the `Device::poll` point
+  qualified: a non-blocking poll is being added to the managed path
+  separately, and under the new plan an app that constructs its own
+  frames polls when it decides to;
+- section 2 (`Drawing`, `drawing()`, `present`) becomes
+  `DrawingMode`, the `mode` field of a `DrawingConfig` inside a
+  `MorphAppConfig` returned by a new first callback,
+  `MorphApp::configure`; `Drawing::Own` is `DrawingMode::ConstructFrame`;
+  `present` is `construct_frame`; and `ctx.surface()` is
+  `ctx.acquire()` and `ctx.present(frame)`, which hand out one frame
+  rather than the surface so scripted runs keep working under both modes;
+- sections 3 (what libmorph keeps) and 4 (what the app takes on) are its
+  sections 3.2 and 4, with one rule added: a frame acquired in
+  `construct_frame` is presented or dropped before it returns, because
+  libmorph reconfigures the surface and Android takes the window back
+  between iterations;
+- section 5 (what it does not do) stands in substance; the relation to
+  `20261105_01` is its section 7;
+- section 6's steps are its steps 5 and 6, which now come after the
+  config, the register and the pump move (its steps 2 to 4) and after
+  pinning libdevice and libmobile by tag (its step 1);
+- section 7 (not justified by a slow frame) is its section 10.
+
+Why it is replaced rather than amended: this plan had no place for the
+surface preferences an app wants under either mode (the format, present
+mode and frame latency), because it made ownership the shape of the
+choice rather than one field of it. And it could not say what happened
+to `on_audio`, `on_camera` and `on_media` under `Own`: the pumps live
+in `Shell::draw`, which `Own` skips, so on the desktop and the web they
+would have stopped. The replacement treats configuration and ownership
+as two axes, states the ordering rule (a managed subsystem is opened,
+pumped and called; an owned one is none of those), computes a register
+once from the config, and moves the pumps to a per-iteration
+`Shell::iterate`.
