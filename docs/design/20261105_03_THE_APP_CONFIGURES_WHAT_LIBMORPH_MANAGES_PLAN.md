@@ -841,3 +841,141 @@ types, and its Lifecycle table's `tick → update + render` becomes
 commit; the game can move `libmorph`'s `tag` to `v0.7.0` and build
 its desktop and Android binaries with no code change; the CHANGES
 entry records the checks.
+
+## Amendment — 2026-11-05 14:33 EST: the register is a bitset, at the owner's instruction
+
+The owner, 2026-11-05, on section 2.4's choice of a struct of named
+`bool`s over a bitset: "the bitset is internal to libmorph, not the
+API". This amendment replaces the register's form and every passage
+that depends on it. The visibility (`pub(crate)`), the single
+computation from `MorphAppConfig` after `configure` returns, the rule
+that the gate lives inside each subsystem's own entry point rather than
+at its callers, and the decision to declare only the subsystem that has
+a source for the other value all stand.
+
+### What was considered, and why the bitset won
+
+Section 2.4 gave three reasons for named fields: the register is read
+on one thread so needs no atomics; a named field cannot be confused
+with another bit; and four subsystems do not need a `u8`. The first is
+true and is not an argument for a struct, only against atomics, which
+the bitset does not use either. The third is neutral. The second is the
+one that decided it, and it is a public-API concern misapplied: a
+mis-bitted flag is a hazard where a type is defined in one place and
+read by callers who cannot see the definition. This type is
+`pub(crate)`, defined once in `src/runner/shell.rs` beside `Shell` and
+`FrameStatus` (both already `pub(crate)`), and read in that crate on the
+loop thread; there is no second definition for it to drift from and no
+downstream caller to get it wrong.
+
+What the bitset gives that the struct did not is **one call shape for
+every subsystem.** The gate at each entry point reads identically -
+`self.managed.has(Subsystem::Drawing)`, `self.managed.has(Subsystem::Audio)`
+- where four differently-named fields are four shapes, and a struct of
+fields does not generalise to iterating or logging the subsystems at
+bring-up. That one shape is what the owner asked for: a clean place to
+check whether a subsystem is managed.
+
+It is also the same object, in shape, as plan `20261105_01`'s "routing
+atomic bitset": a word of bits indexed by a `pub(crate)` enum. One
+mental model across the two plans rather than two forms for the same
+job. The semantic difference section 2.4 drew still holds and is kept
+here so it is not lost: `_01`'s bitset says which of three loops gets
+each event class and is read from several threads, so it is atomic;
+this one has one bit per subsystem, set when managed, and is read on
+the loop thread only, so it is a plain `u8`.
+
+### The replacement for section 2.4's code and its explanation
+
+The code block in section 2.4 (`pub(crate) struct Managed { pub drawing:
+bool }` and its `From`) is replaced by:
+
+```rust
+/// The subsystems the loop drives, each one bit of `Managed`. A
+/// subsystem is declared here when a `MorphAppConfig` field can make
+/// it owned; until then it is managed and has no bit to clear.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub(crate) enum Subsystem {
+    Drawing = 1 << 0,
+    // Audio, Camera, Media: added by the plan that gives each an owned
+    // state, with its bit, its line in `From`, and its gate.
+}
+
+/// Which subsystems libmorph drives this run: one bit per
+/// `Subsystem`, set when managed. Decided once from the app's
+/// `MorphAppConfig` after `configure` returns, and never changed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct Managed(u8);
+
+impl Managed {
+    /// Every declared subsystem managed: the default, and what a
+    /// `MorphAppConfig::default()` gives.
+    pub const ALL: Self = Self(Subsystem::Drawing as u8);
+
+    pub fn has(self, subsystem: Subsystem) -> bool {
+        self.0 & subsystem as u8 != 0
+    }
+
+    fn without(self, subsystem: Subsystem) -> Self {
+        Self(self.0 & !(subsystem as u8))
+    }
+}
+
+impl From<&MorphAppConfig> for Managed {
+    fn from(config: &MorphAppConfig) -> Self {
+        let mut managed = Self::ALL;
+        if config
+            .drawing
+            .as_ref()
+            .is_some_and(|d| d.mode == DrawingMode::ConstructFrame)
+        {
+            managed = managed.without(Subsystem::Drawing);
+        }
+        managed
+    }
+}
+```
+
+The paragraph beginning "It is a struct of named `bool`s, not a bitset,
+for three reasons" is replaced by the reasoning above.
+
+The paragraph beginning "It has one field, because only drawing has a
+source for the other value in this plan" is replaced by: it declares one
+subsystem, because only drawing has a source for the other value in
+this plan. Audio, camera and media are always managed here, and a bit
+nothing can clear is a bit no test can exercise and a reader will take
+to mean more than it does. A bitset in which only one bit can presently
+be cleared is honest and costs nothing. When the audio plan gives
+`MorphAppConfig::audio` an owned state, it adds `Audio = 1 << 1` to
+`Subsystem`, one line to `From`, and
+`if !self.managed.has(Subsystem::Audio) { return; }` at the top of
+`Shell::audio_events`; nothing is pre-declared for it.
+
+The paragraph beginning "Where the gates go matters as much as where the
+register is" stands, with its example gate now written
+`if !self.managed.has(Subsystem::Audio) { return; }`.
+
+### The other passages this changes
+
+- Section 3.1, in `Shell::iterate`: `if self.managed.drawing {` is
+  `if self.managed.has(Subsystem::Drawing) {`. Nothing else in the
+  function changes.
+- Section 5, the bullet "A bitset, or atomics, for the register" is
+  replaced by: **Named `bool` fields for the register.** Their one
+  advantage, that a field cannot be mis-bitted, protects callers who
+  cannot see the definition, and this type has none; a bitset gives one
+  call shape per subsystem and matches `20261105_01`'s. Atomics are
+  still rejected: the register is read on the loop thread only.
+- Section 6, "adds `audio` to the register" is "adds `Subsystem::Audio`
+  to the register".
+- Section 11, step 2's **Done when**: "unit tests show
+  `MorphAppConfig::default()` gives `Managed { drawing: true }`,
+  `DrawingMode::ConstructFrame` gives `drawing: false`" is "unit tests
+  show `Managed::from(&MorphAppConfig::default()) == Managed::ALL`,
+  that `Managed::ALL.has(Subsystem::Drawing)`, and that a config with
+  `DrawingMode::ConstructFrame` gives `!has(Subsystem::Drawing)`".
+
+The status stays Draft. The README row is unchanged: it names the
+register's computation and where its gates live, neither of which
+moved.

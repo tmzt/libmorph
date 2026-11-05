@@ -1515,3 +1515,21 @@ each back one to three docs-only commits and no code.
 
 Not justified by a slow frame: the game's 266 ms on an Adreno 740 is
 steady, and what froze it was a blocking readback of its own.
+
+## 2026-11-05 14:33 EST — the register in plan 20261105_03 is a bitset, at the owner's instruction
+
+The entry above says the subsystems register is "a struct of named
+bools computed once from the config, not a bitset". The owner, asked:
+"the bitset is internal to libmorph, not the API". An amendment to
+`docs/design/20261105_03_THE_APP_CONFIGURES_WHAT_LIBMORPH_MANAGES_PLAN.md`
+replaces section 2.4's form with a `pub(crate) struct Managed(u8)` indexed
+by a `pub(crate) enum Subsystem`, and records why: the mis-bitting
+argument for named fields protects callers who cannot see a type's
+definition, and a `pub(crate)` type read in one crate on one thread has
+none; a bitset gives one call shape at every gate
+(`managed.has(Subsystem::X)`); and it is the same shape as
+`20261105_01`'s routing bitset, which stays atomic and cross-thread where
+this one is a plain `u8`. Kept from the entry above: the register is
+computed once after `configure`; the gate lives inside each subsystem's
+own entry point; and only `Drawing` is declared, because only drawing
+has a source for the owned value in this plan. Status stays Draft.
