@@ -1752,3 +1752,43 @@ a new variant on `Command`, which is `#[non_exhaustive]` and so may gain
 one, a new public `Simulation` enum, a new script verb, and a `resize`
 that does something where it previously did nothing on a target only the
 script runner has.
+
+## 2026-11-05 18:07 EST — the `simulate` verb is deferred: it wants a simulated surface first
+
+Deferred before any code was written, at the owner's instruction:
+**"it needs a fake surface implemented, that could be a subagent plan
+but i dont want to slow the work down any further"**. This replaces the
+plan of the 18:06 EST addendum above; nothing of it was implemented.
+
+The owner is right about why. A scripted run's target is
+`Target::Offscreen`, a plain texture, not a `wgpu::Surface`. So
+`simulate rotate` against it would have verified the app-visible half -
+`ctx.spec.geometry` and `ctx.surface_size` swapping, the app reading the
+new size, captures coming out rotated - and none of the half that
+actually breaks:
+
+- `Gpu::configure` and `surface.configure` at the swapped size;
+- `wgpu_config` called again at attach with the rotated configuration,
+  which is plan 20261105_04 step 4's other unverified **Done when:**;
+- format re-selection against the kept `previous`, which is what keeps
+  an app's pipelines valid across the turn;
+- a swapchain image held across the reconfigure, which is what the
+  plan's one rule is about and what an offscreen texture cannot have.
+
+So the verb would have reported a rotation as survivable while testing
+almost none of the risk. That is worse than the honest gap of an
+unverified **Done when:**, which at least says so.
+
+**What it wants instead**, and it is plan-sized rather than a verb: a
+third `Target` that simulates a swapchain - a small ring of textures
+with real acquire and present semantics, and a way for a script to
+inject `Suboptimal`, `Outdated` and `Lost`. That would make the whole of
+`AcquireError`, the one rule, the suboptimal reconfigure path and
+rotation itself deterministically testable with no device and no
+display, which is worth far more than rotation alone. It belongs in its
+own dated plan.
+
+**Not done, and still true:** `Shell::resize` returns early unless the
+target is a `Target::Surface`, so it is a no-op in a scripted run and a
+script cannot resize. That is a real latent gap, recorded here rather
+than fixed, because the simulated-surface plan is where it belongs.
