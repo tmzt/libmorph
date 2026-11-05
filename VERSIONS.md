@@ -400,3 +400,79 @@ changes, and an app that uses only `on_open_url` sees exactly what it saw.
 - Android: the runner forwarded only a `VIEW` intent's `data` and dropped
   every other intent and every extra. It now forwards each intent whole.
   `on_open_url` is called for the same intents as before.
+
+## libmorph 0.7.0 — 2026-11-05 (tag v0.7.0)
+
+An app declares the subsystems it takes, and `render` says whether to
+present (`docs/design/20261105_04_OWNS_AND_THE_RENDER_STATUS_PLAN.md`).
+Minor under Rule 5.4: `render`'s signature changes. Everything else is
+additive and would have been a patch on its own; both parts ship in one
+break deliberately, because adding `OWNS` while `render` stayed required
+would leave every owning app writing a dead method.
+
+- **Breaking:** `MorphApp::render` returns `RenderStatus` instead of `()`.
+  Every impl changes: `-> RenderStatus`, with `RenderStatus::Drawn` at the
+  end of a body that draws. It is a hard error at every impl, not a
+  warning.
+- **Breaking** (a required method becomes defaulted): `MorphApp::render`
+  has a default body. It draws nothing, returns `RenderStatus::Skipped`
+  and logs once, naming both ways out. An app that owns the frame writes
+  no `render` at all; a managed app that has none now compiles, and the
+  log is the only signal, because Rust cannot ask whether a method was
+  overridden.
+- **Breaking** (observable behaviour): a frame whose `render` returns
+  `RenderStatus::Skipped` is not presented. The surface texture is dropped
+  unpresented, the previous frame stays on screen, and the desktop overlay
+  is not drawn either, since it goes over the app's own frame. `update`
+  still runs. On the offscreen target of a scripted run a skipped frame
+  leaves the texture's prior contents, so both targets report alike.
+- Added `libmorph::RenderStatus`: `Drawn` and `Skipped`. `Clone`, `Copy`,
+  `Debug`, `Eq`, `Hash`, `PartialEq`; not `#[must_use]`, as `KeyStatus` is
+  not. Exhaustive.
+- Added `libmorph::Owned`, a hand-rolled flags type over a `u32`, so no
+  foreign type enters this crate's public API: `Owned::FRAME`,
+  `Owned::empty()`, `Owned::of(&[..])` and `contains`, all `const fn`.
+  There is deliberately no `BitOr`: `MorphApp::OWNS` is a `const` and is
+  the only place an `Owned` is built, and a trait impl cannot be `const`
+  on stable Rust, so `|` would fail with E0015 at every site that
+  matters. `Clone`, `Copy`, `Debug`, `Default`, `Eq`, `Hash`,
+  `PartialEq`.
+- Added `MorphApp::OWNS: Owned`, defaulting to `Owned::empty()`. A set bit
+  means libmorph does not drive that subsystem. `Owned::FRAME` is the only
+  flag: the device, queue and surface cannot be the app's, because the
+  surface comes from the window the platform's loop owns. Adding a flag
+  later is strictly additive.
+- Added `MorphApp::construct_frame(&mut self, ctx)`, with a default body
+  that logs once. Called once per iteration when `OWNS` contains
+  `Owned::FRAME`, after `update`, in place of libmorph's acquire,
+  `render`, desktop overlay and present. A frame acquired in it is
+  presented or dropped before it returns.
+- Added `MorphContext::acquire_frame(&mut self) -> Result<AcquiredFrame,
+  AcquireError>` and `MorphContext::present_frame(&mut self,
+  AcquiredFrame)`. At most one frame per `construct_frame`; not acquiring
+  is how an app skips an iteration. `present_frame` reconfigures a
+  suboptimal surface afterwards, as the managed path does, and does not
+  poll the device: pacing is the app's.
+- Added `libmorph::AcquiredFrame`: `view: wgpu::TextureView`, `format`,
+  `size: (u32, u32)` and `suboptimal: bool`, plus a private source. It
+  owns its texture, because the app presents or drops it, where `Frame`
+  lends a view libmorph presents itself.
+- Added `libmorph::AcquireError`, `#[non_exhaustive]`: `NotOwned`,
+  `NoSurface`, `NotReady`, `Outdated`, `Lost`, `Held`, `Validation`. It
+  implements `Display` and `std::error::Error`.
+- Added `MorphApp::wgpu_config(default: wgpu::SurfaceConfiguration, caps:
+  &wgpu::SurfaceCapabilities) -> wgpu::SurfaceConfiguration`, an
+  associated function with a default that returns `default`. Called at
+  every attach when `OWNS` contains `Owned::FRAME` - the first window, and
+  again after a rotation, a resume or a lost surface - and libmorph
+  overrides `width` and `height` after it returns. By value in and out,
+  as `limits` is. Not called for a managed frame, whose surface knob stays
+  `SRGB_SURFACE`, and not called offscreen, where there is no surface.
+- Added the `ownframe` example and `examples/scripts/ownframe.morph`: an
+  app with `const OWNS: Owned = Owned::FRAME;` that presents a cleared
+  frame, skips every fourth by not acquiring, and asks for the lowest
+  latency the surface offers.
+- libdevice and libmobile are now pinned by tag, `v0.1.3` and `v0.4.0`.
+  Both are the versions already in use and every commit between each tag
+  and the revision the lock held is documentation only, so no code
+  changes and Rule 5.5 does not apply.
