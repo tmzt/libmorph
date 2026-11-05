@@ -1,0 +1,9 @@
+# The high-frame-rate loop, headless and deterministic. `fps` fixes `dt`, so
+# the bar is in the same place on the same frame every run. `geometry` turns
+# the window part way through.
+fps 60
+frames 30
+screenshot swept
+geometry 128 64
+frames 15
+screenshot turned

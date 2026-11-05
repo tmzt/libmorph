@@ -177,3 +177,8 @@ name = "background"
 # An app that takes the frame: `const OWNS: Owned = Owned::FRAME;`.
 [[example]]
 name = "ownframe"
+
+# A high-frame-rate loop over owned frames: present mode, queue depth,
+# polling the device, and measuring what a frame actually costs.
+[[example]]
+name = "hifps"
