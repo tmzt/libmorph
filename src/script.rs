@@ -109,6 +109,19 @@ pub enum Command {
     Key(Key),
     /// `screenshot [<name>]`: the last rendered frame to `<name>.png`.
     Screenshot(Option<String>),
+    /// `geometry <width> <height>`: the window reports a new size, in
+    /// physical pixels, as it does when the device turns.
+    ///
+    /// This is the input a device gives, not a model of it: Android hands
+    /// libmorph a size (`MobileEvent::WindowResized`) and it assigns it,
+    /// so a script states the size rather than asking for a rotation. A
+    /// turned window is not the old one reversed - the navigation bar and
+    /// a display cutout sit on different edges - and the insets arrive on
+    /// their own event, so they are not this verb's business.
+    ///
+    /// Accepted while suspended, where it sets the size the next `resume`
+    /// attaches at.
+    Geometry { width: u32, height: u32 },
     /// `suspend`: the surface goes away.
     Suspend,
     /// `resume`: a new surface.
@@ -332,6 +345,10 @@ pub(crate) enum Action {
         name: String,
         frame: u64,
     },
+    Geometry {
+        width: u32,
+        height: u32,
+    },
     Suspend,
     Resume,
     Exit,
@@ -469,6 +486,18 @@ impl Planner {
                 }
                 let frame = self.frames;
                 self.push(line, Action::Screenshot { name, frame });
+            }
+            Command::Geometry { width, height } => {
+                if *width == 0 || *height == 0 {
+                    return Err("`geometry` takes a width and height above zero".into());
+                }
+                self.push(
+                    line,
+                    Action::Geometry {
+                        width: *width,
+                        height: *height,
+                    },
+                );
             }
             Command::Suspend => {
                 if self.suspended {
@@ -679,6 +708,13 @@ fn parse_command(words: &[&str]) -> Result<Command, String> {
             arity(&[0, 1], "screenshot [<name>]")?;
             Command::Screenshot(args.first().map(|name| (*name).to_owned()))
         }
+        "geometry" => {
+            arity(&[2], "geometry <width> <height>")?;
+            Command::Geometry {
+                width: number(args[0])?,
+                height: number(args[1])?,
+            }
+        }
         "suspend" => {
             arity(&[0], "suspend")?;
             Command::Suspend
@@ -859,6 +895,46 @@ mod tests {
                 message.contains("usage: trim-memory"),
                 "{source}: {message}"
             );
+        }
+    }
+
+    #[test]
+    fn geometry_takes_a_size_and_works_while_suspended() {
+        assert_eq!(
+            actions("geometry 64 128\nsuspend\ngeometry 128 64\nresume"),
+            [
+                Action::Geometry {
+                    width: 64,
+                    height: 128
+                },
+                Action::Suspend,
+                Action::Geometry {
+                    width: 128,
+                    height: 64
+                },
+                Action::Resume,
+            ],
+            "a window may be resized while the app is suspended, and the \
+             next resume attaches at that size"
+        );
+        for source in [
+            "geometry",
+            "geometry 64",
+            "geometry 64 128 2",
+            "geometry wide 128",
+            "geometry -1 128",
+        ] {
+            let (line, message) = rejected(source);
+            assert_eq!(line, 1, "{source}");
+            assert!(
+                message.contains("usage: geometry") || message.contains("whole number"),
+                "{source}: {message}"
+            );
+        }
+        for source in ["geometry 0 128", "geometry 64 0"] {
+            let (line, message) = rejected(source);
+            assert_eq!(line, 1, "{source}");
+            assert!(message.contains("above zero"), "{source}: {message}");
         }
     }
 

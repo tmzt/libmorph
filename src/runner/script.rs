@@ -117,6 +117,19 @@ fn play<A: MorphApp>(
                     pixels_crc32: screenshot::pixels_crc32(&rgb),
                 });
             }
+            // What `Adapter::resized` does for a `WindowResized`: the
+            // window's new size reaches the target and the geometry the
+            // app reads back. `surface_size` is set first so it stands
+            // while suspended, where `resize` has no target to change and
+            // the next `resume` attaches at this size.
+            Action::Geometry { width, height } => {
+                shell.ctx.surface_size = (width, height);
+                (
+                    shell.ctx.spec.geometry.width,
+                    shell.ctx.spec.geometry.height,
+                ) = (width, height);
+                shell.resize((width, height));
+            }
             Action::Suspend => shell.detach(),
             Action::Resume => shell.attach_offscreen(),
             Action::Open(url) => shell.open_url(url),

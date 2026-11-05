@@ -270,10 +270,22 @@ impl<A: MorphApp> Shell<A> {
     }
 
     pub fn resize(&mut self, (width, height): (u32, u32)) {
+        let size = (width.max(1), height.max(1));
+        // A scripted run has no surface to configure: its texture is
+        // replaced at the new size instead, which is what a window being
+        // resized does to an offscreen target. Without this the whole
+        // method was a no-op there and a script could not resize at all.
+        #[cfg(script_runner)]
+        if matches!(self.ctx.target, Some(Target::Offscreen(_))) {
+            self.ctx.surface_size = size;
+            let texture = offscreen_texture(&self.ctx);
+            self.ctx.target = Some(Target::Offscreen(texture));
+            return;
+        }
         let Some(Target::Surface(surface, config)) = &mut self.ctx.target else {
             return;
         };
-        (config.width, config.height) = (width.max(1), height.max(1));
+        (config.width, config.height) = size;
         surface.configure(&self.ctx.gpu.device, config);
         self.ctx.surface_size = (config.width, config.height);
     }
