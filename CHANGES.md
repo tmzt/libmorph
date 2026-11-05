@@ -1533,3 +1533,60 @@ this one is a plain `u8`. Kept from the entry above: the register is
 computed once after `configure`; the gate lives inside each subsystem's
 own entry point; and only `Drawing` is declared, because only drawing
 has a source for the owned value in this plan. Status stays Draft.
+
+## 2026-11-05 16:38 EST — a plan for OWNS and a render status, superseding 20261105_03
+
+Plan `docs/design/20261105_04_OWNS_AND_THE_RENDER_STATUS_PLAN.md`
+(Draft), which supersedes
+`docs/design/20261105_03_THE_APP_CONFIGURES_WHAT_LIBMORPH_MANAGES_PLAN.md`
+before any of it was implemented. Worked out with the owner in
+discussion through 2026-11-05.
+
+**Two changes, released as one break.** An associated const,
+`MorphApp::OWNS`, of a hand-rolled `Owned` flags type, by which an app
+declares the subsystems it takes from libmorph. And a `RenderStatus`
+return from `render`, by which a managed app says whether the frame
+needs presenting at all.
+
+`Owned::FRAME` is the only flag built. It turns off libmorph's acquire,
+draw and present in favour of `construct_frame`, `ctx.acquire_frame`
+and `ctx.present_frame`, and it is the ceiling an app can own: the surface comes
+from the window libmobile's poll loop owns, so the device and surface
+cannot be the app's without it reimplementing libmorph. `AUDIO`,
+`CAMERA` and `MEDIA` are named as the next flags and not built; adding
+a flag is strictly additive.
+
+**Why a const rather than the config 20261105_03 proposed.** A const has
+no position in the call sequence, so nothing is computed, stored or read
+back through a register - the whole of that plan's section 2.4
+disappears - and because the app type is monomorphized the branch folds
+at compile time, leaving a managed app compiled to the path it has
+today. The cost is that ownership is compile-time only.
+
+**Why `wgpu_config` rather than mirrored fields.** 20261105_03 carried
+`format`, `present_mode` and `max_frame_latency` as fields of its own,
+which would have made libmorph track `wgpu::SurfaceConfiguration` and
+bump for its changes. Instead one hook takes and returns wgpu's own
+struct, in the shape `limits` already uses: here is the baseline, hand
+back what you want. It is called at every attach when `FRAME` is owned;
+a managed app's surface knob stays `SRGB_SURFACE`, which already covered
+the case the field was cited for.
+
+**Why `render` changes in the same release.** Adding `OWNS` while
+`render` stayed required would leave every owning app writing a dead
+method. Giving it a default is what removes that, and the default needs
+the return to be safe: without one it must either present an untouched
+surface texture or burn a clear pass every frame. With it, a missing
+`render` presents nothing and logs once, which is the only signal there
+is - Rust cannot ask whether a method was overridden, so a missed
+override cannot be a build error. A lint callable from `build.rs` is the
+intended answer and is out of scope.
+
+**Not justified by a slow frame.** The RPG game's Android build renders
+an interior scene at 266 ms on an Adreno 740, steady, and what froze it
+was a blocking readback of its own. The boundary was in the wrong place
+for anything larger than a demo before that was measured.
+
+0.7.0 under Rule 5.4: `render`'s signature breaks. Not 1.0, because the
+trait's applet shape - 22 defaulted methods, and no way for Rust to
+catch a misspelled override - is provisional and the plan says so.
