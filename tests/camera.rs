@@ -49,7 +49,10 @@ fn run<A: MorphApp>(script: &Script, dir: &Path, size: (u32, u32)) -> Option<Rep
 }
 
 fn clear(ctx: &MorphContext, frame: &Frame<'_>) -> RenderStatus {
-    let mut encoder = ctx.device().create_command_encoder(&Default::default());
+    let Some(gpu) = ctx.gpu() else {
+        return RenderStatus::Skipped;
+    };
+    let mut encoder = gpu.device.create_command_encoder(&Default::default());
     encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view: frame.view,
@@ -62,7 +65,7 @@ fn clear(ctx: &MorphContext, frame: &Frame<'_>) -> RenderStatus {
         })],
         ..Default::default()
     });
-    ctx.queue().submit([encoder.finish()]);
+    gpu.queue.submit([encoder.finish()]);
     RenderStatus::Drawn
 }
 
@@ -347,7 +350,10 @@ impl MorphApp for Finder {
     }
 
     fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
-        let mut encoder = ctx.device().create_command_encoder(&Default::default());
+        let Some(gpu) = ctx.gpu() else {
+            return RenderStatus::Skipped;
+        };
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -366,7 +372,7 @@ impl MorphApp for Finder {
             let rect = [0.0, 0.0, frame.size.0 as f32, frame.size.1 as f32];
             self.viewfinder.draw(ctx, &mut pass, rect, &options);
         }
-        ctx.queue().submit([encoder.finish()]);
+        gpu.queue.submit([encoder.finish()]);
         RenderStatus::Drawn
     }
 }

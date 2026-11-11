@@ -16,7 +16,10 @@ use libmorph::{
 
 /// Clear `frame` to `color` and submit.
 fn clear(ctx: &MorphContext, view: &wgpu::TextureView, color: wgpu::Color) {
-    let mut encoder = ctx.device().create_command_encoder(&Default::default());
+    let Some(gpu) = ctx.gpu() else {
+        return;
+    };
+    let mut encoder = gpu.device.create_command_encoder(&Default::default());
     encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view,
@@ -29,7 +32,7 @@ fn clear(ctx: &MorphContext, view: &wgpu::TextureView, color: wgpu::Color) {
         })],
         ..Default::default()
     });
-    ctx.queue().submit([encoder.finish()]);
+    gpu.queue.submit([encoder.finish()]);
 }
 
 use libmorph::wgpu;

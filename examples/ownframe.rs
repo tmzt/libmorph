@@ -85,7 +85,10 @@ impl MorphApp for OwnFrame {
             b: 0.55 - 0.4 * step,
             a: 1.0,
         };
-        let mut encoder = ctx.device().create_command_encoder(&Default::default());
+        let Some(gpu) = ctx.gpu() else {
+            return;
+        };
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
         encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &frame.view,
@@ -98,7 +101,7 @@ impl MorphApp for OwnFrame {
             })],
             ..Default::default()
         });
-        ctx.queue().submit([encoder.finish()]);
+        gpu.queue.submit([encoder.finish()]);
 
         // Presented before `construct_frame` returns, which is the one
         // rule an owning app keeps. Pacing is the app's: `Fifo` paces the

@@ -37,10 +37,16 @@ const RECENT: usize = 5;
 /// How often the rate is reported.
 const REPORT_EVERY: Duration = Duration::from_secs(1);
 
-struct HiFps {
+/// What the picture is drawn with: built with a device, in `init`.
+struct Scene {
     pipeline: wgpu::RenderPipeline,
     uniform: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
+}
+
+struct HiFps {
+    /// `None` only without a device, which `init` always has.
+    scene: Option<Scene>,
 
     /// Simulated seconds, accumulated from `update`. Drives the picture, so
     /// it is independent of how fast the loop actually runs.
@@ -55,47 +61,12 @@ struct HiFps {
     unavailable: u64,
 }
 
-impl MorphApp for HiFps {
-    /// The frame is the app's: libmorph stops acquiring, calling `render`,
-    /// drawing the overlay and presenting. Everything else stays its own.
-    const OWNS: Owned = Owned::FRAME;
-
-    /// The surface is still libmorph's to configure, and this is where an
-    /// owning app says how. Not called in a scripted run, which has no
-    /// surface.
-    fn wgpu_config(
-        default: wgpu::SurfaceConfiguration,
-        caps: &wgpu::SurfaceCapabilities,
-    ) -> wgpu::SurfaceConfiguration {
-        // In order of preference: Immediate never waits for the display,
-        // Mailbox waits but keeps only the newest frame, and Fifo - the
-        // default everywhere - paces the loop to the refresh rate, which
-        // would cap this example at the display and hide the point.
-        let wanted = [wgpu::PresentMode::Immediate, wgpu::PresentMode::Mailbox];
-        let present_mode = wanted
-            .into_iter()
-            .find(|mode| caps.present_modes.contains(mode))
-            .unwrap_or(default.present_mode);
-        if present_mode == default.present_mode {
-            log::warn!(
-                "hifps: neither Immediate nor Mailbox is offered ({:?}); \
-                 the loop will be paced by the display",
-                caps.present_modes
-            );
-        } else {
-            log::info!("hifps: presenting with {present_mode:?}");
-        }
-        wgpu::SurfaceConfiguration {
-            present_mode,
-            // One frame in flight. A request, clamped to the surface's
-            // own range, so read nothing back as a guarantee.
-            desired_maximum_frame_latency: 1,
-            ..default
-        }
-    }
-
-    fn init(ctx: &mut MorphContext) -> Self {
-        let device = ctx.device();
+impl Scene {
+    fn new(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        cache: Option<&wgpu::PipelineCache>,
+    ) -> Self {
         let shader = device.create_shader_module(wgpu::include_wgsl!("hifps.wgsl"));
 
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -143,19 +114,67 @@ impl MorphApp for HiFps {
                 module: &shader,
                 entry_point: Some("fs_main"),
                 compilation_options: Default::default(),
-                targets: &[Some(ctx.surface_format().into())],
+                targets: &[Some(format.into())],
             }),
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview_mask: None,
-            cache: ctx.pipeline_cache(),
+            cache,
         });
 
         Self {
             pipeline,
             uniform,
             bind_group,
+        }
+    }
+}
+
+impl MorphApp for HiFps {
+    /// The frame is the app's: libmorph stops acquiring, calling `render`,
+    /// drawing the overlay and presenting. Everything else stays its own.
+    const OWNS: Owned = Owned::FRAME;
+
+    /// The surface is still libmorph's to configure, and this is where an
+    /// owning app says how. Not called in a scripted run, which has no
+    /// surface.
+    fn wgpu_config(
+        default: wgpu::SurfaceConfiguration,
+        caps: &wgpu::SurfaceCapabilities,
+    ) -> wgpu::SurfaceConfiguration {
+        // In order of preference: Immediate never waits for the display,
+        // Mailbox waits but keeps only the newest frame, and Fifo - the
+        // default everywhere - paces the loop to the refresh rate, which
+        // would cap this example at the display and hide the point.
+        let wanted = [wgpu::PresentMode::Immediate, wgpu::PresentMode::Mailbox];
+        let present_mode = wanted
+            .into_iter()
+            .find(|mode| caps.present_modes.contains(mode))
+            .unwrap_or(default.present_mode);
+        if present_mode == default.present_mode {
+            log::warn!(
+                "hifps: neither Immediate nor Mailbox is offered ({:?}); \
+                 the loop will be paced by the display",
+                caps.present_modes
+            );
+        } else {
+            log::info!("hifps: presenting with {present_mode:?}");
+        }
+        wgpu::SurfaceConfiguration {
+            present_mode,
+            // One frame in flight. A request, clamped to the surface's
+            // own range, so read nothing back as a guarantee.
+            desired_maximum_frame_latency: 1,
+            ..default
+        }
+    }
+
+    fn init(ctx: &mut MorphContext) -> Self {
+        let format = ctx.surface_format();
+        let cache = ctx.pipeline_cache();
+        Self {
+            scene: ctx.gpu().map(|gpu| Scene::new(&gpu.device, format, cache)),
             elapsed: 0.0,
             last: None,
             recent: VecDeque::with_capacity(RECENT),
@@ -189,10 +208,12 @@ impl MorphApp for HiFps {
 
         let (width, height) = frame.size;
         let uniforms = [self.elapsed, width as f32, height as f32, 0.0];
-        ctx.queue()
-            .write_buffer(&self.uniform, 0, &bytes(&uniforms));
+        let (Some(gpu), Some(scene)) = (ctx.gpu(), &self.scene) else {
+            return;
+        };
+        gpu.queue.write_buffer(&scene.uniform, 0, &bytes(&uniforms));
 
-        let mut encoder = ctx.device().create_command_encoder(&Default::default());
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("hifps"),
@@ -207,11 +228,11 @@ impl MorphApp for HiFps {
                 })],
                 ..Default::default()
             });
-            pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &self.bind_group, &[]);
+            pass.set_pipeline(&scene.pipeline);
+            pass.set_bind_group(0, &scene.bind_group, &[]);
             pass.draw(0..3, 0..1);
         }
-        ctx.queue().submit([encoder.finish()]);
+        gpu.queue.submit([encoder.finish()]);
 
         // Presented before this returns, which is the one rule an owning
         // app keeps: libmorph may reconfigure the surface between
@@ -225,7 +246,7 @@ impl MorphApp for HiFps {
         // and it matters most exactly here: a loop running flat out with a
         // shallow queue submits often, and on a backend that needs it,
         // nothing is reclaimed until something maintains the device.
-        if let Err(error) = ctx.device().poll(wgpu::PollType::Poll) {
+        if let Err(error) = gpu.device.poll(wgpu::PollType::Poll) {
             log::warn!("hifps: polling the device: {error}");
         }
     }

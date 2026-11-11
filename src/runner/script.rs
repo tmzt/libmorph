@@ -9,7 +9,7 @@ use libdevice::InsetType;
 use super::overlay::Overlay;
 use super::shell::Shell;
 use crate::camera::ScriptFrame;
-use crate::gpu::{self, Gpu};
+use crate::gpu::{self, DeviceRequest};
 use crate::media::{MediaSource, ScriptAnswer, ScriptFile};
 use crate::screenshot::{self, Entry, ExitBy, Manifest};
 use crate::script::{Action, Report, Screenshot, Script, ScriptError, ScriptRun};
@@ -20,11 +20,15 @@ pub(crate) fn run<A: MorphApp>(script: &Script, run: ScriptRun) -> Result<Report
     let dir = run.out.create().map_err(ScriptError::Io)?;
     println!("libmorph: output {}", dir.display());
 
+    let request = DeviceRequest {
+        force_fallback_adapter: run.fallback_adapter,
+        pipeline_cache: false,
+    };
     let gpu = pollster::block_on(async {
         let instance = gpu::instance(None).await;
-        Gpu::new(instance, None, run.fallback_adapter, A::limits, false).await
+        gpu::bring_up(instance, None, request, A::limits, A::MEMORY_HINTS).await
     })?;
-    let adapter = gpu.adapter.get_info();
+    let adapter = gpu.opened.adapter.get_info();
     let spec = run.spec;
     let size = (spec.geometry.width, spec.geometry.height);
     // Asked as on every host, but scripted runs stay silent.
@@ -46,7 +50,7 @@ pub(crate) fn run<A: MorphApp>(script: &Script, run: ScriptRun) -> Result<Report
     let fps = script.fps();
     let mut shell = Shell::<A>::start_offscreen(ctx, size, Duration::from_secs(1) / fps);
     if run.overlay {
-        shell.overlay = Some(Overlay::new(&shell.ctx));
+        shell.overlay = Overlay::new(&shell.ctx);
     }
     let mut manifest = Manifest {
         script: script.path().map(|path| path.display().to_string()),
@@ -246,7 +250,10 @@ fn read_rgb<A: MorphApp>(shell: &Shell<A>) -> Result<Vec<u8>, ScriptError> {
     let (width, height) = shell.ctx.surface_size;
     let bytes_per_row = (width * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
         * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-    let device = &shell.gpu().device;
+    let Some(gpu) = shell.ctx.gpu() else {
+        return Err(readback("there is no device"));
+    };
+    let device = &gpu.device;
     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("libmorph screenshot"),
         size: u64::from(bytes_per_row) * u64::from(height),
@@ -272,7 +279,7 @@ fn read_rgb<A: MorphApp>(shell: &Shell<A>) -> Result<Vec<u8>, ScriptError> {
             depth_or_array_layers: 1,
         },
     );
-    shell.gpu().queue.submit([encoder.finish()]);
+    gpu.queue.submit([encoder.finish()]);
     let (sender, mapped) = std::sync::mpsc::channel();
     buffer.map_async(wgpu::MapMode::Read, .., move |result| {
         let _ = sender.send(result);

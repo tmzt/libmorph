@@ -120,14 +120,74 @@ fn format_report(at: &str, report: Option<&wgpu::AllocatorReport>) -> String {
     }
 }
 
-/// The handles that outlive every surface.
-#[derive(Debug)]
-pub(crate) struct Gpu {
-    pub instance: wgpu::Instance,
-    pub adapter: wgpu::Adapter,
+/// The device and queue an app draws with, as
+/// [`MorphContext::gpu`](crate::MorphContext::gpu) hands them out: cheap to
+/// clone (an `Arc` each), and holding no borrow of the context.
+///
+/// A clone keeps the device alive. An app whose
+/// [`GPU_IN_BACKGROUND`](crate::MorphApp::GPU_IN_BACKGROUND) is `Release`
+/// drops every clone, with every other wgpu object, in
+/// [`on_gpu(Release)`](crate::MorphApp::on_gpu): memory goes back only when
+/// the last handle goes.
+#[derive(Clone, Debug)]
+pub struct Gpu {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
+}
+
+/// What an app does with its GPU device while it has no surface, as
+/// [`MorphApp::GPU_IN_BACKGROUND`](crate::MorphApp::GPU_IN_BACKGROUND).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum GpuInBackground {
+    /// Keep the device off screen: libmorph's behaviour before this
+    /// existed, and the default.
+    Keep,
+    /// Give the device back after `after` without a surface, or at once,
+    /// without a surface, under memory pressure (a `Background` trim or
+    /// above, or low memory), and request a new one at the next surface.
+    Release { after: std::time::Duration },
+}
+
+/// What happened to the device, for an app whose
+/// [`GPU_IN_BACKGROUND`](crate::MorphApp::GPU_IN_BACKGROUND) is `Release`.
+/// Passed to [`MorphApp::on_gpu`](crate::MorphApp::on_gpu), always with a
+/// device.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum GpuEvent {
+    /// The device goes when this returns: drop every wgpu object, cloned
+    /// [`Gpu`] values included.
+    Release,
+    /// A new device, with the same limits: rebuild before the next frame.
+    /// [`on_resume`](crate::MorphApp::on_resume) follows.
+    Restored,
+}
+
+/// The device libmorph opened, with its adapter: what a release drops.
+#[derive(Debug)]
+pub(crate) struct Opened {
+    pub adapter: wgpu::Adapter,
+    pub gpu: Gpu,
+}
+
+/// What bring-up gives: what stays for the whole run (the instance and the
+/// limits first granted), and the first device.
+#[derive(Debug)]
+pub(crate) struct BringUp {
+    pub instance: wgpu::Instance,
     pub limits: wgpu::Limits,
+    pub opened: Opened,
+}
+
+/// How a runner asks for a device.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DeviceRequest {
+    pub force_fallback_adapter: bool,
+    /// `PIPELINE_CACHE` where the adapter offers it on Vulkan: `true` only
+    /// from a runner whose host keeps a data directory (Android), which is
+    /// where the cache's data is kept.
+    pub pipeline_cache: bool,
 }
 
 fn backends() -> wgpu::Backends {
@@ -156,70 +216,90 @@ pub(crate) async fn instance(
     }
 }
 
-impl Gpu {
-    /// Pick an adapter that can present to `surface` (any adapter for
-    /// scripted runs, which have none) and open a device on it with the
-    /// limits `limits` asks for (the app's `MorphApp::limits`). A plain `fn`
-    /// pointer, so it moves into the web's `spawn_local` future.
-    /// `want_pipeline_cache` asks for `PIPELINE_CACHE` where the adapter
-    /// offers it on Vulkan: `true` only from a runner whose host keeps a data
-    /// directory (Android), which is where the cache's data is kept.
-    pub async fn new(
-        instance: wgpu::Instance,
-        surface: Option<&wgpu::Surface<'_>>,
-        force_fallback_adapter: bool,
-        limits: fn(&wgpu::Limits) -> LimitsRequest,
-        want_pipeline_cache: bool,
-    ) -> Result<Self, GpuError> {
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: surface,
-                force_fallback_adapter,
-                apply_limit_buckets: false,
-            })
-            .await
-            .map_err(GpuError::Adapter)?;
-        let info = adapter.get_info();
-        log::info!("libmorph: {} ({:?})", info.name, info.backend);
-
-        // GLES (WebGL2, older Android) gets the WebGL2 floor; everything
-        // else the downlevel one. Texture sizes rise to what the adapter
-        // allows, so full-resolution device frames fit.
-        let base = if info.backend == wgpu::Backend::Gl {
-            wgpu::Limits::downlevel_webgl2_defaults()
-        } else {
-            wgpu::Limits::downlevel_defaults()
-        };
-        let base = base.using_resolution(adapter.limits());
-        let limits = resolve_limits(&limits(&base), &adapter.limits())?;
-        let required_features = if want_pipeline_cache
-            && wgpu::util::pipeline_cache_key(&info).is_some()
-            && adapter.features().contains(wgpu::Features::PIPELINE_CACHE)
-        {
-            wgpu::Features::PIPELINE_CACHE
-        } else {
-            wgpu::Features::empty()
-        };
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: Some("libmorph"),
-                required_features,
-                required_limits: limits.clone(),
-                memory_hints: wgpu::MemoryHints::Performance,
-                ..Default::default()
-            })
-            .await
-            .map_err(GpuError::Device)?;
-        Ok(Self {
-            instance,
-            adapter,
-            device,
-            queue,
-            limits,
+/// An adapter that can present to `surface` (any adapter for scripted
+/// runs, which have none).
+async fn adapter(
+    instance: &wgpu::Instance,
+    surface: Option<&wgpu::Surface<'_>>,
+    request: DeviceRequest,
+) -> Result<wgpu::Adapter, GpuError> {
+    let adapter = instance
+        .request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: surface,
+            force_fallback_adapter: request.force_fallback_adapter,
+            apply_limit_buckets: false,
         })
-    }
+        .await
+        .map_err(GpuError::Adapter)?;
+    let info = adapter.get_info();
+    log::info!("libmorph: {} ({:?})", info.name, info.backend);
+    Ok(adapter)
+}
 
+/// A device on `adapter` with exactly `limits`.
+async fn open(
+    adapter: wgpu::Adapter,
+    limits: &wgpu::Limits,
+    request: DeviceRequest,
+    memory_hints: wgpu::MemoryHints,
+) -> Result<Opened, GpuError> {
+    let info = adapter.get_info();
+    let required_features = if request.pipeline_cache
+        && wgpu::util::pipeline_cache_key(&info).is_some()
+        && adapter.features().contains(wgpu::Features::PIPELINE_CACHE)
+    {
+        wgpu::Features::PIPELINE_CACHE
+    } else {
+        wgpu::Features::empty()
+    };
+    let (device, queue) = adapter
+        .request_device(&wgpu::DeviceDescriptor {
+            label: Some("libmorph"),
+            required_features,
+            required_limits: limits.clone(),
+            memory_hints,
+            ..Default::default()
+        })
+        .await
+        .map_err(GpuError::Device)?;
+    Ok(Opened {
+        adapter,
+        gpu: Gpu { device, queue },
+    })
+}
+
+/// Pick an adapter for `surface` and open the run's first device on it with
+/// the limits `limits` asks for (the app's `MorphApp::limits`) and the
+/// app's `memory_hints`. A plain `fn` pointer, so it moves into the web's
+/// `spawn_local` future.
+pub(crate) async fn bring_up(
+    instance: wgpu::Instance,
+    surface: Option<&wgpu::Surface<'_>>,
+    request: DeviceRequest,
+    limits: fn(&wgpu::Limits) -> LimitsRequest,
+    memory_hints: wgpu::MemoryHints,
+) -> Result<BringUp, GpuError> {
+    let adapter = adapter(&instance, surface, request).await?;
+    // GLES (WebGL2, older Android) gets the WebGL2 floor; everything
+    // else the downlevel one. Texture sizes rise to what the adapter
+    // allows, so full-resolution device frames fit.
+    let base = if adapter.get_info().backend == wgpu::Backend::Gl {
+        wgpu::Limits::downlevel_webgl2_defaults()
+    } else {
+        wgpu::Limits::downlevel_defaults()
+    };
+    let base = base.using_resolution(adapter.limits());
+    let limits = resolve_limits(&limits(&base), &adapter.limits())?;
+    let opened = open(adapter, &limits, request, memory_hints).await?;
+    Ok(BringUp {
+        instance,
+        limits,
+        opened,
+    })
+}
+
+impl Opened {
     /// Configure `surface` at `size`, keeping `previous` (the format the
     /// app's pipelines were built for) whenever the surface still offers it,
     /// else preferring an sRGB or non-sRGB format as `srgb` asks.
@@ -248,7 +328,7 @@ impl Gpu {
             );
         }
         let config = apply_wgpu_config(config, &caps, wgpu_config, (width, height));
-        surface.configure(&self.device, &config);
+        surface.configure(&self.gpu.device, &config);
         Some(config)
     }
 }

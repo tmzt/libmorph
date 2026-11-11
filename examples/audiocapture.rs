@@ -104,7 +104,8 @@ pub struct AudioCapture {
     asked: usize,
     /// `None` until capture is ready.
     columns: Option<Arc<Mutex<Columns>>>,
-    view: Spectrogram,
+    /// `None` only without a device, which `init` always has.
+    view: Option<Spectrogram>,
     /// Time since the streams' states were last logged.
     since_states: Duration,
 }
@@ -197,13 +198,12 @@ impl MorphApp for AudioCapture {
     }
 
     fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
-        match &self.columns {
-            Some(columns) => {
-                self.view.upload(ctx, columns);
-                self.view
-                    .draw(ctx, frame, self.mode.load(Ordering::Relaxed));
+        match (&self.columns, &mut self.view) {
+            (Some(columns), Some(view)) => {
+                view.upload(ctx, columns);
+                view.draw(ctx, frame, self.mode.load(Ordering::Relaxed));
             }
-            None => clear(ctx, frame),
+            _ => clear(ctx, frame),
         }
         RenderStatus::Drawn
     }
@@ -231,7 +231,10 @@ impl MorphApp for AudioCapture {
 
 /// The dark red screen before capture is ready.
 fn clear(ctx: &MorphContext, frame: &Frame<'_>) {
-    let mut encoder = ctx.device().create_command_encoder(&Default::default());
+    let Some(gpu) = ctx.gpu() else {
+        return;
+    };
+    let mut encoder = gpu.device.create_command_encoder(&Default::default());
     encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view: frame.view,
@@ -249,7 +252,7 @@ fn clear(ctx: &MorphContext, frame: &Frame<'_>) {
         })],
         ..Default::default()
     });
-    ctx.queue().submit([encoder.finish()]);
+    gpu.queue.submit([encoder.finish()]);
 }
 
 /// The spectrogram on the GPU: the ring as an `R8Unorm` texture, drawn full
@@ -267,8 +270,9 @@ struct Spectrogram {
 }
 
 impl Spectrogram {
-    fn new(ctx: &MorphContext) -> Self {
-        let device = ctx.device();
+    /// The spectrogram's GPU side: `None` without a device.
+    fn new(ctx: &MorphContext) -> Option<Self> {
+        let device = ctx.device()?;
         let format = ctx.surface_format();
         let shader = device.create_shader_module(wgpu::include_wgsl!("audiocapture.wgsl"));
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -357,7 +361,7 @@ impl Spectrogram {
                 },
             ],
         });
-        Self {
+        Some(Self {
             pipeline,
             texture,
             uniforms,
@@ -365,7 +369,7 @@ impl Spectrogram {
             format,
             uploaded: u64::MAX,
             next: 0,
-        }
+        })
     }
 
     /// Copy the ring to the texture if the analysis has added columns.
@@ -376,7 +380,10 @@ impl Spectrogram {
             return;
         }
         self.uploaded = columns.written;
-        ctx.queue().write_texture(
+        let Some(gpu) = ctx.gpu() else {
+            return;
+        };
+        gpu.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &self.texture,
                 mip_level: 0,
@@ -397,15 +404,20 @@ impl Spectrogram {
     /// `mode` is the granted mode's place in [`MODES`], for the band.
     fn draw(&mut self, ctx: &MorphContext, frame: &Frame<'_>, mode: usize) {
         if frame.format != self.format {
-            *self = Self::new(ctx);
+            if let Some(view) = Self::new(ctx) {
+                *self = view;
+            }
             return;
         }
         let bytes: Vec<u8> = [self.next, COLUMNS as u32, ROWS as u32, mode as u32]
             .iter()
             .flat_map(|value| value.to_ne_bytes())
             .collect();
-        ctx.queue().write_buffer(&self.uniforms, 0, &bytes);
-        let mut encoder = ctx.device().create_command_encoder(&Default::default());
+        let Some(gpu) = ctx.gpu() else {
+            return;
+        };
+        gpu.queue.write_buffer(&self.uniforms, 0, &bytes);
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("spectrogram"),
@@ -424,7 +436,7 @@ impl Spectrogram {
             pass.set_bind_group(0, &self.bind_group, &[]);
             pass.draw(0..3, 0..1);
         }
-        ctx.queue().submit([encoder.finish()]);
+        gpu.queue.submit([encoder.finish()]);
     }
 }
 

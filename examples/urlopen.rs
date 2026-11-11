@@ -98,7 +98,10 @@ impl MorphApp for UrlOpen {
             },
             color,
         );
-        let mut encoder = ctx.device().create_command_encoder(&Default::default());
+        let Some(gpu) = ctx.gpu() else {
+            return RenderStatus::Skipped;
+        };
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
         encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: frame.view,
@@ -111,7 +114,7 @@ impl MorphApp for UrlOpen {
             })],
             ..Default::default()
         });
-        ctx.queue().submit([encoder.finish()]);
+        gpu.queue.submit([encoder.finish()]);
         RenderStatus::Drawn
     }
 

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use libdevice::DeviceSpec;
 
-use crate::gpu::Gpu;
+use crate::gpu::{BringUp, Gpu, Opened};
 use crate::log_once::log_once;
 use crate::pipeline_cache::PipelineCacheStore;
 use crate::{Audio, OpenLinkError, PermissionRequest, SafeArea, SecureStore};
@@ -110,11 +110,21 @@ impl std::fmt::Display for AcquireError {
 
 impl std::error::Error for AcquireError {}
 
-/// Shared state for the whole run. The device and queue never change; the
-/// surface size, format, safe area and scale factor follow the host.
+/// Shared state for the whole run. The surface size, format, safe area and
+/// scale factor follow the host. The device and queue stay for the whole
+/// run unless the app's
+/// [`GPU_IN_BACKGROUND`](crate::MorphApp::GPU_IN_BACKGROUND) is `Release`,
+/// in which case they may be released while it has no surface: the device
+/// accessors return `Option` for that reason (plan
+/// `20261111_03_THE_DEVICE_MAY_BE_ABSENT_PLAN.md`).
 #[derive(Debug)]
 pub struct MorphContext {
-    pub(crate) gpu: Gpu,
+    /// Kept for the whole run: a restore creates its surface from it.
+    pub(crate) instance: wgpu::Instance,
+    /// The limits first granted; a restore asks for the same.
+    pub(crate) limits: wgpu::Limits,
+    /// The device, queue and adapter: `None` while released.
+    pub(crate) device: Option<Opened>,
     pub(crate) spec: DeviceSpec,
     pub(crate) safe_area: SafeArea,
     pub(crate) scale_factor: f32,
@@ -163,9 +173,11 @@ pub struct MorphContext {
 }
 
 impl MorphContext {
-    pub(crate) fn new(gpu: Gpu, spec: DeviceSpec, args: Vec<String>, audio: Audio) -> Self {
+    pub(crate) fn new(gpu: BringUp, spec: DeviceSpec, args: Vec<String>, audio: Audio) -> Self {
         Self {
-            gpu,
+            instance: gpu.instance,
+            limits: gpu.limits,
+            device: Some(gpu.opened),
             spec,
             safe_area: SafeArea::NONE,
             scale_factor: spec.pixel_ratio,
@@ -199,25 +211,64 @@ impl MorphContext {
         }
     }
 
+    /// The device and the queue, cloned (an `Arc` each, so the value holds
+    /// no borrow of the context): `None` while the device is released,
+    /// which only an app whose
+    /// [`GPU_IN_BACKGROUND`](crate::MorphApp::GPU_IN_BACKGROUND) is
+    /// `Release` can see.
+    ///
+    /// Take it once at the top of a callback that does GPU work, and decide
+    /// there what that callback does without a device: return, defer the
+    /// GPU part, or carry on with the part that needs none.
+    ///
+    /// ```ignore
+    /// fn on_intent(&mut self, ctx: &mut MorphContext, intent: &Intent) {
+    ///     self.settings.apply(intent); // needs no GPU: always runs
+    ///     let Some(gpu) = ctx.gpu() else {
+    ///         self.pending_scene = scene_of(intent); // the GPU part waits
+    ///         return;
+    ///     };
+    ///     self.scene.load(&gpu.device, &gpu.queue, intent);
+    /// }
+    /// ```
+    ///
+    /// In [`init`](crate::MorphApp::init), [`update`](crate::MorphApp::update),
+    /// [`render`](crate::MorphApp::render) and the other callbacks
+    /// libmorph only calls with a device (see
+    /// [`MorphApp`](crate::MorphApp)), it is always `Some`; there,
+    /// `let Some(gpu) = ctx.gpu() else { return };` (with
+    /// `RenderStatus::Skipped` from `render`) never returns early.
     #[must_use]
-    pub fn device(&self) -> &wgpu::Device {
-        &self.gpu.device
+    pub fn gpu(&self) -> Option<Gpu> {
+        self.device.as_ref().map(|opened| opened.gpu.clone())
     }
 
+    /// The device: `None` while it is released (see [`gpu`](Self::gpu)).
     #[must_use]
-    pub fn queue(&self) -> &wgpu::Queue {
-        &self.gpu.queue
+    pub fn device(&self) -> Option<&wgpu::Device> {
+        self.device.as_ref().map(|opened| &opened.gpu.device)
     }
 
+    /// The queue: `None` while the device is released (see
+    /// [`gpu`](Self::gpu)).
     #[must_use]
-    pub fn adapter_info(&self) -> wgpu::AdapterInfo {
-        self.gpu.adapter.get_info()
+    pub fn queue(&self) -> Option<&wgpu::Queue> {
+        self.device.as_ref().map(|opened| &opened.gpu.queue)
+    }
+
+    /// The adapter's description: `None` while the device is released
+    /// (see [`gpu`](Self::gpu)).
+    #[must_use]
+    pub fn adapter_info(&self) -> Option<wgpu::AdapterInfo> {
+        self.device.as_ref().map(|opened| opened.adapter.get_info())
     }
 
     /// The limits the device was granted; feature-detect against these.
+    /// Always the limits first granted: a restore asks for the same, so
+    /// this is there with or without a device.
     #[must_use]
     pub fn limits(&self) -> &wgpu::Limits {
-        &self.gpu.limits
+        &self.limits
     }
 
     /// The device being emulated on desktop. On Android and the web, the
@@ -311,11 +362,12 @@ impl MorphContext {
     }
 
     /// The pipeline cache to pass as `cache` in pipeline descriptors.
-    /// `None` unless the host persists one (Android on Vulkan): libmorph
-    /// loads it from `<data_dir>/libmorph/` before
-    /// [`init`](crate::MorphApp::init) and saves it after `init`, on suspend
-    /// and on exit. It is a cheap clone for pipelines built on another
-    /// thread.
+    /// `None` unless the host persists one (Android on Vulkan), and while
+    /// the device is released: libmorph loads it from
+    /// `<data_dir>/libmorph/` before [`init`](crate::MorphApp::init) and
+    /// saves it after `init`, on suspend, on exit and before a release,
+    /// and reopens it with a restored device. It is a cheap clone for
+    /// pipelines built on another thread.
     #[must_use]
     pub fn pipeline_cache(&self) -> Option<&wgpu::PipelineCache> {
         self.pipeline_cache.as_ref().map(PipelineCacheStore::cache)
@@ -659,7 +711,12 @@ impl MorphContext {
         // The view borrows the texture, so it goes first.
         drop(view);
         match source {
-            FrameSource::Surface(texture) => self.gpu.queue.present(texture),
+            FrameSource::Surface(texture) => {
+                // `construct_frame` is only called with a device.
+                if let Some(opened) = &self.device {
+                    opened.gpu.queue.present(texture);
+                }
+            }
             #[cfg(script_runner)]
             FrameSource::Offscreen => {}
         }
@@ -685,8 +742,9 @@ impl MorphContext {
 
     /// Configure the surface again with the configuration it has.
     pub(crate) fn reconfigure(&mut self) {
-        if let Some(Target::Surface(surface, config)) = &self.target {
-            surface.configure(&self.gpu.device, config);
+        if let (Some(Target::Surface(surface, config)), Some(opened)) = (&self.target, &self.device)
+        {
+            surface.configure(&opened.gpu.device, config);
         }
     }
 

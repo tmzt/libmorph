@@ -4,7 +4,10 @@ use std::time::Duration;
 
 use crate::log_once::log_once;
 use crate::service::ServiceEvent;
-use crate::{AudioSetup, Key, KeyStatus, LimitsRequest, MorphContext, Permissions, Touch};
+use crate::{
+    AudioSetup, GpuEvent, GpuInBackground, Key, KeyStatus, LimitsRequest, MorphContext,
+    Permissions, Touch,
+};
 
 /// The surface texture for one frame. libmorph presents it after
 /// [`MorphApp::render`] returns [`RenderStatus::Drawn`].
@@ -124,6 +127,44 @@ pub trait MorphApp: Sized + 'static {
     /// default) uses the executable's file stem, with any other character
     /// replaced by `_`. Android uses the package's own directories instead.
     const APP_ID: &'static str = "";
+
+    /// What libmorph does with the GPU device while the app has no
+    /// surface (plan `20261111_03_THE_DEVICE_MAY_BE_ABSENT_PLAN.md`).
+    /// [`GpuInBackground::Keep`] - the default - keeps it for the whole
+    /// run, as libmorph always did.
+    ///
+    /// [`GpuInBackground::Release`] gives it back after `after` without a
+    /// surface, or at once, without a surface, on a `Background` trim or
+    /// above or on low memory, so another app in front gets the GPU memory
+    /// this one held. The app hears [`on_gpu`](Self::on_gpu) with
+    /// [`GpuEvent::Release`] first and drops every wgpu object it holds;
+    /// at the next surface libmorph requests a device with the same limits
+    /// and calls `on_gpu` with [`GpuEvent::Restored`] before
+    /// [`on_resume`](Self::on_resume). While it is released,
+    /// [`ctx.gpu()`](MorphContext::gpu) and the other device accessors
+    /// return `None`.
+    ///
+    /// ```
+    /// # use libmorph::GpuInBackground;
+    /// # use std::time::Duration;
+    /// const GPU_IN_BACKGROUND: GpuInBackground = GpuInBackground::Release {
+    ///     after: Duration::from_secs(10),
+    /// };
+    /// ```
+    const GPU_IN_BACKGROUND: GpuInBackground = GpuInBackground::Keep;
+
+    /// wgpu's memory hints for every device libmorph requests for this app:
+    /// the first, and each one after a release.
+    /// [`MemoryHints::Performance`](wgpu::MemoryHints::Performance) - the
+    /// default - is what libmorph always asked for;
+    /// [`MemoryHints::MemoryUsage`](wgpu::MemoryHints::MemoryUsage) trades
+    /// some speed for smaller allocations.
+    ///
+    /// ```
+    /// # use libmorph::wgpu;
+    /// const MEMORY_HINTS: wgpu::MemoryHints = wgpu::MemoryHints::MemoryUsage;
+    /// ```
+    const MEMORY_HINTS: wgpu::MemoryHints = wgpu::MemoryHints::Performance;
 
     /// The device limits to ask for, before [`init`](Self::init). `base` is
     /// what libmorph asks for by default: the downlevel defaults (WebGL2
@@ -263,7 +304,7 @@ pub trait MorphApp: Sized + 'static {
     ///
     /// **A frame acquired here is presented or dropped before this
     /// returns.** Pacing, and when to call
-    /// [`ctx.device()`](MorphContext::device)`.poll(..)`, are the app's.
+    /// the device's `poll(..)`, are the app's.
     /// The desktop overlay is not drawn, because it is drawn into the
     /// frame libmorph constructs and libmorph constructs none.
     ///
@@ -419,6 +460,21 @@ pub trait MorphApp: Sized + 'static {
     fn on_resume(&mut self, ctx: &mut MorphContext) {
         let _ = ctx;
     }
+
+    /// The device is about to be released, or has been restored. Called
+    /// only for an app whose [`GPU_IN_BACKGROUND`](Self::GPU_IN_BACKGROUND)
+    /// is `Release`, and always with a device.
+    ///
+    /// [`GpuEvent::Release`]: drop every wgpu object the app holds -
+    /// buffers, textures, pipelines, bind groups and cloned
+    /// [`Gpu`](crate::Gpu) values - because the device's memory goes back
+    /// only with its last handle. [`GpuEvent::Restored`]: a new device
+    /// with the same limits; rebuild before the next frame, reading
+    /// [`ctx.surface_format()`](MorphContext::surface_format) again, as in
+    /// [`init`](Self::init). [`on_resume`](Self::on_resume) follows.
+    fn on_gpu(&mut self, ctx: &mut MorphContext, event: &GpuEvent) {
+        let _ = (ctx, event);
+    }
 }
 
 #[cfg(test)]
@@ -464,5 +520,22 @@ mod tests {
         }
         assert_eq!(Quiet::OWNS, Owned::empty());
         assert!(!Quiet::OWNS.contains(Owned::FRAME));
+    }
+
+    /// An app that says nothing keeps its device off screen and asks for
+    /// the memory hints libmorph always asked for: nothing changes for it.
+    #[test]
+    fn an_app_keeps_its_device_by_default() {
+        struct Quiet;
+        impl MorphApp for Quiet {
+            fn init(_ctx: &mut crate::MorphContext) -> Self {
+                unreachable!("the consts are read without an instance")
+            }
+        }
+        assert_eq!(Quiet::GPU_IN_BACKGROUND, crate::GpuInBackground::Keep);
+        assert!(matches!(
+            Quiet::MEMORY_HINTS,
+            wgpu::MemoryHints::Performance
+        ));
     }
 }

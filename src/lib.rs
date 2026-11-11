@@ -50,7 +50,7 @@ pub use build_info::BuildInfo;
 pub use clipboard::{ClipboardError, ClipboardWrite};
 pub use config::{MORPH_ARGS_HELP, MorphError};
 pub use context::{AcquireError, AcquiredFrame, MorphContext};
-pub use gpu::{GpuError, LimitFailure, LimitsRequest};
+pub use gpu::{Gpu, GpuError, GpuEvent, GpuInBackground, LimitFailure, LimitsRequest};
 pub use input::{Key, KeyStatus, Touch, TouchPhase};
 pub use intent::Intent;
 #[cfg(feature = "secure-store")]

@@ -48,10 +48,16 @@ const SCENE: [&[[f32; 4]]; STORAGE_BUFFERS as usize] = [
     &[[0.6, 0.8, 0.4, 1.4], [-0.7, 0.3, -0.5, 0.35]],
 ];
 
-struct Raymarch {
+/// What the scene is drawn with: built with a device, in `init`.
+struct Scene {
     pipeline: wgpu::RenderPipeline,
     frame: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
+}
+
+struct Raymarch {
+    /// `None` only without a device, which `init` always has.
+    scene: Option<Scene>,
     time: f32,
     yaw: f32,
     pitch: f32,
@@ -69,26 +75,8 @@ fn bytes(values: &[[f32; 4]]) -> Vec<u8> {
         .collect()
 }
 
-impl MorphApp for Raymarch {
-    fn limits(base: &wgpu::Limits) -> LimitsRequest {
-        let required = wgpu::Limits {
-            max_storage_buffers_per_shader_stage: STORAGE_BUFFERS,
-            ..base.clone()
-        };
-        LimitsRequest {
-            preferred: required.clone(),
-            required,
-        }
-    }
-
-    fn init(ctx: &mut MorphContext) -> Self {
-        log::info!(
-            "{} ({:?}), storage buffers per stage: {}",
-            ctx.adapter_info().name,
-            ctx.surface_format(),
-            ctx.limits().max_storage_buffers_per_shader_stage,
-        );
-        let device = ctx.device();
+impl Scene {
+    fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let shader = device.create_shader_module(wgpu::include_wgsl!("raymarch.wgsl"));
 
         let mut entries = vec![wgpu::BindGroupLayoutEntry {
@@ -170,7 +158,7 @@ impl MorphApp for Raymarch {
                 module: &shader,
                 entry_point: Some("fs_main"),
                 compilation_options: Default::default(),
-                targets: &[Some(ctx.surface_format().into())],
+                targets: &[Some(format.into())],
             }),
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
@@ -182,6 +170,33 @@ impl MorphApp for Raymarch {
             pipeline,
             frame,
             bind_group,
+        }
+    }
+}
+
+impl MorphApp for Raymarch {
+    fn limits(base: &wgpu::Limits) -> LimitsRequest {
+        let required = wgpu::Limits {
+            max_storage_buffers_per_shader_stage: STORAGE_BUFFERS,
+            ..base.clone()
+        };
+        LimitsRequest {
+            preferred: required.clone(),
+            required,
+        }
+    }
+
+    fn init(ctx: &mut MorphContext) -> Self {
+        log::info!(
+            "{:?} ({:?}), storage buffers per stage: {}",
+            ctx.adapter_info().map(|info| info.name),
+            ctx.surface_format(),
+            ctx.limits().max_storage_buffers_per_shader_stage,
+        );
+        Self {
+            scene: ctx
+                .gpu()
+                .map(|gpu| Scene::new(&gpu.device, ctx.surface_format())),
             time: 0.0,
             yaw: 0.6,
             pitch: 0.35,
@@ -204,9 +219,12 @@ impl MorphApp for Raymarch {
             [width as f32, height as f32, self.time, encode],
             [self.yaw, self.pitch, self.distance, 0.0],
         ];
-        ctx.queue().write_buffer(&self.frame, 0, &bytes(&uniforms));
+        let (Some(gpu), Some(scene)) = (ctx.gpu(), &self.scene) else {
+            return RenderStatus::Skipped;
+        };
+        gpu.queue.write_buffer(&scene.frame, 0, &bytes(&uniforms));
 
-        let mut encoder = ctx.device().create_command_encoder(&Default::default());
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -220,11 +238,11 @@ impl MorphApp for Raymarch {
                 })],
                 ..Default::default()
             });
-            pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &self.bind_group, &[]);
+            pass.set_pipeline(&scene.pipeline);
+            pass.set_bind_group(0, &scene.bind_group, &[]);
             pass.draw(0..3, 0..1);
         }
-        ctx.queue().submit([encoder.finish()]);
+        gpu.queue.submit([encoder.finish()]);
         RenderStatus::Drawn
     }
 

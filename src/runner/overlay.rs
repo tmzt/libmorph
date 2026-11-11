@@ -19,8 +19,9 @@ pub(crate) struct Overlay {
 }
 
 impl Overlay {
-    pub fn new(ctx: &MorphContext) -> Self {
-        let device = ctx.device();
+    /// The overlay for the surface's format: `None` without a device.
+    pub fn new(ctx: &MorphContext) -> Option<Self> {
+        let device = ctx.device()?;
         let format = ctx.surface_format();
         let shader = device.create_shader_module(wgpu::include_wgsl!("overlay.wgsl"));
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -83,26 +84,33 @@ impl Overlay {
         if ctx.device_spec().cutouts.len() > MAX_CUTOUTS {
             log::warn!("libmorph: the overlay draws only the first {MAX_CUTOUTS} cutouts");
         }
-        Self {
+        Some(Self {
             pipeline,
             uniforms,
             bind_group,
             format,
-        }
+        })
     }
 
+    /// Draw over `view`; nothing without a device.
     pub fn draw(&mut self, ctx: &MorphContext, view: &wgpu::TextureView) {
         if ctx.surface_format() != self.format {
-            *self = Self::new(ctx);
+            match Self::new(ctx) {
+                Some(overlay) => *self = overlay,
+                None => return,
+            }
         }
+        let Some(gpu) = ctx.gpu() else {
+            return;
+        };
         let bytes: Vec<u8> = uniforms(ctx.device_spec(), ctx.surface_size())
             .iter()
             .flat_map(|value| value.to_ne_bytes())
             .collect();
-        ctx.queue().write_buffer(&self.uniforms, 0, &bytes);
+        gpu.queue.write_buffer(&self.uniforms, 0, &bytes);
 
-        let mut encoder = ctx
-            .device()
+        let mut encoder = gpu
+            .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("libmorph overlay"),
             });
@@ -124,7 +132,7 @@ impl Overlay {
             pass.set_bind_group(0, &self.bind_group, &[]);
             pass.draw(0..3, 0..1);
         }
-        ctx.queue().submit([encoder.finish()]);
+        gpu.queue.submit([encoder.finish()]);
     }
 }
 

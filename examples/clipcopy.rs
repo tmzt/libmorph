@@ -54,7 +54,10 @@ impl MorphApp for ClipCopy {
             Some(true) => (0.1, 0.6, 0.2),
             Some(false) => (0.7, 0.1, 0.1),
         };
-        let mut encoder = ctx.device().create_command_encoder(&Default::default());
+        let Some(gpu) = ctx.gpu() else {
+            return RenderStatus::Skipped;
+        };
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
         encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: frame.view,
@@ -67,7 +70,7 @@ impl MorphApp for ClipCopy {
             })],
             ..Default::default()
         });
-        ctx.queue().submit([encoder.finish()]);
+        gpu.queue.submit([encoder.finish()]);
         RenderStatus::Drawn
     }
 

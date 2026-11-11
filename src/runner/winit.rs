@@ -14,14 +14,14 @@ use winit::window::{Window, WindowId};
 
 use super::shell::{FrameStatus, Shell};
 use crate::config::Launch;
-use crate::gpu::{self, Gpu};
+use crate::gpu::{self, BringUp, DeviceRequest};
 use crate::input::{MouseOutput, MouseTouch, key_from_winit};
 #[cfg(target_os = "macos")]
 use crate::input::{PadMapping, PadTouch};
 use crate::{GpuError, MorphApp, MorphContext, MorphError, SafeArea, Touch, TouchPhase};
 
 /// The GPU, and the surface it was chosen for, once bring-up finishes.
-type Boot = Result<(Gpu, wgpu::Surface<'static>), GpuError>;
+type Boot = Result<(BringUp, wgpu::Surface<'static>), GpuError>;
 
 struct Ready(Boot);
 
@@ -234,7 +234,18 @@ impl<A: MorphApp> Handler<A> {
             let surface = instance
                 .create_surface(window)
                 .map_err(GpuError::CreateSurface)?;
-            let gpu = Gpu::new(instance, Some(&surface), fallback, A::limits, false).await?;
+            let request = DeviceRequest {
+                force_fallback_adapter: fallback,
+                pipeline_cache: false,
+            };
+            let gpu = gpu::bring_up(
+                instance,
+                Some(&surface),
+                request,
+                A::limits,
+                A::MEMORY_HINTS,
+            )
+            .await?;
             Ok((gpu, surface))
         };
 
@@ -285,7 +296,7 @@ impl<A: MorphApp> Handler<A> {
                 let shell = {
                     let mut shell = shell;
                     if launch.options.overlay {
-                        shell.overlay = Some(super::overlay::Overlay::new(&shell.ctx));
+                        shell.overlay = super::overlay::Overlay::new(&shell.ctx);
                     }
                     shell
                 };
@@ -481,7 +492,7 @@ impl<A: MorphApp> Handler<A> {
         if shell.has_surface() {
             return;
         }
-        match shell.gpu().instance.create_surface(window.clone()) {
+        match shell.instance().create_surface(window.clone()) {
             Ok(surface) => {
                 let size = window.inner_size();
                 shell.attach(surface, (size.width, size.height));
@@ -508,7 +519,7 @@ impl<A: MorphApp> Handler<A> {
                     return;
                 };
                 if shell.frame() == FrameStatus::Lost {
-                    match shell.gpu().instance.create_surface(window.clone()) {
+                    match shell.instance().create_surface(window.clone()) {
                         Ok(surface) => {
                             let size = window.inner_size();
                             shell.attach(surface, (size.width, size.height));

@@ -6,7 +6,6 @@ use std::time::Duration;
 use web_time::Instant;
 
 use crate::context::Target;
-use crate::gpu::Gpu;
 use crate::gpu::WgpuConfig;
 use crate::log_once::log_once;
 use crate::{Frame, MorphApp, MorphContext, MorphError, Owned, RenderStatus, Touch};
@@ -124,8 +123,11 @@ impl<A: MorphApp> Shell<A> {
         size: (u32, u32),
     ) -> Result<Self, MorphError> {
         let config = ctx
-            .gpu
-            .configure(&surface, size, None, A::SRGB_SURFACE, Self::wgpu_config())
+            .device
+            .as_ref()
+            .and_then(|opened| {
+                opened.configure(&surface, size, None, A::SRGB_SURFACE, Self::wgpu_config())
+            })
             .ok_or(MorphError::NoSurfaceFormat)?;
         ctx.surface_format = config.format;
         ctx.surface_size = (config.width, config.height);
@@ -155,8 +157,9 @@ impl<A: MorphApp> Shell<A> {
         }
     }
 
-    pub fn gpu(&self) -> &Gpu {
-        &self.ctx.gpu
+    /// The instance, kept for the whole run: surfaces are created from it.
+    pub fn instance(&self) -> &wgpu::Instance {
+        &self.ctx.instance
     }
 
     pub fn has_surface(&self) -> bool {
@@ -167,13 +170,15 @@ impl<A: MorphApp> Shell<A> {
     /// app hears [`MorphApp::on_resume`] only if it was suspended.
     pub fn attach(&mut self, surface: wgpu::Surface<'static>, size: (u32, u32)) {
         let previous = Some(self.ctx.surface_format);
-        let Some(config) = self.ctx.gpu.configure(
-            &surface,
-            size,
-            previous,
-            A::SRGB_SURFACE,
-            Self::wgpu_config(),
-        ) else {
+        let Some(config) = self.ctx.device.as_ref().and_then(|opened| {
+            opened.configure(
+                &surface,
+                size,
+                previous,
+                A::SRGB_SURFACE,
+                Self::wgpu_config(),
+            )
+        }) else {
             log::error!("libmorph: the new surface has no presentable format");
             return;
         };
@@ -256,10 +261,7 @@ impl<A: MorphApp> Shell<A> {
 
     /// Log the allocator report once, `at` a point of the lifecycle.
     pub fn gpu_report(&self, at: &str) {
-        log::info!(
-            "{}",
-            crate::gpu::report_line(at, Some(&self.ctx.gpu.device))
-        );
+        log::info!("{}", crate::gpu::report_line(at, self.ctx.device()));
     }
 
     /// Whether the app called [`MorphContext::exit`].
@@ -288,15 +290,16 @@ impl<A: MorphApp> Shell<A> {
         #[cfg(script_runner)]
         if matches!(self.ctx.target, Some(Target::Offscreen(_))) {
             self.ctx.surface_size = size;
-            let texture = offscreen_texture(&self.ctx);
-            self.ctx.target = Some(Target::Offscreen(texture));
+            self.ctx.target = offscreen_texture(&self.ctx).map(Target::Offscreen);
             return;
         }
-        let Some(Target::Surface(surface, config)) = &mut self.ctx.target else {
+        let (Some(Target::Surface(surface, config)), Some(opened)) =
+            (&mut self.ctx.target, &self.ctx.device)
+        else {
             return;
         };
         (config.width, config.height) = size;
-        surface.configure(&self.ctx.gpu.device, config);
+        surface.configure(&opened.gpu.device, config);
         self.ctx.surface_size = (config.width, config.height);
     }
 
@@ -459,7 +462,10 @@ impl<A: MorphApp> Shell<A> {
             }
             return FrameStatus::Skipped;
         }
-        self.ctx.gpu.queue.present(texture);
+        // A frame is only drawn with a device.
+        if let Some(opened) = &self.ctx.device {
+            opened.gpu.queue.present(texture);
+        }
         if suboptimal {
             self.ctx.reconfigure();
         }
@@ -519,15 +525,16 @@ impl<A: MorphApp> Shell<A> {
     pub fn start_offscreen(mut ctx: MorphContext, size: (u32, u32), dt: Duration) -> Self {
         ctx.surface_format = Self::offscreen_format();
         ctx.surface_size = (size.0.max(1), size.1.max(1));
-        let texture = offscreen_texture(&ctx);
+        let texture = offscreen_texture(&ctx).expect("a device at bring-up");
         Self::with_app(ctx, Target::Offscreen(texture), Some(dt))
     }
 
     /// A new offscreen target in the kept format and size, after
     /// [`detach`](Self::detach).
     pub fn attach_offscreen(&mut self) {
-        let texture = offscreen_texture(&self.ctx);
-        self.install(Target::Offscreen(texture));
+        if let Some(texture) = offscreen_texture(&self.ctx) {
+            self.install(Target::Offscreen(texture));
+        }
     }
 
     /// The offscreen texture, while attached.
@@ -539,10 +546,11 @@ impl<A: MorphApp> Shell<A> {
     }
 }
 
+/// A texture at the context's size and format: `None` without a device.
 #[cfg(script_runner)]
-fn offscreen_texture(ctx: &MorphContext) -> wgpu::Texture {
+fn offscreen_texture(ctx: &MorphContext) -> Option<wgpu::Texture> {
     let (width, height) = ctx.surface_size;
-    ctx.gpu.device.create_texture(&wgpu::TextureDescriptor {
+    Some(ctx.device()?.create_texture(&wgpu::TextureDescriptor {
         label: Some("libmorph offscreen"),
         size: wgpu::Extent3d {
             width,
@@ -555,7 +563,7 @@ fn offscreen_texture(ctx: &MorphContext) -> wgpu::Texture {
         format: ctx.surface_format,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
-    })
+    }))
 }
 
 #[cfg(test)]

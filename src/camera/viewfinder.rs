@@ -17,6 +17,7 @@
 use super::convert::{Fit, layout};
 use super::{PreviewFrame, ScanId};
 use crate::MorphContext;
+use crate::log_once::log_once;
 
 /// Bytes of the uniform block: `crop` and `flags`, a `vec4<f32>` each.
 const UNIFORM_BYTES: u64 = 32;
@@ -41,15 +42,30 @@ struct Planes {
     bind_group: wgpu::BindGroup,
 }
 
-/// Draws the camera's preview frames into a rectangle of the app's render
-/// pass. Built once (in `init`) for the format it draws into; the frame's
-/// textures are made on the first upload and remade only when the frame
-/// size changes.
-pub struct Viewfinder {
+/// The pipeline and what it binds, built with a device.
+struct Pipes {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     uniforms: wgpu::Buffer,
+}
+
+/// Draws the camera's preview frames into a rectangle of the app's render
+/// pass. Built once (in `init`) for the format it draws into; the frame's
+/// textures are made on the first upload and remade only when the frame
+/// size changes.
+///
+/// Without a device (an app whose
+/// [`GPU_IN_BACKGROUND`](crate::MorphApp::GPU_IN_BACKGROUND) is `Release`,
+/// while released) it does nothing: [`upload`](Self::upload) and
+/// [`update`](Self::update) return `false` and say so once in the log, and
+/// [`draw`](Self::draw) draws nothing. It holds wgpu objects, so such an
+/// app drops it in [`on_gpu(Release)`](crate::MorphApp::on_gpu) and makes
+/// a new one in `Restored`, as it does its own.
+pub struct Viewfinder {
+    /// Built with the viewfinder when there is a device, else on the first
+    /// upload with one.
+    pipes: Option<Pipes>,
     format: wgpu::TextureFormat,
     planes: Option<Planes>,
     /// `(sequence, timestamp_ns)` of the frame uploaded: a new session
@@ -70,7 +86,24 @@ impl Viewfinder {
     /// camera's colours.
     #[must_use]
     pub fn with_format(ctx: &MorphContext, format: wgpu::TextureFormat) -> Self {
-        let device = ctx.device();
+        Self {
+            pipes: ctx
+                .device()
+                .map(|device| Pipes::new(device, ctx.pipeline_cache(), format)),
+            format,
+            planes: None,
+            uploaded: None,
+            quarter_turns: 0,
+        }
+    }
+}
+
+impl Pipes {
+    fn new(
+        device: &wgpu::Device,
+        cache: Option<&wgpu::PipelineCache>,
+        format: wgpu::TextureFormat,
+    ) -> Self {
         let shader = device.create_shader_module(wgpu::include_wgsl!("viewfinder.wgsl"));
         let plane = |binding| wgpu::BindGroupLayoutEntry {
             binding,
@@ -137,7 +170,7 @@ impl Viewfinder {
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview_mask: None,
-            cache: ctx.pipeline_cache(),
+            cache,
         });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("libmorph viewfinder"),
@@ -158,15 +191,14 @@ impl Viewfinder {
             layout,
             sampler,
             uniforms,
-            format,
-            planes: None,
-            uploaded: None,
-            quarter_turns: 0,
         }
     }
+}
 
+impl Viewfinder {
     /// Poll the scan's newest preview frame and upload it if it is new.
-    /// Returns whether it uploaded. Call it once a frame, before `draw`.
+    /// Returns whether it uploaded: `false` without a device. Call it once
+    /// a frame, before `draw`.
     pub fn update(&mut self, ctx: &mut MorphContext, scan: ScanId) -> bool {
         match ctx.camera().preview(scan) {
             Some(frame) => self.upload(ctx, &frame),
@@ -175,18 +207,31 @@ impl Viewfinder {
     }
 
     /// Upload `frame`'s planes, unless it is the frame already uploaded
-    /// (same `sequence` and timestamp). Returns whether it uploaded.
+    /// (same `sequence` and timestamp). Returns whether it uploaded:
+    /// `false` without a device, which is logged once.
     pub fn upload(&mut self, ctx: &MorphContext, frame: &PreviewFrame) -> bool {
+        let Some(gpu) = ctx.gpu() else {
+            log_once!(
+                "libmorph: Viewfinder::upload without a device (released): \
+                 nothing uploaded"
+            );
+            return false;
+        };
         let key = (frame.sequence(), frame.timestamp_ns());
         let size = (frame.width(), frame.height());
         if self.uploaded == Some(key) && self.planes.as_ref().is_some_and(|p| p.size == size) {
             return false;
         }
+        let pipes = self
+            .pipes
+            .get_or_insert_with(|| Pipes::new(&gpu.device, ctx.pipeline_cache(), self.format));
         if self.planes.as_ref().is_none_or(|p| p.size != size) {
-            self.planes = Some(self.make_planes(ctx.device(), size));
+            self.planes = Some(pipes.make_planes(&gpu.device, size));
         }
-        let planes = self.planes.as_ref().expect("made above");
-        let queue = ctx.queue();
+        let Some(planes) = self.planes.as_ref() else {
+            return false;
+        };
+        let queue = &gpu.queue;
         let (cw, ch) = frame.chroma_size();
         write_plane(queue, &planes.y, frame.y(), size);
         write_plane(queue, &planes.u, frame.u(), (cw, ch));
@@ -195,7 +240,9 @@ impl Viewfinder {
         self.quarter_turns = frame.quarter_turns();
         true
     }
+}
 
+impl Pipes {
     fn make_planes(&self, device: &wgpu::Device, (width, height): (u32, u32)) -> Planes {
         let texture = |label, (width, height): (u32, u32)| {
             device.create_texture(&wgpu::TextureDescriptor {
@@ -253,7 +300,9 @@ impl Viewfinder {
             bind_group,
         }
     }
+}
 
+impl Viewfinder {
     /// Whether a frame has been uploaded (`draw` draws nothing before).
     #[must_use]
     pub fn has_frame(&self) -> bool {
@@ -286,7 +335,8 @@ impl Viewfinder {
     /// Draw the uploaded frame into `rect` (`[x, y, width, height]`, pixels
     /// of the render target, inside it) of `pass`, whose target has this
     /// viewfinder's format. Sets the pass's viewport; the app sets its own
-    /// again for what it draws after. Does nothing before the first upload.
+    /// again for what it draws after. Does nothing before the first upload,
+    /// or without a device.
     /// One `draw` per viewfinder per queue submission: the layout is a
     /// uniform written through the queue.
     pub fn draw(
@@ -296,7 +346,9 @@ impl Viewfinder {
         rect: [f32; 4],
         options: &ViewfinderOptions,
     ) {
-        let (Some(planes), Some(image)) = (&self.planes, self.image_size()) else {
+        let (Some(planes), Some(image), Some(pipes), Some(queue)) =
+            (&self.planes, self.image_size(), &self.pipes, ctx.queue())
+        else {
             return;
         };
         if self.uploaded.is_none() || rect[2] <= 0.0 || rect[3] <= 0.0 {
@@ -313,10 +365,10 @@ impl Viewfinder {
         for (chunk, value) in bytes.chunks_exact_mut(4).zip(crop.iter().chain(&flags)) {
             chunk.copy_from_slice(&value.to_le_bytes());
         }
-        ctx.queue().write_buffer(&self.uniforms, 0, &bytes);
+        queue.write_buffer(&pipes.uniforms, 0, &bytes);
         let [x, y, w, h] = viewport;
         pass.set_viewport(x, y, w, h, 0.0, 1.0);
-        pass.set_pipeline(&self.pipeline);
+        pass.set_pipeline(&pipes.pipeline);
         pass.set_bind_group(0, &planes.bind_group, &[]);
         pass.draw(0..4, 0..1);
     }

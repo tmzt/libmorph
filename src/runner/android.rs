@@ -13,7 +13,7 @@ use raw_window_handle::{DisplayHandle, HandleError, HasDisplayHandle};
 use std::time::Duration;
 
 use super::shell::{FrameStatus, Shell};
-use crate::gpu::{self, Gpu};
+use crate::gpu::{self, DeviceRequest};
 use crate::input::KeyRouting;
 use crate::pipeline_cache::PipelineCacheStore;
 use crate::{
@@ -102,7 +102,7 @@ impl<A: MorphApp> Adapter<A> {
                 if shell.has_surface() {
                     return shell.resize(size);
                 }
-                match shell.gpu().instance.create_surface(target) {
+                match shell.instance().create_surface(target) {
                     Ok(surface) => shell.attach(surface, size),
                     Err(error) => log::error!("libmorph: {}", GpuError::CreateSurface(error)),
                 }
@@ -120,7 +120,18 @@ impl<A: MorphApp> Adapter<A> {
             let surface = instance
                 .create_surface(target)
                 .map_err(GpuError::CreateSurface)?;
-            let gpu = Gpu::new(instance, Some(&surface), false, A::limits, true).await?;
+            let request = DeviceRequest {
+                force_fallback_adapter: false,
+                pipeline_cache: true,
+            };
+            let gpu = gpu::bring_up(
+                instance,
+                Some(&surface),
+                request,
+                A::limits,
+                A::MEMORY_HINTS,
+            )
+            .await?;
             Ok::<_, GpuError>((gpu, surface))
         };
         let (gpu, surface) = match pollster::block_on(boot) {
@@ -152,9 +163,12 @@ impl<A: MorphApp> Adapter<A> {
             ctx.key_store =
                 crate::Vault::named(&crate::secure_store::namespace(A::SECURE_STORE_ID)).ok();
         }
-        ctx.pipeline_cache = ctx.data_dir.as_deref().and_then(|dir| {
-            PipelineCacheStore::open(&ctx.gpu.device, &ctx.gpu.adapter.get_info(), dir)
-        });
+        ctx.pipeline_cache = match (&ctx.device, ctx.data_dir.as_deref()) {
+            (Some(opened), Some(dir)) => {
+                PipelineCacheStore::open(&opened.gpu.device, &opened.adapter.get_info(), dir)
+            }
+            _ => None,
+        };
         match Shell::start(ctx, surface, size) {
             Ok(mut shell) => {
                 for intent in std::mem::take(&mut self.intents) {
@@ -289,7 +303,7 @@ impl<A: MorphApp> Adapter<A> {
         }
         if let Some(target) = SurfaceTarget::current(app) {
             let size = target.size();
-            match shell.gpu().instance.create_surface(target) {
+            match shell.instance().create_surface(target) {
                 Ok(surface) => shell.attach(surface, size),
                 Err(error) => log::error!("libmorph: {}", GpuError::CreateSurface(error)),
             }
