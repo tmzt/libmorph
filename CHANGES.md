@@ -1912,3 +1912,55 @@ The plan goes to `In implementation` in the step 1 commit. The work is in
 a worktree, `.claude/worktrees/gpu-release` (branch `wt-gpu-release`), so
 the main checkout, which one dependent builds through a local `[patch]`,
 does not carry step 2 before it is merged.
+
+## 2026-11-11 17:32 EST — plan 20261111_03, steps 1 to 5 built; departures, and what is still open
+
+Steps 1 to 5 are committed on `wt-gpu-release`: the allocator report
+(`4ae0572`), the layout and the accessors (`591584d`), intents and links on
+arrival (`f9aa904`), and the release, the restore and the runners
+(`8f3e28a`). Every commit passed `cargo fmt --check`, clippy and the tests
+with and without `--features script`, and the Android example crates pass
+clippy for `aarch64-linux-android`. The scripted tests ran on the Mac
+mini's Metal adapter; none was skipped.
+
+Departures, each small and needed to make the plan work (Rule 1.7):
+
+1. **`init` returns `Self`, so decision 2's early return does not fit
+   it.** The plan's idiom is written for callbacks that return `()` or a
+   `RenderStatus`. The examples that build GPU state in `init`
+   (`raymarch`, `hifps`, `audiocapture`, `background`) keep it in an
+   `Option` built with `ctx.gpu().map(..)`, which is also the shape a
+   releasing app needs for `on_gpu`. No `expect` is used. The owner is
+   asked whether the README should show this as the idiom for `init`.
+2. **The `Viewfinder` builds its pipeline on the first upload with a
+   device** when it was made without one, so `Viewfinder::new` keeps its
+   signature (decision 3 named only `upload` and `update`).
+3. **Steps 4 and 5 share one commit** (`8f3e28a`): without the runners'
+   calls, the shell's release clock is dead code in a default build, which
+   clippy reports.
+4. **A failed restore is covered by a unit test of its schedule**
+   (`a_failed_restore_is_retried_every_two_seconds`), not by a scripted
+   test: a scripted run has no way to make a device request fail. The
+   retry path itself is the same code as the first restore.
+5. **The pipeline cache's save, drop and reopen** is checked in the
+   scripted test only as far as Metal allows: there is no cache on Metal,
+   so the test checks that `pipeline_cache()` is `None` while released.
+   The reopen runs on Vulkan with a data directory, which is Android; it is
+   checked in the S23 log in step 6.
+6. **The desktop loop no longer asks for a redraw while it has no
+   surface**, so a hidden window of a releasing app waits instead of
+   spinning. A `Keep` app has no surface only after winit's `suspended`,
+   which the desktop does not send.
+
+Open:
+
+- **Step 5's macOS check is not done.** The Mac mini's session is locked,
+  so every window is occluded from the moment it opens and no
+  `Occluded` change ever arrives: hiding and showing the example's app
+  through System Events produced no window event at all (checked with a
+  temporary log of every window event, removed before the commit).
+  The check needs an unlocked session. A consequence worth knowing: a
+  releasing app started behind a locked screen keeps its device until its
+  window has been shown once.
+- **Step 6** waits for the owner: the background example is built and
+  installed on the S23, but running it takes the phone's foreground.
