@@ -1,7 +1,7 @@
 ---
 title: The GPU in the types - an app may give back its device off screen, and only callbacks with a device can reach it
 date: 2026-11-11
-status: Draft
+status: Superseded (by 20261111_03_THE_DEVICE_MAY_BE_ABSENT_PLAN.md)
 covers: >
   The background release of 20261111_01, rebuilt around the device's
   absence being visible in the types instead of a panic. The context
@@ -273,3 +273,23 @@ are named here only by count.
 3. **Making `MorphContext` generic over the app**, so the check folds
    away for a `Keep` app. Rejected: a larger break than decision 1, for a
    check decision 1 does not need.
+
+## Amendment — 2026-11-11 14:34 EST: superseded by 20261111_03
+
+On the owner's instruction (2026-11-11): "rewrite again, clearly argue
+for the preferred version". This plan is superseded, before any
+implementation, by `20261111_03_THE_DEVICE_MAY_BE_ABSENT_PLAN.md`, and
+nothing in it is implemented. Its decisions 1 and 2, the two contexts,
+are replaced by one context whose GPU accessors return `Option`, each
+callback deciding what to do without a device: the owner, "if gpu is
+required to do meaningful work it makes sense to exit … its still up to
+the consumer to write the logic. for intents, some may be background and
+require no gpu". The split is kept there as a rejected alternative,
+because it withholds the device from `on_intent` while one is present.
+Section 2.2's count of 142 unwraps is corrected there: the cost is one
+early exit per callback that does GPU work. Decisions 3 to 12 move to
+20261111_03 as its decisions 5 and 7 to 15, with `gpu_available()`
+dropped, since `ctx.gpu().is_some()` says the same; sections 2.1, 2.3 to
+2.5, 4 and 5 move to its sections 3, 5 and 6. Its section 2.3 was wrong
+about `on_audio`, `on_intent` and `on_open_url`, which today arrive only
+with a device; 20261111_03 section 3.3 corrects it.
