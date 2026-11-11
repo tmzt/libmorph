@@ -1891,3 +1891,24 @@ that survives in the project section points at `~/src/libdevice` and
 `~/src/libmobile` instead.
 
 No code changed, so Rule 3.4's trio does not apply.
+
+## 2026-11-11 17:12 EST — plan 20261111_03: the device may be absent, approved and started
+
+The owner approved `docs/design/20261111_03_THE_DEVICE_MAY_BE_ABSENT_PLAN.md`
+("approve and build"). It is built in its six steps, in order, each step's
+`libmorph` changes in their own commit:
+
+1. the allocator report and the `gpu-report` script verb;
+2. the context's layout: `Gpu`, `ctx.gpu()`, `Option` from `device()`,
+   `queue()` and `adapter_info()`, `GPU_IN_BACKGROUND`, `MEMORY_HINTS`,
+   `GpuEvent` and `on_gpu`, with the examples and tests moved to the
+   idiom; the Android example crates follow in their own commits;
+3. intents and links delivered on arrival, also while suspended;
+4. the release and the restore in the shell and the script runner;
+5. the Android and desktop runners, with desktop occlusion;
+6. the S23 measurement, then 0.8.0 with its `VERSIONS.md` entry and tag.
+
+The plan goes to `In implementation` in the step 1 commit. The work is in
+a worktree, `.claude/worktrees/gpu-release` (branch `wt-gpu-release`), so
+the main checkout, which one dependent builds through a local `[patch]`,
+does not carry step 2 before it is merged.
