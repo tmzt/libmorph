@@ -144,16 +144,15 @@ pub enum Command {
     GpuReport,
     /// `open <url>`: the app is opened with a link
     /// ([`MorphApp::on_open_url`](crate::MorphApp::on_open_url)). The URL has
-    /// no whitespace, and the line has no comment. While suspended, it is
-    /// delivered after the resume.
+    /// no whitespace, and the line has no comment. Delivered at once, also
+    /// while suspended.
     Open(String),
     /// `intent <key>=<value> [<key>=<value> ...]`: an intent reaches the app
     /// ([`MorphApp::on_intent`](crate::MorphApp::on_intent)) carrying these
     /// extras, with no action and no data - the `am start --es <key>
     /// <value>` case, which is what extras are for. `is_new` is `true`: a
     /// script's intent arrives at an app that is already running. A link's
-    /// own leg is `open <url>`. While suspended, it is delivered after the
-    /// resume.
+    /// own leg is `open <url>`. Delivered at once, also while suspended.
     Intent(Vec<(String, String)>),
     /// `camera-qr <text>`: the running QR scan
     /// ([`start_qr`](crate::camera::Camera::start_qr)) reads a code whose

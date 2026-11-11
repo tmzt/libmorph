@@ -172,7 +172,7 @@ impl<A: MorphApp> Adapter<A> {
         match Shell::start(ctx, surface, size) {
             Ok(mut shell) => {
                 for intent in std::mem::take(&mut self.intents) {
-                    shell.intent(intent);
+                    shell.intent(&intent);
                 }
                 #[cfg(feature = "mobile-media-request")]
                 for response in std::mem::take(&mut self.media) {
@@ -381,7 +381,7 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
                     is_new: intent.is_new,
                 };
                 match &mut self.shell {
-                    Some(shell) => shell.intent(intent),
+                    Some(shell) => shell.intent(&intent),
                     None => self.intents.push(intent),
                 }
             }

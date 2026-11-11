@@ -18,6 +18,7 @@
 //! desktop where libmobile is not compiled in.
 
 /// The action of an intent that opens a link.
+#[cfg_attr(not(any(test, script_runner, target_os = "android")), allow(dead_code))]
 pub(crate) const ACTION_VIEW: &str = "android.intent.action.VIEW";
 
 /// An intent the app was started with, or that arrived while it ran.
@@ -65,6 +66,7 @@ impl Intent {
     /// What decides whether [`MorphApp::on_open_url`](crate::MorphApp::on_open_url)
     /// is called as well, so the two hooks cannot disagree about which
     /// intents are links.
+    #[cfg_attr(not(any(test, script_runner, target_os = "android")), allow(dead_code))]
     pub(crate) fn link(&self) -> Option<&str> {
         if self.action.as_deref() == Some(ACTION_VIEW) {
             self.data.as_deref()

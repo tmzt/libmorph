@@ -1,5 +1,5 @@
 //! `open <url>` in a scripted run reaches `on_open_url` after `init`, in
-//! order, and links opened while suspended come after `on_resume`. Needs a
+//! order, and links opened while suspended are delivered at once. Needs a
 //! GPU adapter; without one the test says so and passes.
 
 #![cfg(all(
@@ -89,9 +89,9 @@ fn links_arrive_after_init_in_order() {
             "open app://first/pair#secret",
             "open app://second?k=v",
             "suspend",
-            "resume",
             "open app://third",
             "open app://fourth",
+            "resume",
             "suspend",
         ]
     );

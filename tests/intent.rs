@@ -1,6 +1,6 @@
 //! `intent <key>=<value>` in a scripted run reaches `on_intent` after
 //! `init`, in order, with the extras it was given and `on_open_url` left
-//! alone; intents that arrive while suspended come after `on_resume`. Needs
+//! alone; intents that arrive while suspended are delivered at once. Needs
 //! a GPU adapter; without one the test says so and passes.
 
 #![cfg(all(
@@ -104,11 +104,11 @@ fn intents_arrive_after_init_in_order() {
             r#"intent scene=Some("demo") n=None missing=None new=true action=None data=None"#,
             r#"intent scene=Some("tavern") n=Some("3") missing=None new=true action=None data=None"#,
             "suspend",
-            "resume",
             r#"intent scene=Some("third") n=None missing=None new=true action=None data=None"#,
+            "resume",
             "suspend",
         ],
-        "an intent while suspended waits for the resume, and no link is reported"
+        "an intent while suspended is delivered at once, and no link is reported"
     );
 }
 

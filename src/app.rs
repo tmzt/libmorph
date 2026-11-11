@@ -369,8 +369,10 @@ pub trait MorphApp: Sized + 'static {
     /// The app was opened with `url`, a link with one of the URL schemes its
     /// build script declared (`gradle_project(id).url_scheme("myapp")`), at
     /// launch or while running. Called after [`init`](Self::init), in the
-    /// order the links arrived; links that arrive while the app is suspended
-    /// come after [`on_resume`](Self::on_resume). Android only, and scripted
+    /// order the links arrived, as each arrives: also while the app is
+    /// suspended, and then possibly without a device (see
+    /// [`ctx.gpu()`](MorphContext::gpu)); a link that arrives before `init`
+    /// waits for it. Android only, and scripted
     /// runs (`open <url>`). The URL is untrusted input: validate it, and do
     /// not log it past its path, since a query or fragment may be a secret.
     fn on_open_url(&mut self, ctx: &mut MorphContext, url: &str) {
@@ -382,9 +384,11 @@ pub trait MorphApp: Sized + 'static {
     /// data URI, every extra as a key and a string, and whether it arrived
     /// at an already-running instance ([`Intent`](crate::Intent)).
     ///
-    /// Called after [`init`](Self::init), in the order the intents arrived;
-    /// one that arrives while the app is suspended comes after
-    /// [`on_resume`](Self::on_resume). A `VIEW` intent carrying a URI calls
+    /// Called after [`init`](Self::init), in the order the intents arrived,
+    /// as each arrives: also while the app is suspended, and then possibly
+    /// without a device - an intent that needs no GPU is handled at once,
+    /// and one that needs it finds [`ctx.gpu()`](MorphContext::gpu) `None`
+    /// and defers. One that arrives before `init` waits for it. A `VIEW` intent carrying a URI calls
     /// this **first** and then [`on_open_url`](Self::on_open_url), which is
     /// unchanged - the intent is the whole event and the link is one field
     /// of it, so an app may read either or both. Android only, and scripted
