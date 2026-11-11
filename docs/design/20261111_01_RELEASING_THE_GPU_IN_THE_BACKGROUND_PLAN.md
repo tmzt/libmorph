@@ -1,7 +1,7 @@
 ---
 title: Releasing the GPU in the background - an app may give back its device while it is off screen
 date: 2026-11-11
-status: Draft
+status: Superseded (by 20261111_02_THE_GPU_IN_THE_TYPES_PLAN.md)
 covers: >
   An associated const, `MorphApp::GPU_IN_BACKGROUND`, by which an app
   says whether libmorph keeps its device while the app is off screen
@@ -251,3 +251,17 @@ an app off screen holds no GPU memory at all.
    screen and make each one handle `on_gpu`.
 3. **The delay**: 10 s is the proposal's value for flankr; whether
    libmorph should offer a named default for it.
+
+## Amendment — 2026-11-11 14:20 EST: superseded by 20261111_02
+
+On the owner's instruction (2026-11-11): "rewrite around option B,
+succeed". This plan is superseded, before any implementation, by
+`20261111_02_THE_GPU_IN_THE_TYPES_PLAN.md`, and nothing in it is
+implemented. Open question 1 is decided against decision 5's panic: the
+device's absence is in the types. 20261111_02 does that by splitting the
+context (`HostContext` for the ten callbacks that can arrive with no
+device, `MorphContext` for the rest), not by `Option` accessors, on an
+impact review of every dependent. Decisions 1 to 4 and 6 to 10 move there
+as its decisions 3 to 11, unchanged but for `GpuEvent::RestoreFailed`,
+which becomes a log line and `gpu_available()`, since it has no device to
+hand over. The version moves from 0.7.2 to 0.8.0.
