@@ -140,6 +140,7 @@ fn play<A: MorphApp>(
                 is_new: true,
                 ..crate::Intent::default()
             }),
+            Action::GpuReport => shell.gpu_report("gpu-report"),
             Action::LowMemory => shell.low_memory(),
             Action::TrimMemory(level) => shell.trim_memory(level),
             Action::CameraQr(text) => {

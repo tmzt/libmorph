@@ -138,6 +138,10 @@ pub enum Command {
     /// `ui-hidden`, `background`, `moderate` or `complete`. Accepted while
     /// suspended.
     TrimMemory(TrimLevel),
+    /// `gpu-report`: log the device's allocator report once, as libmorph
+    /// does at each suspend (what it has allocated and reserved, or that
+    /// the backend keeps none). Accepted while suspended.
+    GpuReport,
     /// `open <url>`: the app is opened with a link
     /// ([`MorphApp::on_open_url`](crate::MorphApp::on_open_url)). The URL has
     /// no whitespace, and the line has no comment. While suspended, it is
@@ -356,6 +360,7 @@ pub(crate) enum Action {
     Intent(Vec<(String, String)>),
     LowMemory,
     TrimMemory(TrimLevel),
+    GpuReport,
     CameraQr(String),
     CameraFrame(PathBuf),
     CameraDeny {
@@ -516,6 +521,7 @@ impl Planner {
             Command::Exit => self.push(line, Action::Exit),
             Command::LowMemory => self.push(line, Action::LowMemory),
             Command::TrimMemory(level) => self.push(line, Action::TrimMemory(*level)),
+            Command::GpuReport => self.push(line, Action::GpuReport),
             Command::Open(url) => {
                 if url.is_empty() || url.contains(char::is_whitespace) {
                     return Err("`open` takes one URL, without whitespace".into());
@@ -739,6 +745,10 @@ fn parse_command(words: &[&str]) -> Result<Command, String> {
                     .ok_or_else(|| format!("unknown trim level `{}`; usage: {USAGE}", args[0]))?,
             )
         }
+        "gpu-report" => {
+            arity(&[0], "gpu-report")?;
+            Command::GpuReport
+        }
         "open" => {
             arity(&[1], "open <url>")?;
             Command::Open(args[0].to_owned())
@@ -952,6 +962,22 @@ mod tests {
         let (line, message) = rejected("low-memory now");
         assert_eq!(line, 1);
         assert!(message.contains("usage: low-memory"), "{message}");
+    }
+
+    #[test]
+    fn gpu_report_takes_nothing_and_works_while_suspended() {
+        assert_eq!(
+            actions("gpu-report\nsuspend\ngpu-report\nresume"),
+            [
+                Action::GpuReport,
+                Action::Suspend,
+                Action::GpuReport,
+                Action::Resume,
+            ]
+        );
+        let (line, message) = rejected("gpu-report now");
+        assert_eq!(line, 1);
+        assert!(message.contains("usage: gpu-report"), "{message}");
     }
 
     #[test]

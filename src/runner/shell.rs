@@ -249,8 +249,17 @@ impl<A: MorphApp> Shell<A> {
             self.ctx.camera.suspend();
             self.camera_events();
             self.app.on_suspend(&mut self.ctx);
+            self.gpu_report("suspend");
         }
         self.ctx.save_pipeline_cache();
+    }
+
+    /// Log the allocator report once, `at` a point of the lifecycle.
+    pub fn gpu_report(&self, at: &str) {
+        log::info!(
+            "{}",
+            crate::gpu::report_line(at, Some(&self.ctx.gpu.device))
+        );
     }
 
     /// Whether the app called [`MorphContext::exit`].
@@ -263,6 +272,7 @@ impl<A: MorphApp> Shell<A> {
     pub fn shutdown(mut self) {
         if self.lifecycle.suspend() {
             self.app.on_suspend(&mut self.ctx);
+            self.gpu_report("suspend");
             self.ctx.save_pipeline_cache();
         }
         self.ctx.target = None;

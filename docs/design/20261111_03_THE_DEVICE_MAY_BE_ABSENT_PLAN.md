@@ -1,7 +1,7 @@
 ---
 title: The device may be absent - an app may give back its GPU off screen, and the accessors say whether there is one
 date: 2026-11-11
-status: Draft
+status: In implementation
 covers: >
   The background release of 20261111_01 and 20261111_02, built on one
   context whose device accessors return `Option`. `MorphContext` holds
@@ -408,3 +408,11 @@ flankr are named here only by count.
   step 6 measures what the S23 shows.
 - The app built through a local `[patch]` (section 3.7) breaks as soon as
   the libmorph checkout carries step 2, before 0.8.0 is tagged.
+
+## Amendment — 2026-11-11 17:14 EST: implementation started; this document is now immutable
+
+The owner approved this plan on 2026-11-11 ("approve and build").
+Implementation starts with step 1, the allocator report, in the commit
+that carries this amendment, and the status is now `In implementation`.
+From here this document changes only on the owner's explicit instruction;
+departures needed to make it work are recorded in `CHANGES.md`.

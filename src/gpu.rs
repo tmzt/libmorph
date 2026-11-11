@@ -99,6 +99,27 @@ pub(crate) fn resolve_limits(
         .or_better_values_from(&request.required))
 }
 
+/// The allocator report's log line (plan 20261111_03, decision 13): what
+/// the device has allocated and reserved `at` a point of the lifecycle, or
+/// that the backend keeps no report (Metal, GL). `None` for `device` is a
+/// released device.
+pub(crate) fn report_line(at: &str, device: Option<&wgpu::Device>) -> String {
+    match device {
+        None => format!("libmorph: gpu memory at {at}: no device (released)"),
+        Some(device) => format_report(at, device.generate_allocator_report().as_ref()),
+    }
+}
+
+fn format_report(at: &str, report: Option<&wgpu::AllocatorReport>) -> String {
+    match report {
+        Some(report) => format!(
+            "libmorph: gpu memory at {at}: {} bytes allocated, {} bytes reserved",
+            report.total_allocated_bytes, report.total_reserved_bytes
+        ),
+        None => format!("libmorph: gpu memory at {at}: the backend gives no allocator report"),
+    }
+}
+
 /// The handles that outlive every surface.
 #[derive(Debug)]
 pub(crate) struct Gpu {
@@ -281,7 +302,29 @@ fn choose_format(
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_wgpu_config, choose_format};
+    use super::{apply_wgpu_config, choose_format, format_report};
+
+    #[test]
+    fn the_report_line_says_what_the_backend_gave() {
+        let report = wgpu::AllocatorReport {
+            allocations: Vec::new(),
+            blocks: Vec::new(),
+            total_allocated_bytes: 1_048_576,
+            total_reserved_bytes: 4_194_304,
+        };
+        assert_eq!(
+            format_report("suspend", Some(&report)),
+            "libmorph: gpu memory at suspend: 1048576 bytes allocated, 4194304 bytes reserved"
+        );
+        assert_eq!(
+            format_report("gpu-report", None),
+            "libmorph: gpu memory at gpu-report: the backend gives no allocator report"
+        );
+        assert_eq!(
+            super::report_line("release", None),
+            "libmorph: gpu memory at release: no device (released)"
+        );
+    }
     use wgpu::TextureFormat::{Bgra8Unorm, Bgra8UnormSrgb, Rgba16Float};
 
     const OFFERED: [wgpu::TextureFormat; 3] = [Bgra8UnormSrgb, Bgra8Unorm, Rgba16Float];
