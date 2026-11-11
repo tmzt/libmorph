@@ -296,7 +296,7 @@ impl<A: MorphApp> Handler<A> {
                 let shell = {
                     let mut shell = shell;
                     if launch.options.overlay {
-                        shell.overlay = super::overlay::Overlay::new(&shell.ctx);
+                        shell.enable_overlay();
                     }
                     shell
                 };
@@ -440,9 +440,10 @@ impl<A: MorphApp> ApplicationHandler<Ready> for Handler<A> {
         self.check_exit(event_loop);
     }
 
-    #[cfg(target_os = "macos")]
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        #[cfg(target_os = "macos")]
         self.drain_pad();
+        self.poll_gpu(event_loop);
         self.check_exit(event_loop);
     }
 
@@ -465,6 +466,57 @@ impl<A: MorphApp> ApplicationHandler<Ready> for Handler<A> {
 }
 
 impl<A: MorphApp> Handler<A> {
+    /// The release clock and the restore retry (plan 20261111_03, decisions
+    /// 8 and 10): the loop wakes when either is next due, and draws again
+    /// once a retried restore succeeds.
+    fn poll_gpu(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(shell) = &mut self.shell else {
+            return;
+        };
+        let had_surface = shell.has_surface();
+        let deadline = shell.poll_gpu();
+        if !had_surface
+            && shell.has_surface()
+            && let Some(window) = &self.window
+        {
+            window.request_redraw();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        event_loop.set_control_flow(match deadline {
+            Some(at) => winit::event_loop::ControlFlow::WaitUntil(at),
+            None => winit::event_loop::ControlFlow::Wait,
+        });
+        #[cfg(target_arch = "wasm32")]
+        let _ = (event_loop, deadline);
+    }
+
+    /// The window was covered or minimised (`true`), or shown again
+    /// (decision 11). Only for an app that releases its device: it is then
+    /// a suspension, so frames stop and the release clock starts; showing
+    /// the window attaches a new surface, restoring first if released. A
+    /// `Keep` app's loop is unchanged.
+    fn occluded(&mut self, event_loop: &ActiveEventLoop, occluded: bool) {
+        if !Shell::<A>::releases() {
+            return;
+        }
+        let Some(shell) = &mut self.shell else {
+            return;
+        };
+        if occluded {
+            if shell.has_surface() {
+                log::info!("libmorph: the window is hidden: suspended");
+                #[cfg(target_os = "macos")]
+                self.cancel_pad();
+                if let Some(shell) = &mut self.shell {
+                    shell.detach();
+                }
+            }
+        } else if !shell.has_surface() {
+            log::info!("libmorph: the window is shown again: resumed");
+            self.resume(event_loop);
+        }
+    }
+
     fn resume(&mut self, event_loop: &ActiveEventLoop) {
         let window = match self.window.clone() {
             Some(window) => window,
@@ -511,7 +563,12 @@ impl<A: MorphApp> Handler<A> {
                     shell.resize(size);
                     place(&mut shell.ctx, window, size);
                 }
+                // Minimising is reported as a resize on some desktops.
+                if let Some(minimized) = self.window.as_ref().and_then(|w| w.is_minimized()) {
+                    self.occluded(event_loop, minimized);
+                }
             }
+            WindowEvent::Occluded(occluded) => self.occluded(event_loop, occluded),
             WindowEvent::RedrawRequested => {
                 #[cfg(target_os = "macos")]
                 self.drain_pad();
@@ -529,7 +586,12 @@ impl<A: MorphApp> Handler<A> {
                         }
                     }
                 }
-                window.request_redraw();
+                // Without a surface (suspended, or a releasing app's hidden
+                // window) the loop waits rather than spins; attaching one
+                // asks for the next frame.
+                if shell.has_surface() {
+                    window.request_redraw();
+                }
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let size = self.surface_size();

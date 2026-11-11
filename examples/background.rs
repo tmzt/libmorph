@@ -16,6 +16,11 @@
 //! * Each launch counts itself in `launches` in `ctx.data_dir()`, which
 //!   survives restarts: `~/Library/Application Support/<APP_ID>` on the Mac,
 //!   the app's files directory on Android.
+//! * It gives its GPU device back after 10 s off screen
+//!   (`GPU_IN_BACKGROUND`), and holds 64 MiB of texture while it has one,
+//!   dropped in `on_gpu(Release)` and made again in `Restored`, so the
+//!   release shows in `adb shell dumpsys meminfo <package>` (Graphics, GL
+//!   mtrack). On the Mac, minimise the window for 10 s.
 //!
 //! On Android the host comes from a link with the example's scheme (see
 //! `examples/android/background`):
@@ -47,7 +52,8 @@ use libmorph::service::{
 };
 use libmorph::system_events::{self, SystemEvent};
 use libmorph::{
-    Frame, MorphApp, MorphContext, PermissionRequest, Permissions, RenderStatus, battery, wgpu,
+    Frame, GpuEvent, GpuInBackground, MorphApp, MorphContext, PermissionRequest, Permissions,
+    RenderStatus, battery, wgpu,
 };
 
 const POST_NOTIFICATIONS: &str = "android.permission.POST_NOTIFICATIONS";
@@ -210,13 +216,56 @@ fn start_service() {
     log::info!("background: battery {:?}", battery::state());
 }
 
+/// The side of the square texture held while there is a device: 4096² RGBA,
+/// 64 MiB, so a release is easy to see in the system's memory report.
+const BALLAST_SIDE: u32 = 4096;
+
+/// 64 MiB of texture, cleared once so the driver commits it.
+fn ballast(gpu: &libmorph::Gpu) -> wgpu::Texture {
+    let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("background ballast"),
+        size: wgpu::Extent3d {
+            width: BALLAST_SIDE,
+            height: BALLAST_SIDE,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let mut encoder = gpu.device.create_command_encoder(&Default::default());
+    encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: &view,
+            depth_slice: None,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        ..Default::default()
+    });
+    gpu.queue.submit([encoder.finish()]);
+    texture
+}
+
 pub struct Background {
     /// This app's `POST_NOTIFICATIONS` request.
     request: Option<PermissionRequest>,
+    /// Held while there is a device; `None` while it is released.
+    ballast: Option<wgpu::Texture>,
 }
 
 impl MorphApp for Background {
     const APP_ID: &'static str = "dev.highbay.libmorph.example.background";
+    const GPU_IN_BACKGROUND: GpuInBackground = GpuInBackground::Release {
+        after: Duration::from_secs(10),
+    };
 
     fn init(ctx: &mut MorphContext) -> Self {
         log::info!("background: init");
@@ -241,7 +290,21 @@ impl MorphApp for Background {
         if request.is_none() {
             start_service();
         }
-        Self { request }
+        Self {
+            request,
+            ballast: ctx.gpu().map(|gpu| ballast(&gpu)),
+        }
+    }
+
+    /// Everything wgpu goes at `Release`, so the device's memory goes back;
+    /// it is made again with the new device.
+    fn on_gpu(&mut self, ctx: &mut MorphContext, event: &GpuEvent) {
+        log::info!("background: on_gpu {event:?}");
+        match event {
+            GpuEvent::Release => self.ballast = None,
+            GpuEvent::Restored => self.ballast = ctx.gpu().map(|gpu| ballast(&gpu)),
+            _ => {}
+        }
     }
 
     fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {

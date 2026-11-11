@@ -85,6 +85,17 @@ impl Owned {
 
 /// A libmorph application. Every hook runs on the main thread with the
 /// shared [`MorphContext`].
+///
+/// **The device.** For an app whose
+/// [`GPU_IN_BACKGROUND`](Self::GPU_IN_BACKGROUND) is `Release`, the device
+/// can be released while the app has no surface, and
+/// [`ctx.gpu()`](MorphContext::gpu) is then `None`. libmorph calls `init`,
+/// `update`, `render`, `construct_frame`, the input hooks, `on_audio`,
+/// `on_suspend`, `on_resume` and `on_gpu` only with a device: no frame
+/// runs while it is released, and input that arrives with a window but no
+/// device (a restore that failed and is being retried) is dropped. The
+/// other hooks can arrive without one. A `Keep` app, the default, always
+/// has a device.
 pub trait MorphApp: Sized + 'static {
     /// The subsystems this app takes from libmorph. [`Owned::empty()`] -
     /// the default - leaves libmorph driving everything, which is every app
@@ -255,9 +266,15 @@ pub trait MorphApp: Sized + 'static {
 
     /// Build the app once the GPU is up and the first surface is configured,
     /// so `ctx.surface_format()` is already known.
+    ///
+    /// Always called with a device: [`ctx.gpu()`](MorphContext::gpu) is
+    /// `Some` here (plan `20261111_03`, decision 4).
     fn init(ctx: &mut MorphContext) -> Self;
 
     /// Advance state by `dt`, once per frame before [`render`](Self::render).
+    ///
+    /// Always called with a device: [`ctx.gpu()`](MorphContext::gpu) is
+    /// `Some` here (plan `20261111_03`, decision 4).
     fn update(&mut self, ctx: &mut MorphContext, dt: Duration) {
         let _ = (ctx, dt);
     }
@@ -279,6 +296,9 @@ pub trait MorphApp: Sized + 'static {
     /// an app whose [`OWNS`](Self::OWNS) contains [`Owned::FRAME`], where
     /// `render` is never called; for a managed app it means nothing is
     /// drawn at all, so it logs once.
+    ///
+    /// Always called with a device: [`ctx.gpu()`](MorphContext::gpu) is
+    /// `Some` here (plan `20261111_03`, decision 4).
     fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
         let _ = (ctx, frame);
         log_once!(
@@ -309,6 +329,9 @@ pub trait MorphApp: Sized + 'static {
     /// frame libmorph constructs and libmorph constructs none.
     ///
     /// The default draws and presents nothing, so it logs once.
+    ///
+    /// Always called with a device: [`ctx.gpu()`](MorphContext::gpu) is
+    /// `Some` here (plan `20261111_03`, decision 4).
     fn construct_frame(&mut self, ctx: &mut MorphContext) {
         let _ = ctx;
         log_once!(
@@ -318,24 +341,36 @@ pub trait MorphApp: Sized + 'static {
     }
 
     /// A touch, or on desktop the mouse translated into one.
+    ///
+    /// Always called with a device: [`ctx.gpu()`](MorphContext::gpu) is
+    /// `Some` here (plan `20261111_03`, decision 4).
     fn on_touch(&mut self, ctx: &mut MorphContext, touch: Touch) {
         let _ = (ctx, touch);
     }
 
     /// The cursor moved with no button held (desktop and web). Physical
     /// pixels, like touches.
+    ///
+    /// Always called with a device: [`ctx.gpu()`](MorphContext::gpu) is
+    /// `Some` here (plan `20261111_03`, decision 4).
     fn on_hover(&mut self, ctx: &mut MorphContext, x: f32, y: f32) {
         let _ = (ctx, x, y);
     }
 
     /// A key was pressed. On Android, `Handled` keeps Back inside the app and
     /// `Unhandled` lets the system act; desktop ignores the result.
+    ///
+    /// Always called with a device: [`ctx.gpu()`](MorphContext::gpu) is
+    /// `Some` here (plan `20261111_03`, decision 4).
     fn on_key(&mut self, ctx: &mut MorphContext, key: Key) -> KeyStatus {
         let _ = (ctx, key);
         KeyStatus::Unhandled
     }
 
     /// Text input event: a change in text, an action key press, or keyboard dismissal.
+    ///
+    /// Always called with a device: [`ctx.gpu()`](MorphContext::gpu) is
+    /// `Some` here (plan `20261111_03`, decision 4).
     fn on_text_input(&mut self, ctx: &mut MorphContext, event: &crate::TextInputEvent) {
         let _ = (ctx, event);
     }
@@ -345,6 +380,10 @@ pub trait MorphApp: Sized + 'static {
     /// Called once per run, after [`init`](Self::init): right after it when
     /// capture opened with the rest of audio, or on Android once the user
     /// allows `RECORD_AUDIO`. Never called if capture did not open.
+    ///
+    /// May be called while the device is released, for an app whose
+    /// [`GPU_IN_BACKGROUND`](Self::GPU_IN_BACKGROUND) is `Release`: check
+    /// [`ctx.gpu()`](MorphContext::gpu) before GPU work, and defer it.
     fn on_capture_ready(&mut self, ctx: &mut MorphContext) {
         let _ = ctx;
     }
@@ -354,6 +393,9 @@ pub trait MorphApp: Sized + 'static {
     /// thread before [`update`](Self::update), oldest first, while the app
     /// is resumed. [`on_capture_ready`](Self::on_capture_ready) is not
     /// called again after a reopen: the format and the sinks are kept.
+    ///
+    /// Always called with a device: [`ctx.gpu()`](MorphContext::gpu) is
+    /// `Some` here (plan `20261111_03`, decision 4).
     fn on_audio(&mut self, ctx: &mut MorphContext, event: &crate::AudioEvent) {
         let _ = (ctx, event);
     }
@@ -362,6 +404,10 @@ pub trait MorphApp: Sized + 'static {
     /// [`ctx.request_permissions`](MorphContext::request_permissions) call,
     /// once per request the app made. Answers to libmorph's own requests
     /// (`RECORD_AUDIO` for capture) are not passed here.
+    ///
+    /// May be called while the device is released, for an app whose
+    /// [`GPU_IN_BACKGROUND`](Self::GPU_IN_BACKGROUND) is `Release`: check
+    /// [`ctx.gpu()`](MorphContext::gpu) before GPU work, and defer it.
     fn on_permissions(&mut self, ctx: &mut MorphContext, answer: &Permissions) {
         let _ = (ctx, answer);
     }
@@ -375,6 +421,10 @@ pub trait MorphApp: Sized + 'static {
     /// waits for it. Android only, and scripted
     /// runs (`open <url>`). The URL is untrusted input: validate it, and do
     /// not log it past its path, since a query or fragment may be a secret.
+    ///
+    /// May be called while the device is released, for an app whose
+    /// [`GPU_IN_BACKGROUND`](Self::GPU_IN_BACKGROUND) is `Release`: check
+    /// [`ctx.gpu()`](MorphContext::gpu) before GPU work, and defer it.
     fn on_open_url(&mut self, ctx: &mut MorphContext, url: &str) {
         let _ = (ctx, url);
     }
@@ -396,6 +446,10 @@ pub trait MorphApp: Sized + 'static {
     ///
     /// Every field is untrusted input: validate it, and log a key rather
     /// than its value, since a value may be a secret.
+    ///
+    /// May be called while the device is released, for an app whose
+    /// [`GPU_IN_BACKGROUND`](Self::GPU_IN_BACKGROUND) is `Release`: check
+    /// [`ctx.gpu()`](MorphContext::gpu) before GPU work, and defer it.
     fn on_intent(&mut self, ctx: &mut MorphContext, intent: &crate::Intent) {
         let _ = (ctx, intent);
     }
@@ -408,6 +462,10 @@ pub trait MorphApp: Sized + 'static {
     /// suspended, after [`init`](Self::init). Android with
     /// `mobile-foreground-service` only; the app's other threads hear the
     /// same through [`system_events`](crate::system_events).
+    ///
+    /// May be called while the device is released, for an app whose
+    /// [`GPU_IN_BACKGROUND`](Self::GPU_IN_BACKGROUND) is `Release`: check
+    /// [`ctx.gpu()`](MorphContext::gpu) before GPU work, and defer it.
     fn on_service(&mut self, ctx: &mut MorphContext, event: &ServiceEvent) {
         let _ = (ctx, event);
     }
@@ -419,6 +477,10 @@ pub trait MorphApp: Sized + 'static {
     /// suspended or zoomed, a capture finished, or a QR code was read. On
     /// the main thread, before input and [`update`](Self::update), so the
     /// frame after it sees the result; after [`init`](Self::init).
+    ///
+    /// May be called while the device is released, for an app whose
+    /// [`GPU_IN_BACKGROUND`](Self::GPU_IN_BACKGROUND) is `Release`: check
+    /// [`ctx.gpu()`](MorphContext::gpu) before GPU work, and defer it.
     fn on_camera(&mut self, ctx: &mut MorphContext, event: &crate::camera::CameraEvent) {
         let _ = (ctx, event);
     }
@@ -431,6 +493,10 @@ pub trait MorphApp: Sized + 'static {
     /// arrives, also while suspended (one that arrived before the app
     /// existed comes right after `init`, with `request: None`); elsewhere
     /// before the next frame's [`update`](Self::update).
+    ///
+    /// May be called while the device is released, for an app whose
+    /// [`GPU_IN_BACKGROUND`](Self::GPU_IN_BACKGROUND) is `Release`: check
+    /// [`ctx.gpu()`](MorphContext::gpu) before GPU work, and defer it.
     fn on_media(&mut self, ctx: &mut MorphContext, response: &crate::media::MediaResponse) {
         let _ = (ctx, response);
     }
@@ -440,6 +506,10 @@ pub trait MorphApp: Sized + 'static {
     /// per report after [`init`](Self::init), whether or not the app is
     /// suspended. Never called on the desktop or the web, or in scripted
     /// runs unless the script says `low-memory`.
+    ///
+    /// May be called while the device is released, for an app whose
+    /// [`GPU_IN_BACKGROUND`](Self::GPU_IN_BACKGROUND) is `Release`: check
+    /// [`ctx.gpu()`](MorphContext::gpu) before GPU work, and defer it.
     fn on_low_memory(&mut self, ctx: &mut MorphContext) {
         let _ = ctx;
     }
@@ -450,17 +520,28 @@ pub trait MorphApp: Sized + 'static {
     /// whether or not the app is suspended. Never called on the desktop or
     /// the web, or in scripted runs unless the script says
     /// `trim-memory <level>`.
+    ///
+    /// May be called while the device is released, for an app whose
+    /// [`GPU_IN_BACKGROUND`](Self::GPU_IN_BACKGROUND) is `Release`: check
+    /// [`ctx.gpu()`](MorphContext::gpu) before GPU work, and defer it.
     fn on_trim_memory(&mut self, ctx: &mut MorphContext, level: crate::TrimLevel) {
         let _ = (ctx, level);
     }
 
     /// The surface is gone (app backgrounded). The device, queue and every
-    /// resource built on them stay valid.
+    /// resource built on them stay valid: a release, for an app that
+    /// chose one, comes later, announced by [`on_gpu`](Self::on_gpu).
+    ///
+    /// Always called with a device: [`ctx.gpu()`](MorphContext::gpu) is
+    /// `Some` here (plan `20261111_03`, decision 4).
     fn on_suspend(&mut self, ctx: &mut MorphContext) {
         let _ = ctx;
     }
 
     /// A new surface is configured after [`on_suspend`](Self::on_suspend).
+    ///
+    /// Always called with a device: [`ctx.gpu()`](MorphContext::gpu) is
+    /// `Some` here (plan `20261111_03`, decision 4).
     fn on_resume(&mut self, ctx: &mut MorphContext) {
         let _ = ctx;
     }

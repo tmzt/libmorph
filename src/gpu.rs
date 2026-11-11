@@ -171,16 +171,18 @@ pub(crate) struct Opened {
     pub gpu: Gpu,
 }
 
-/// What bring-up gives: what stays for the whole run (the instance and the
-/// limits first granted), and the first device.
+/// What bring-up gives: what stays for the whole run (the instance, the
+/// limits first granted, how the device was asked for), and the first
+/// device.
 #[derive(Debug)]
 pub(crate) struct BringUp {
     pub instance: wgpu::Instance,
     pub limits: wgpu::Limits,
+    pub request: DeviceRequest,
     pub opened: Opened,
 }
 
-/// How a runner asks for a device.
+/// How a runner asks for a device, kept so a restore asks the same way.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct DeviceRequest {
     pub force_fallback_adapter: bool,
@@ -295,8 +297,24 @@ pub(crate) async fn bring_up(
     Ok(BringUp {
         instance,
         limits,
+        request,
         opened,
     })
+}
+
+/// A device again after a release: an adapter for `surface`, then a device
+/// with the `limits` first granted, so everything the app built against
+/// them still fits.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) async fn reopen(
+    instance: &wgpu::Instance,
+    surface: Option<&wgpu::Surface<'_>>,
+    request: DeviceRequest,
+    limits: &wgpu::Limits,
+    memory_hints: wgpu::MemoryHints,
+) -> Result<Opened, GpuError> {
+    let adapter = adapter(instance, surface, request).await?;
+    open(adapter, limits, request, memory_hints).await
 }
 
 impl Opened {

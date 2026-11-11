@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use libdevice::DeviceSpec;
 
-use crate::gpu::{BringUp, Gpu, Opened};
+use crate::gpu::{BringUp, DeviceRequest, Gpu, Opened};
 use crate::log_once::log_once;
 use crate::pipeline_cache::PipelineCacheStore;
 use crate::{Audio, OpenLinkError, PermissionRequest, SafeArea, SecureStore};
@@ -123,6 +123,9 @@ pub struct MorphContext {
     pub(crate) instance: wgpu::Instance,
     /// The limits first granted; a restore asks for the same.
     pub(crate) limits: wgpu::Limits,
+    /// How the first device was asked for; a restore asks the same way.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub(crate) request: DeviceRequest,
     /// The device, queue and adapter: `None` while released.
     pub(crate) device: Option<Opened>,
     pub(crate) spec: DeviceSpec,
@@ -177,6 +180,7 @@ impl MorphContext {
         Self {
             instance: gpu.instance,
             limits: gpu.limits,
+            request: gpu.request,
             device: Some(gpu.opened),
             spec,
             safe_area: SafeArea::NONE,

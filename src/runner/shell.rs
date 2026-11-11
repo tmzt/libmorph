@@ -9,6 +9,7 @@ use crate::context::Target;
 use crate::gpu::WgpuConfig;
 use crate::log_once::log_once;
 use crate::{Frame, MorphApp, MorphContext, MorphError, Owned, RenderStatus, Touch};
+use crate::{GpuEvent, GpuInBackground};
 
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use super::overlay::Overlay;
@@ -47,6 +48,43 @@ impl Lifecycle {
     }
 }
 
+/// How long a failed restore waits before the next try, while the window
+/// is up (plan 20261111_03, decision 10).
+const RETRY: Duration = Duration::from_secs(2);
+
+/// How long a release waits for the device to finish its work (decision 9).
+const RELEASE_WAIT: Duration = Duration::from_secs(2);
+
+/// A surface that came while the device was released and could not be
+/// restored for: kept, and the restore tried again every [`RETRY`].
+enum Pending {
+    Surface(wgpu::Surface<'static>, (u32, u32)),
+    /// A scripted run's `resume`.
+    #[cfg(script_runner)]
+    Offscreen,
+}
+
+/// When a failed restore is tried again: every [`RETRY`] after the last
+/// failure, while the window is up.
+#[derive(Debug, Default)]
+struct Retry {
+    at: Option<Instant>,
+}
+
+impl Retry {
+    fn failed(&mut self, now: Instant) {
+        self.at = Some(now + RETRY);
+    }
+
+    fn due(&self, now: Instant) -> bool {
+        self.at.is_some_and(|at| now >= at)
+    }
+
+    fn clear(&mut self) {
+        self.at = None;
+    }
+}
+
 pub(crate) struct Shell<A> {
     pub ctx: MorphContext,
     pub app: A,
@@ -54,8 +92,24 @@ pub(crate) struct Shell<A> {
     last_frame: Instant,
     /// Scripted runs: the `dt` every frame gets, instead of the clock.
     fixed_dt: Option<Duration>,
+    /// Scripted runs: the time, advanced by `dt` each frame (and each frame
+    /// that passes while suspended), so a release's `after` is counted in
+    /// frames. `None` reads the wall clock.
+    script_now: Option<Instant>,
+    /// When the app last lost its surface: the start of a releasing app's
+    /// `after`. `None` while it has one.
+    off_since: Option<Instant>,
+    /// A surface waiting for a restore that failed.
+    pending: Option<Pending>,
+    retry: Retry,
+    /// Input was dropped for want of a device since it was last present:
+    /// logged once per stretch.
+    dropping_input: bool,
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     pub overlay: Option<Overlay>,
+    /// The runner asked for the overlay: rebuilt after a restore.
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    overlay_wanted: bool,
 }
 
 impl<A: MorphApp> Shell<A> {
@@ -107,9 +161,54 @@ impl<A: MorphApp> Shell<A> {
             lifecycle: Lifecycle::default(),
             last_frame: Instant::now(),
             fixed_dt,
+            script_now: fixed_dt.map(|_| Instant::now()),
+            off_since: None,
+            pending: None,
+            retry: Retry::default(),
+            dropping_input: false,
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             overlay: None,
+            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            overlay_wanted: false,
         }
+    }
+
+    /// Draw the desktop overlay over every frame, from now on and after
+    /// each restore.
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    pub fn enable_overlay(&mut self) {
+        self.overlay_wanted = true;
+        self.overlay = Overlay::new(&self.ctx);
+    }
+
+    /// The time the release clock and the restore retry read.
+    fn now(&self) -> Instant {
+        self.script_now.unwrap_or_else(Instant::now)
+    }
+
+    /// `after` for an app that releases its device off screen; `None` for
+    /// one that keeps it, and on the web, where nothing is released.
+    fn release_after() -> Option<Duration> {
+        match A::GPU_IN_BACKGROUND {
+            GpuInBackground::Release { after } if !cfg!(target_arch = "wasm32") => Some(after),
+            _ => None,
+        }
+    }
+
+    /// Whether the app gives its device back off screen.
+    pub fn releases() -> bool {
+        Self::release_after().is_some()
+    }
+
+    /// Whether the app has been told it is suspended.
+    #[cfg(script_runner)]
+    pub fn suspended(&self) -> bool {
+        self.lifecycle.suspended
+    }
+
+    /// Whether there is a device: `false` only while released.
+    pub fn has_device(&self) -> bool {
+        self.ctx.device.is_some()
     }
 
     /// The instance, kept for the whole run: surfaces are created from it.
@@ -122,8 +221,17 @@ impl<A: MorphApp> Shell<A> {
     }
 
     /// Install a new surface: after a resume, or to replace a lost one. The
-    /// app hears [`MorphApp::on_resume`] only if it was suspended.
+    /// app hears [`MorphApp::on_resume`] only if it was suspended. If the
+    /// device was released, it is restored first, and the app hears
+    /// [`MorphApp::on_gpu`] with [`GpuEvent::Restored`] before `on_resume`;
+    /// if that fails the surface is kept and the restore tried again every
+    /// [`RETRY`] from [`poll_gpu`](Self::poll_gpu).
     pub fn attach(&mut self, surface: wgpu::Surface<'static>, size: (u32, u32)) {
+        let restored = !self.has_device();
+        if restored && !self.restore(Some(&surface)) {
+            self.pending = Some(Pending::Surface(surface, size));
+            return;
+        }
         let previous = Some(self.ctx.surface_format);
         let Some(config) = self.ctx.device.as_ref().and_then(|opened| {
             opened.configure(
@@ -139,16 +247,140 @@ impl<A: MorphApp> Shell<A> {
         };
         self.ctx.surface_format = config.format;
         self.ctx.surface_size = (config.width, config.height);
-        self.install(Target::Surface(surface, config));
+        self.install(Target::Surface(surface, config), restored);
     }
 
-    fn install(&mut self, target: Target) {
+    /// The new target is in place: `on_gpu(Restored)` after a restore,
+    /// then `on_resume` if the app was suspended.
+    fn install(&mut self, target: Target, restored: bool) {
         self.ctx.target = Some(target);
+        self.off_since = None;
         // Frame time does not accumulate across a suspension.
         self.last_frame = Instant::now();
+        if restored {
+            self.app.on_gpu(&mut self.ctx, &GpuEvent::Restored);
+            self.gpu_report("restore");
+        }
         if self.lifecycle.resume() {
             self.ctx.camera.resume();
             self.app.on_resume(&mut self.ctx);
+        }
+    }
+
+    /// A device again, after a release (decision 10): an adapter for
+    /// `surface` and a device with the limits first granted, then the
+    /// pipeline cache reopened from its saved data and the overlay rebuilt.
+    /// The caller configures the surface and tells the app. On failure it
+    /// logs, schedules the next try and returns `false`.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn restore(&mut self, surface: Option<&wgpu::Surface<'static>>) -> bool {
+        let reopened = pollster::block_on(crate::gpu::reopen(
+            &self.ctx.instance,
+            surface,
+            self.ctx.request,
+            &self.ctx.limits,
+            A::MEMORY_HINTS,
+        ));
+        let opened = match reopened {
+            Ok(opened) => opened,
+            Err(error) => {
+                log::error!(
+                    "libmorph: the GPU could not be restored ({error}); trying again in {} s",
+                    RETRY.as_secs()
+                );
+                let now = self.now();
+                self.retry.failed(now);
+                return false;
+            }
+        };
+        log::info!("libmorph: GPU restored");
+        self.retry.clear();
+        self.dropping_input = false;
+        if self.ctx.request.pipeline_cache
+            && let Some(dir) = self.ctx.data_dir.as_deref()
+        {
+            self.ctx.pipeline_cache = crate::pipeline_cache::PipelineCacheStore::open(
+                &opened.gpu.device,
+                &opened.adapter.get_info(),
+                dir,
+            );
+        }
+        self.ctx.device = Some(opened);
+        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        if self.overlay_wanted {
+            self.overlay = Overlay::new(&self.ctx);
+        }
+        true
+    }
+
+    /// The web never releases, so it never restores.
+    #[cfg(target_arch = "wasm32")]
+    fn restore(&mut self, _surface: Option<&wgpu::Surface<'static>>) -> bool {
+        false
+    }
+
+    /// Give the device back (decision 9): `on_gpu(Release)`, then the
+    /// pipeline cache saved and dropped, the overlay dropped, the device
+    /// waited on so queued work and dropped objects finish, and the device,
+    /// queue and adapter dropped. Only for a releasing app, suspended, with
+    /// a device.
+    fn release(&mut self, why: &str) {
+        if !Self::releases() || !self.lifecycle.suspended || !self.has_device() {
+            return;
+        }
+        self.app.on_gpu(&mut self.ctx, &GpuEvent::Release);
+        self.ctx.save_pipeline_cache();
+        self.ctx.pipeline_cache = None;
+        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        {
+            self.overlay = None;
+        }
+        if let Some(device) = self.ctx.device() {
+            let wait = wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(RELEASE_WAIT),
+            };
+            if let Err(error) = device.poll(wait) {
+                log::warn!("libmorph: waiting on the GPU before the release: {error}");
+            }
+        }
+        self.gpu_report("release");
+        self.ctx.device = None;
+        log::info!("libmorph: GPU released ({why})");
+    }
+
+    /// The release clock and the restore retry, called from the runner's
+    /// loop: releases a releasing app's device once it has been off screen
+    /// for `after`, and tries a failed restore again when it is due.
+    /// Returns when it next needs calling, for the runner's wait.
+    pub fn poll_gpu(&mut self) -> Option<Instant> {
+        let after = Self::release_after()?;
+        let now = self.now();
+        if self.has_device() {
+            let due = self.off_since? + after;
+            if now < due {
+                return Some(due);
+            }
+            self.release("off screen");
+            return None;
+        }
+        if self.pending.is_some() && self.retry.due(now) {
+            match self.pending.take() {
+                Some(Pending::Surface(surface, size)) => self.attach(surface, size),
+                #[cfg(script_runner)]
+                Some(Pending::Offscreen) => self.attach_offscreen(),
+                None => {}
+            }
+        }
+        self.retry.at
+    }
+
+    /// Memory pressure: a releasing app off screen gives its device back at
+    /// once (decision 8).
+    #[cfg(any(script_runner, target_os = "android"))]
+    fn release_under_pressure(&mut self, why: &str) {
+        if self.off_since.is_some() {
+            self.release(why);
         }
     }
 
@@ -179,22 +411,35 @@ impl<A: MorphApp> Shell<A> {
         }
     }
 
-    /// The system is low on memory: tell the app, suspended or not.
+    /// The system is low on memory: tell the app, suspended or not, then
+    /// release a releasing app's device if it is off screen.
     #[cfg(any(script_runner, target_os = "android"))]
     pub fn low_memory(&mut self) {
         self.app.on_low_memory(&mut self.ctx);
+        self.release_under_pressure("low memory");
     }
 
-    /// Android asked the app to trim memory: tell it, suspended or not.
+    /// Android asked the app to trim memory: tell it, suspended or not,
+    /// then, from `Background` up, release a releasing app's device if it
+    /// is off screen.
     #[cfg(any(script_runner, target_os = "android"))]
     pub fn trim_memory(&mut self, level: crate::TrimLevel) {
         self.app.on_trim_memory(&mut self.ctx, level);
+        if level >= crate::TrimLevel::Background {
+            self.release_under_pressure("trim memory");
+        }
     }
 
     /// Drop the surface (it must not outlive the platform window) and tell
     /// the app, unless it already knows it is suspended.
     pub fn detach(&mut self) {
         self.ctx.target = None;
+        // A surface waiting for a restore goes with the window too.
+        self.pending = None;
+        self.retry.clear();
+        if Self::releases() && self.off_since.is_none() {
+            self.off_since = Some(self.now());
+        }
         if self.lifecycle.suspend() {
             self.ctx.camera.suspend();
             self.camera_events();
@@ -285,21 +530,51 @@ impl<A: MorphApp> Shell<A> {
         self.app.on_camera(&mut self.ctx, event);
     }
 
+    /// Input reaches the app only with a device (decision 4): what arrives
+    /// with a window but none, after a failed restore, is dropped, with one
+    /// log line per stretch.
+    fn input_allowed(&mut self) -> bool {
+        if self.has_device() {
+            return true;
+        }
+        if !std::mem::replace(&mut self.dropping_input, true) {
+            log::warn!("libmorph: input dropped: the GPU is released and not yet restored");
+        }
+        false
+    }
+
     pub fn touch(&mut self, touch: Touch) {
-        self.app.on_touch(&mut self.ctx, touch);
+        if self.input_allowed() {
+            self.app.on_touch(&mut self.ctx, touch);
+        }
     }
 
     pub fn key(&mut self, key: crate::Key) -> crate::KeyStatus {
-        self.app.on_key(&mut self.ctx, key)
+        if self.input_allowed() {
+            self.app.on_key(&mut self.ctx, key)
+        } else {
+            crate::KeyStatus::Unhandled
+        }
     }
 
     pub fn text_input(&mut self, event: crate::TextInputEvent) {
-        self.app.on_text_input(&mut self.ctx, &event);
+        if self.input_allowed() {
+            self.app.on_text_input(&mut self.ctx, &event);
+        }
     }
 
     #[cfg(not(target_os = "android"))]
     pub fn hover(&mut self, x: f32, y: f32) {
-        self.app.on_hover(&mut self.ctx, x, y);
+        if self.input_allowed() {
+            self.app.on_hover(&mut self.ctx, x, y);
+        }
+    }
+
+    /// A scripted run's clock moves on by one frame's `dt`.
+    fn tick_script_clock(&mut self) {
+        if let (Some(now), Some(dt)) = (&mut self.script_now, self.fixed_dt) {
+            *now += dt;
+        }
     }
 
     /// One iteration: the subsystem pumps and `update`, then either
@@ -308,6 +583,11 @@ impl<A: MorphApp> Shell<A> {
     /// `A` is monomorphized, so the branch folds at compile time and a
     /// managed app is compiled to the managed path alone.
     pub fn frame(&mut self) -> FrameStatus {
+        self.tick_script_clock();
+        // No frames without a device (decision 4).
+        if !self.has_device() {
+            return FrameStatus::Skipped;
+        }
         if A::OWNS.contains(Owned::FRAME) {
             self.app_frame()
         } else {
@@ -455,6 +735,15 @@ impl<A: MorphApp> Shell<A> {
 /// Scripted runs: an offscreen texture in place of a surface.
 #[cfg(script_runner)]
 impl<A: MorphApp> Shell<A> {
+    /// While suspended, `n` frames' time passes with no frame run, and the
+    /// release clock is read after each (decision 14).
+    pub fn idle_frames(&mut self, n: u32) {
+        for _ in 0..n {
+            self.tick_script_clock();
+            self.poll_gpu();
+        }
+    }
+
     /// The offscreen format: RGBA so readback needs no channel swap, sRGB
     /// or not as the app asks.
     pub fn offscreen_format() -> wgpu::TextureFormat {
@@ -476,9 +765,15 @@ impl<A: MorphApp> Shell<A> {
 
     /// A new offscreen target in the kept format and size, after
     /// [`detach`](Self::detach).
+    /// Restores the device first if it was released.
     pub fn attach_offscreen(&mut self) {
+        let restored = !self.has_device();
+        if restored && !self.restore(None) {
+            self.pending = Some(Pending::Offscreen);
+            return;
+        }
         if let Some(texture) = offscreen_texture(&self.ctx) {
-            self.install(Target::Offscreen(texture));
+            self.install(Target::Offscreen(texture), restored);
         }
     }
 
@@ -513,7 +808,8 @@ fn offscreen_texture(ctx: &MorphContext) -> Option<wgpu::Texture> {
 
 #[cfg(test)]
 mod tests {
-    use super::Lifecycle;
+    use super::{Lifecycle, Retry};
+    use std::time::Duration;
 
     #[test]
     fn one_suspend_and_resume_per_transition() {
@@ -523,6 +819,23 @@ mod tests {
         assert!(!life.suspend(), "already suspended");
         assert!(life.resume());
         assert!(!life.resume());
+    }
+
+    /// A failed restore is tried again every two seconds after the last
+    /// failure, and not before; a success, or the window going, stops it.
+    #[test]
+    fn a_failed_restore_is_retried_every_two_seconds() {
+        let start = web_time::Instant::now();
+        let mut retry = Retry::default();
+        assert!(!retry.due(start), "nothing failed");
+        retry.failed(start);
+        assert!(!retry.due(start + Duration::from_millis(1999)));
+        assert!(retry.due(start + Duration::from_secs(2)));
+        retry.failed(start + Duration::from_secs(2));
+        assert!(!retry.due(start + Duration::from_secs(3)));
+        assert!(retry.due(start + Duration::from_secs(4)));
+        retry.clear();
+        assert!(!retry.due(start + Duration::from_secs(60)));
     }
 
     #[test]

@@ -89,7 +89,11 @@ const MAX_NAME: usize = 64;
 pub enum Command {
     /// `fps <n>`: the fixed frame rate, before the first frame.
     Fps(u32),
-    /// `frames <n>`: run `n` frames.
+    /// `frames <n>`: run `n` frames. While suspended no frame runs: the
+    /// time of `n` frames at the script's `fps` passes, which is what a
+    /// releasing app's
+    /// [`GPU_IN_BACKGROUND`](crate::MorphApp::GPU_IN_BACKGROUND) `after`
+    /// is counted in.
     Frames(u32),
     /// `touch <id> <start|move|end|cancel> <x> <y> [<pressure>]`.
     Touch(Touch),
@@ -402,9 +406,13 @@ impl Planner {
                 }
             }
             Command::Frames(n) => {
-                running("frames", self.suspended)?;
                 range("frames", *n, 1, MAX_FRAMES)?;
-                self.frames(line, *n);
+                if self.suspended {
+                    // Time passes; no frame is run or counted.
+                    self.wait(line, *n);
+                } else {
+                    self.frames(line, *n);
+                }
             }
             Command::Touch(touch) => {
                 running("touch", self.suspended)?;
@@ -582,6 +590,11 @@ impl Planner {
             *count += n;
             return;
         }
+        self.push(line, Action::Frames(n));
+    }
+
+    /// `frames <n>` while suspended: `n` frames' time, no frames.
+    fn wait(&mut self, line: u32, n: u32) {
         self.push(line, Action::Frames(n));
     }
 
@@ -963,6 +976,26 @@ mod tests {
         assert!(message.contains("usage: low-memory"), "{message}");
     }
 
+    /// While suspended, `frames` is time passing: accepted, and not counted
+    /// as frames run, so a default screenshot name is unchanged by it.
+    #[test]
+    fn frames_while_suspended_pass_time_without_counting() {
+        assert_eq!(
+            actions("frames 2\nsuspend\nframes 5\nresume\nframes 1\nscreenshot"),
+            [
+                Action::Frames(2),
+                Action::Suspend,
+                Action::Frames(5),
+                Action::Resume,
+                Action::Frames(1),
+                Action::Screenshot {
+                    name: "screenshot-000003".into(),
+                    frame: 3,
+                },
+            ]
+        );
+    }
+
     #[test]
     fn gpu_report_takes_nothing_and_works_while_suspended() {
         assert_eq!(
@@ -1282,7 +1315,6 @@ mod tests {
             ("frames 1\nscreenshot a.png", 2, "must be 1–64"),
             ("suspend\nsuspend", 2, "already suspended"),
             ("resume", 1, "while running"),
-            ("suspend\nframes 1", 2, "`frames` while suspended"),
             ("suspend\ntap 0 0", 2, "while suspended"),
             ("suspend\ndrag 0 0 0 1 1 1", 2, "while suspended"),
             ("suspend\ntouch 0 start 0 0", 2, "while suspended"),

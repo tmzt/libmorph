@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use libdevice::InsetType;
 
-use super::overlay::Overlay;
 use super::shell::Shell;
 use crate::camera::ScriptFrame;
 use crate::gpu::{self, DeviceRequest};
@@ -50,7 +49,7 @@ pub(crate) fn run<A: MorphApp>(script: &Script, run: ScriptRun) -> Result<Report
     let fps = script.fps();
     let mut shell = Shell::<A>::start_offscreen(ctx, size, Duration::from_secs(1) / fps);
     if run.overlay {
-        shell.overlay = Overlay::new(&shell.ctx);
+        shell.enable_overlay();
     }
     let mut manifest = Manifest {
         script: script.path().map(|path| path.display().to_string()),
@@ -94,9 +93,13 @@ fn play<A: MorphApp>(
 ) -> Result<(), ScriptError> {
     for (line, action) in script.actions() {
         match action {
+            // While suspended no frame runs; the time of `n` frames passes,
+            // which is what a releasing app's `after` is counted in.
+            Action::Frames(n) if shell.suspended() => shell.idle_frames(n),
             Action::Frames(n) => {
                 for _ in 0..n {
                     shell.frame();
+                    shell.poll_gpu();
                     if shell.exit_requested() {
                         break;
                     }

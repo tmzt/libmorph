@@ -45,6 +45,7 @@ pub fn run_android<A: MorphApp>(app: AndroidApp) {
             intents: Vec::new(),
             #[cfg(feature = "mobile-media-request")]
             media: Vec::new(),
+            gpu_deadline: None,
         },
     );
 }
@@ -82,6 +83,9 @@ struct Adapter<A> {
     /// killed while the camera was up), delivered right after `init`.
     #[cfg(feature = "mobile-media-request")]
     media: Vec<libmobile::media::MediaResponse>,
+    /// When the shell's release clock or restore retry next needs reading
+    /// (plan 20261111_03, decision 8), for `poll_timeout`.
+    gpu_deadline: Option<web_time::Instant>,
 }
 
 /// What capture needs granted at runtime.
@@ -460,15 +464,23 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
 
     fn tick(&mut self, app: &AndroidApp) {
         self.frame(app);
+        // A releasing app's device goes once it has been off screen for
+        // `after`; a failed restore is tried again.
+        self.gpu_deadline = self.shell.as_mut().and_then(Shell::poll_gpu);
         self.check_exit(app);
     }
 
     fn poll_timeout(&self) -> Option<Duration> {
         // Render continuously while visible; Fifo presentation paces it.
         if self.resumed && self.shell.as_ref().is_some_and(Shell::has_surface) {
-            Some(Duration::ZERO)
-        } else {
-            Some(DEFAULT_POLL_TIMEOUT)
+            return Some(Duration::ZERO);
         }
+        // Otherwise wake for the release clock if it is due sooner.
+        let until = self
+            .gpu_deadline
+            .map(|at| at.saturating_duration_since(web_time::Instant::now()));
+        Some(until.map_or(DEFAULT_POLL_TIMEOUT, |until| {
+            until.min(DEFAULT_POLL_TIMEOUT)
+        }))
     }
 }
