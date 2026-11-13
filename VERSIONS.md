@@ -501,3 +501,49 @@ surface's own reconfiguration, `MorphApp::wgpu_config` at the following
 attach, the format kept across a change, and a frame held over one are
 not reachable from a script. That wants a target that simulates a
 swapchain.
+
+## libmorph 0.8.0 — 2026-11-12 (tag v0.8.0)
+
+A minor bump under Rule 5.4: two accessors' types and the timing of two
+callbacks change. An app may now give its GPU back while it is off screen
+(plan 20261111_03, The device may be absent).
+
+- **Breaking:** `MorphContext::device()`, `queue()` and `adapter_info()`
+  return `Option<&wgpu::Device>`, `Option<&wgpu::Queue>` and
+  `Option<wgpu::AdapterInfo>`. They are `None` only while the device is
+  released, which only an app with `GpuInBackground::Release` can reach;
+  for any other app they are always `Some`. The change an app makes, once
+  at the top of a callback that does GPU work:
+
+  ```rust
+  let Some(gpu) = ctx.gpu() else { return };
+  ```
+
+  (`RenderStatus::Skipped` from `render`, which in fact always has a
+  device). `init` returns the app, so it uses `ctx.gpu()` in a `match` or
+  keeps its GPU objects in an `Option`. `ctx.limits()` is unchanged and
+  always answers; `ctx.pipeline_cache()` is also `None` while released.
+- **Breaking:** `on_intent` and `on_open_url` are called when the intent
+  or link arrives, also while the app is suspended, in arrival order,
+  instead of after the next `on_resume`. An intent before `init` still
+  waits for `init`.
+- Added `libmorph::Gpu { device, queue }` (`Clone`) and
+  `MorphContext::gpu() -> Option<Gpu>`.
+- Added `GpuInBackground` (`Keep`, `Release { after }`;
+  `#[non_exhaustive]`) and `MorphApp::GPU_IN_BACKGROUND`, default `Keep`,
+  which keeps 0.7's behaviour. With `Release { after }` the device is
+  released after `after` without a surface, or at once without one under
+  a `TrimLevel::Background` or higher trim or low memory, and restored
+  with the limits first granted at the next surface. On the desktop a
+  hidden or minimised window is a suspension for a releasing app.
+- Added `GpuEvent` (`Release`, `Restored`; `#[non_exhaustive]`) and
+  `MorphApp::on_gpu(&mut self, ctx, &GpuEvent)`, default empty, called
+  only for a releasing app, always with a device: `Release` before the
+  device goes, `Restored` after a restore and before `on_resume`.
+- Added `MorphApp::MEMORY_HINTS: wgpu::MemoryHints`, default
+  `Performance`, used for every device request.
+- Added the script verb `gpu-report` and `script::Command::GpuReport`
+  (`Command` is `#[non_exhaustive]`). libmorph logs the allocator report
+  at each suspend, release and restore, and `frames` is accepted while a
+  script is suspended, where it passes time without drawing.
+- `Viewfinder::upload` returns `false` and draws nothing without a device.
