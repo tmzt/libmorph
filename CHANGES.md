@@ -1964,3 +1964,31 @@ Open:
   window has been shown once.
 - **Step 6** waits for the owner: the background example is built and
   installed on the S23, but running it takes the phone's foreground.
+
+## 2026-11-12 21:31 EST — plan 20261111_03 step 6: the S23 measurement
+
+For [The device may be absent](docs/design/20261111_03_THE_DEVICE_MAY_BE_ABSENT_PLAN.md),
+step 6. The `background` example (`Release { after: 10 s }`, a 64 MiB
+ballast texture) on the Galaxy S23 Ultra (Adreno 740, Vulkan), launched,
+sent HOME, measured, and relaunched. Evidence:
+`out/gpu-release/20261112_01_s23_release/`, logged in `out/gpu-release/LOG.md`.
+
+| `dumpsys meminfo` | Graphics | GL mtrack | EGL mtrack | TOTAL PSS |
+|---|---|---|---|---|
+| Foreground, 6 s after launch | 251,896 kB | 202,216 kB | 49,680 kB | 311,733 kB |
+| 4 s after HOME, not yet released | 202,216 kB | 202,216 kB | 0 | 266,930 kB |
+| 16 s after HOME, released | 384 kB | 384 kB | 0 | 64,575 kB |
+| Relaunched, restored | 251,896 kB | 202,216 kB | 49,680 kB | 316,527 kB |
+
+The surface (EGL, 49.7 MB) goes at suspend, as before; the device's
+202 MB stays for `after` and then goes. `on_gpu(Release)` came 10.0 s
+after HOME (21:27:31.116 to 21:27:41.116), with the allocator at 524,608
+bytes allocated and 201,326,592 reserved at release (67,899,392 allocated
+at suspend). On relaunch the log reads "GPU restored", "pipeline cache:
+loaded 96 bytes" (saved at release and reopened; 96 bytes, since the
+example builds no pipelines), `on_gpu Restored`, the restore report
+(67,899,648 bytes allocated), then `on_resume`, in decision 10's order,
+and the screen shows the example's clear colour again.
+
+Step 6 is done. Still open: step 5's macOS minimise check, which needs an
+unlocked session, so the plan stays `In implementation`.
