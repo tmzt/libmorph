@@ -32,7 +32,7 @@ impl MorphApp for App {
     }
 
     fn render(&mut self, ctx: &mut MorphContext, frame: &Frame<'_>) -> RenderStatus {
-        // Draw to frame.view with ctx.device() and ctx.queue().
+        // Draw to frame.view with the device and queue from ctx.gpu().
         RenderStatus::Drawn
     }
 }
@@ -84,7 +84,7 @@ impl MorphApp for Game {
                 return;
             }
         };
-        // Draw into frame.view with ctx.device() and ctx.queue(), then:
+        // Draw into frame.view with the device and queue from ctx.gpu(), then:
         ctx.present_frame(frame);
     }
 }
@@ -226,9 +226,10 @@ From Rust, including tests: `libmorph::script::run::<App>(&script, run)`.
 
 ## Lifecycle
 
-The device and queue live for the whole run. The surface does not: it exists
-only while there is a window, and on Android the window goes away whenever the
-app leaves the screen.
+The surface exists only while there is a window, and on Android the window
+goes away whenever the app leaves the screen. The device and queue live for
+the whole run by default; an app may instead give them back while it is off
+screen (see [The device off screen](#the-device-off-screen)).
 
 **Android.** A new window creates and configures the surface; on the first one
 libmorph also brings up the adapter, device and queue and calls `init`. When
@@ -248,6 +249,65 @@ all go through the same shutdown.
 
 `on_suspend` and `on_resume` are called once per transition, and every exit
 calls `on_suspend` once unless the app is already suspended.
+
+`on_intent` and `on_open_url` are called when the intent or link arrives,
+also while the app is suspended, in the order they arrive. One that arrives
+before `init` waits for it.
+
+### The device off screen
+
+`GPU_IN_BACKGROUND` chooses what happens to the device while the app has no
+surface:
+
+```rust
+impl MorphApp for App {
+    // Keep it (the default), or give it back after 10 s off screen:
+    const GPU_IN_BACKGROUND: GpuInBackground =
+        GpuInBackground::Release { after: Duration::from_secs(10) };
+
+    fn on_gpu(&mut self, ctx: &mut MorphContext, event: &GpuEvent) {
+        match event {
+            // Drop every wgpu object, cloned `Gpu` values included.
+            GpuEvent::Release => self.scene = None,
+            // A new device with the same limits: rebuild.
+            GpuEvent::Restored => self.scene = ctx.gpu().map(|gpu| Scene::new(&gpu)),
+            _ => {}
+        }
+    }
+    // ...
+}
+```
+
+With `Release { after }`, the device goes once the app has had no surface
+for `after`, or at once with no surface under a `TrimLevel::Background` (or
+higher) trim or low memory. libmorph calls `on_gpu(Release)`, saves the
+pipeline cache, waits up to 2 s for queued work, and drops the queue, device
+and adapter; the memory returns when the last handle goes, so a handle the
+app keeps keeps it. At the next surface it requests a device with the limits
+first granted, reopens the pipeline cache, calls `on_gpu(Restored)`, then
+`on_resume`. A restore that fails is logged and retried every 2 s while the
+window is up. On the desktop, a hidden or minimised window counts as a
+suspension for a releasing app. `MEMORY_HINTS` sets wgpu's memory hints for
+every device request, and libmorph logs the allocator's report at each
+suspend, release and restore (the `gpu-report` script verb does the same).
+
+`ctx.gpu()`, `ctx.device()`, `ctx.queue()`, `ctx.adapter_info()` and
+`ctx.pipeline_cache()` return `None` only while the device is released, which
+only a `Release` app can reach; `ctx.limits()` always answers. `init`,
+`update`, `render`, `construct_frame`, `on_audio`, `on_touch`, `on_hover`,
+`on_key`, `on_text_input`, `on_suspend`, `on_resume` and `on_gpu` always have
+a device: libmorph calls none of them while it is released, and drops input
+that arrives before a restore. The other callbacks, `on_intent` and
+`on_open_url` among them, may run without one. A callback that does GPU work
+starts with:
+
+```rust
+let Some(gpu) = ctx.gpu() else { return };
+```
+
+and defers what it cannot do yet. `init` returns the app, so a releasing app
+keeps its GPU objects in an `Option` built when there is a device, which is
+also what it rebuilds on `Restored`.
 
 ## Features
 
