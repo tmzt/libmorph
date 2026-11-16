@@ -582,3 +582,9 @@ short-gap repair remains the default.
 
 - libmobile 0.5.1 → 0.5.2 (revision `75fb7d9`); the QR API and runtime
   behavior are unchanged.
+
+## libmorph-build 0.5.2 — 2026-11-16 (tag `libmorph-build-v0.5.2`)
+
+- libmobile 0.5.1 → 0.5.2 (revision `75fb7d9`); the
+  `libmorph_build::gradle` re-export follows the compatible release and its
+  public API is unchanged.

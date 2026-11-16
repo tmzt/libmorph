@@ -2012,3 +2012,9 @@ options now add `terminal_qr_compatibility`; the companion enables it for
 pairing codes rendered by a terminal. The standard short-gap repair remains
 the default for other callers. libmorph and `libmorph-build` consume
 libmobile 0.5.1; the camera protocol and event API remain unchanged.
+
+## 2026-11-16 15:20 EST — Follow the camera QR feature build fix
+
+libmorph now consumes libmobile 0.5.2, which restores the camera QR feature's
+contrast threshold constant. The camera protocol and event API remain
+unchanged.
