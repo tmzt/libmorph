@@ -1077,8 +1077,8 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libmobile"
-version = "0.5.1"
-source = "git+https://github.com/tmzt/libmobile?rev=f95f39d29bce07a26aa3764e2b6ac0d6bd50d330#f95f39d29bce07a26aa3764e2b6ac0d6bd50d330"
+version = "0.5.2"
+source = "git+https://github.com/tmzt/libmobile?rev=75fb7d9c7e529b8285b012552f53e5f4a75c8d60#75fb7d9c7e529b8285b012552f53e5f4a75c8d60"
 dependencies = [
  "android-activity",
  "cpal",
@@ -1096,7 +1096,7 @@ dependencies = [
 
 [[package]]
 name = "libmorph"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "block2 0.5.1",
  "cpal",

@@ -1,6 +1,6 @@
 [package]
 name = "libmorph"
-version = "0.9.1"
+version = "0.9.2"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Unified windowing, graphics and device-emulation shell for wgpu applications"
@@ -83,14 +83,14 @@ web-time = "1"
 wgpu = "30.0.1"
 # Its platform-free types (`SafeArea`, `Insets`) build on any host; the
 # runtime is Android-only.
-libmobile = { git = "https://github.com/tmzt/libmobile", rev = "f95f39d29bce07a26aa3764e2b6ac0d6bd50d330", optional = true }
+libmobile = { git = "https://github.com/tmzt/libmobile", rev = "75fb7d9c7e529b8285b012552f53e5f4a75c8d60", optional = true }
 # `system_events::subscribe_tokio` (feature `tokio`): an unbounded channel only.
 tokio = { version = "1", default-features = false, features = ["sync"], optional = true }
 
 # The host copy, for `libmobile::gradle::forward_metadata` in build.rs.
 # `dep:libmobile` (the `mobile` feature) enables it with the normal one.
 [build-dependencies]
-libmobile = { git = "https://github.com/tmzt/libmobile", rev = "f95f39d29bce07a26aa3764e2b6ac0d6bd50d330", optional = true }
+libmobile = { git = "https://github.com/tmzt/libmobile", rev = "75fb7d9c7e529b8285b012552f53e5f4a75c8d60", optional = true }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 winit = "0.30.13"
