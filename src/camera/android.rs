@@ -218,6 +218,7 @@ mod qr {
             ScreenExposure::Off => types::ScreenExposure::Off,
             ScreenExposure::Screen => types::ScreenExposure::Screen,
         };
+        out.terminal_qr_compatibility = options.terminal_qr_compatibility;
         out.preview = options.preview.map(preview_options);
         out
     }

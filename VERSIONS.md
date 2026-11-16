@@ -562,3 +562,12 @@ No libmorph camera protocol or event API changes.
 - **Breaking:** libmobile 0.4.0 → 0.5.0 (revision `a7407e0`) (Rule 5.5).
   The `libmorph_build::gradle` re-export follows the compatible release;
   its public API is unchanged.
+
+## libmorph 0.9.1 — 2026-11-16 (tag `v0.9.1`)
+
+`QrOptions::terminal_qr_compatibility` is an additive setting for opting into
+wider terminal QR line-spacing repair. Its default is `false`; the existing
+short-gap repair remains the default.
+
+- libmobile 0.5.0 → 0.5.1 (revision `f95f39d`) with the additive QR option.
+

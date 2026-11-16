@@ -283,6 +283,9 @@ pub struct QrOptions {
     /// Preview frames for a viewfinder; `None` for none. Default
     /// `Some(PreviewOptions::default())`.
     pub preview: Option<PreviewOptions>,
+    /// Repair terminal-rendered QR line spacing up to eight frame rows.
+    /// Default `false`, preserving the standard short-gap repair.
+    pub terminal_qr_compatibility: bool,
 }
 
 impl Default for QrOptions {
@@ -293,6 +296,7 @@ impl Default for QrOptions {
             auto_zoom: true,
             exposure: ScreenExposure::Auto,
             preview: Some(PreviewOptions::default()),
+            terminal_qr_compatibility: false,
         }
     }
 }
@@ -607,6 +611,7 @@ mod tests {
         assert!(q.auto_zoom);
         assert_eq!(q.exposure, ScreenExposure::Auto);
         assert_eq!(q.preview, Some(PreviewOptions::default()));
+        assert!(!q.terminal_qr_compatibility);
     }
 
     #[test]
