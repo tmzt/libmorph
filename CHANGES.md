@@ -2004,3 +2004,11 @@ terminal horizontal-gap normalization.
 
 The package releases are libmorph 0.9.0 (`8875a81`, tag `v0.9.0`) and
 libmorph-build 0.5.0 (`b0e5183`, tag `libmorph-build-v0.5.0`).
+
+## 2026-11-16 13:51 EST — Camera QR release: opt-in terminal line spacing
+
+Plan: `docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md`. The QR
+options now add `terminal_qr_compatibility`; the companion enables it for
+pairing codes rendered by a terminal. The standard short-gap repair remains
+the default for other callers. libmorph and `libmorph-build` consume
+libmobile 0.5.1; the camera protocol and event API remain unchanged.
