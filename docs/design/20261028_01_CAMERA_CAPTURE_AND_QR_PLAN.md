@@ -289,3 +289,14 @@ gitignored `[patch]`). The branch merges into `main` once libmobile 0.3.1
 is published and `Cargo.lock` is re-resolved against it. The status is
 `In implementation`, and the document is now immutable: it changes only on
 the owner's explicit instruction.
+
+## Amendment — 2026-11-16 12:35 EST: consume libmobile 0.5.0 QR normalization
+
+At the owner's instruction, libmorph consumes libmobile `v0.5.0` at
+revision `a7407e0`, which normalizes terminal horizontal gaps privately in
+the QR decoder. The existing `mobile-camera-qr` passthrough and all
+libmorph camera protocol and event types remain unchanged. Both libmorph's
+runtime and build dependencies, and the `libmorph-build` re-export
+dependency, resolve to this revision. This amendment supersedes the
+implementation-start note's pending dependency re-resolution; the plan
+remains `In implementation` and is otherwise immutable.

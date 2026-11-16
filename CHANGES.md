@@ -1992,3 +1992,15 @@ and the screen shows the example's clear colour again.
 
 Step 6 is done. Still open: step 5's macOS minimise check, which needs an
 unlocked session, so the plan stays `In implementation`.
+
+## 2026-11-16 12:38 EST — Camera QR release: libmobile 0.5.0
+
+Plan: `docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md`. At the
+owner's instruction, libmorph now resolves libmobile's runtime and build
+dependencies, and `libmorph-build`'s Gradle re-export dependency, to
+libmobile `v0.5.0` at revision `a7407e0`. The release keeps libmorph's
+camera protocol and event API unchanged while consuming libmobile's private
+terminal horizontal-gap normalization.
+
+The package releases are libmorph 0.9.0 (`8875a81`, tag `v0.9.0`) and
+libmorph-build 0.5.0 (`b0e5183`, tag `libmorph-build-v0.5.0`).
