@@ -83,14 +83,14 @@ web-time = "1"
 wgpu = "30.0.1"
 # Its platform-free types (`SafeArea`, `Insets`) build on any host; the
 # runtime is Android-only.
-libmobile = { git = "https://github.com/tmzt/libmobile", rev = "a7407e0", optional = true }
+libmobile = { git = "https://github.com/tmzt/libmobile", rev = "a7407e0659c3c791097d8eb330b688ccf75a4df4", optional = true }
 # `system_events::subscribe_tokio` (feature `tokio`): an unbounded channel only.
 tokio = { version = "1", default-features = false, features = ["sync"], optional = true }
 
 # The host copy, for `libmobile::gradle::forward_metadata` in build.rs.
 # `dep:libmobile` (the `mobile` feature) enables it with the normal one.
 [build-dependencies]
-libmobile = { git = "https://github.com/tmzt/libmobile", rev = "a7407e0", optional = true }
+libmobile = { git = "https://github.com/tmzt/libmobile", rev = "a7407e0659c3c791097d8eb330b688ccf75a4df4", optional = true }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 winit = "0.30.13"
