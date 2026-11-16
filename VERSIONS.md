@@ -547,3 +547,12 @@ callbacks change. An app may now give its GPU back while it is off screen
   at each suspend, release and restore, and `frames` is accepted while a
   script is suspended, where it passes time without drawing.
 - `Viewfinder::upload` returns `false` and draws nothing without a device.
+
+## libmorph 0.9.0 — 2026-11-16 (tag v0.9.0)
+
+No libmorph camera protocol or event API changes.
+
+- **Breaking:** libmobile 0.4.0 → 0.5.0 (revision `a7407e0`) (Rule 5.5).
+  The camera QR implementation's private terminal-gap normalization is
+  consumed through the existing `mobile-camera-qr` passthrough.
+
