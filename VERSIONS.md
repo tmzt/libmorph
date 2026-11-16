@@ -556,3 +556,9 @@ No libmorph camera protocol or event API changes.
   The camera QR implementation's private terminal-gap normalization is
   consumed through the existing `mobile-camera-qr` passthrough.
 
+
+## libmorph-build 0.5.0 — 2026-11-16 (tag libmorph-build-v0.5.0)
+
+- **Breaking:** libmobile 0.4.0 → 0.5.0 (revision `a7407e0`) (Rule 5.5).
+  The `libmorph_build::gradle` re-export follows the compatible release;
+  its public API is unchanged.
