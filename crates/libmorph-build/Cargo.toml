@@ -1,6 +1,6 @@
 [package]
 name = "libmorph-build"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Build-script helpers for libmorph apps: Gradle project generation for Android"
@@ -8,4 +8,4 @@ repository = "https://github.com/tmzt/libmorph"
 
 [dependencies]
 # `icons`: gradle::Icon and Project::icon (host-only; this crate is a
-libmobile = { git = "https://github.com/tmzt/libmobile", rev = "a7407e0659c3c791097d8eb330b688ccf75a4df4", features = ["icons"] }
+libmobile = { git = "https://github.com/tmzt/libmobile", rev = "f95f39d29bce07a26aa3764e2b6ac0d6bd50d330", features = ["icons"] }
