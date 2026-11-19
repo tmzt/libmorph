@@ -302,3 +302,31 @@ the read is a `statvfs` of microseconds, libmorph's own timer (one
 The timer never runs per tick or per frame on either host.
 
 Versioning stands: additive, a patch release.
+
+## Amendment — 2026-11-19 18:37 EST: open question 2 closed; DISK_WATCH stays off by default
+
+The owner answered open question 2 ("Default on?") on 2026-11-19, through
+the ShotToss coordinator (verbatim): "the only impact we have to disk is
+our redb caches which are expendable. later versions might add permanent
+album categories, remotes, cloud accounts, or sync policies, etc." That
+answer is the agreement for this amendment.
+
+It settles open question 2 of section 9 and confirms, unchanged, section
+2's `const DISK_WATCH: Option<DiskWatch> = None;` and its doc comment
+("None, the default: no watch, no timer, on_disk_pressure is never
+called"). It replaces nothing else, and no earlier amendment.
+
+- **The default stays `None`.** An app opts in with
+  `Some(DiskWatch::DEFAULT)` or its own thresholds. ShotToss opts in for
+  its expendable caches.
+- **Who should opt in.** Not only apps with caches: an app that keeps
+  permanent data (in ShotToss's later versions, say, album categories,
+  remotes, cloud accounts or sync policies) should opt in too, so that at
+  `Critical` it can defer or refuse writes it cannot afford to lose
+  halfway, rather than meet the disk filling mid-write.
+- **The grade is advisory.** libmorph deletes, trims and refuses nothing
+  at any grade; it only reports. What to drop or defer is the app's
+  decision, as with `MemoryPressure`. `on_disk_pressure`'s and
+  `DISK_WATCH`'s documentation say so in step 1.
+
+Open question 2 is closed. No open questions remain in this plan.
