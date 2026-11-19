@@ -2024,3 +2024,9 @@ unchanged.
 Plan: [All files access, the shared storage root and media scans on every host](docs/design/20261119_01_ALL_FILES_ACCESS_PLAN.md) (Draft).
 
 Planned new work, requested by ShotToss (`dev.tmzt.shottoss`) on the owner's instruction that generic JNI such as access checks belongs in libmobile and libmorph: four `MorphContext` methods over libmobile's plan of the same date, two passthrough features and a script verb, for libmorph 0.9.3 and libmorph-build 0.5.3. No code until the owner approves both plans.
+
+## 2026-11-19 18:25 EST — Disk pressure and memory pressure grades, planned
+
+Plans: [Disk space and disk pressure, told to the app when it changes](docs/design/20261119_02_DISK_PRESSURE_PLAN.md) and [Memory pressure in grades, shared from flankr](docs/design/20261119_03_MEMORY_PRESSURE_GRADES_PLAN.md) (both Draft).
+
+Planned new work, requested by ShotToss (`dev.tmzt.shottoss`) after the owner said disk and memory pressure might be valuable as libmorph/libmobile plans: a `disk` module with an `on_disk_pressure` hook over libmobile's `disk-space` and libdevice's (to be planned) `disk::space`; and `MemoryPressure` grades lifted from flankr's companion with an `on_memory_pressure` hook. No code until the owner approves them.
