@@ -188,3 +188,43 @@ release, numbered when released (0.9.4 if the all-files access plan's
    libdevice.
 2. **Default on?** `DISK_WATCH` is `None` by default so no app gains a
    timer it did not ask for. ShotToss sets `Some(DiskWatch::DEFAULT)`.
+
+## Amendment — 2026-11-19 18:32 EST: the desktop through libdevice's plan; one engine file; open question 1 closed
+
+The owner answered open question 1 on 2026-11-19, through the ShotToss
+coordinator (verbatim): "just have the subagent do it and follow the
+critical rules, must be tested and share API with libmorph". That answer
+is the agreement for this amendment. It replaces the following:
+
+- **Section 3, the desktop row and "Why libdevice on the desktop".** The
+  desktop's `disk_space` is libdevice's `disk_space::space` (feature
+  `disk-space`), planned in libdevice
+  `docs/design/20261119_01_DISK_SPACE_PLAN.md` (Draft), for libdevice
+  0.1.4. It is the name libdevice's plan uses; this plan's "`disk::space`"
+  meant the same call.
+- **Section 2, "libmorph's own types" and "written in both crates".** The
+  grading is not written in libmorph. The types and `grade` live in one
+  engine file, `src/disk_space/engine.rs`, byte-identical in libmobile and
+  libdevice (libmobile's plan amended the same day; the key store
+  precedent). libmorph's `disk` module re-exports libdevice's engine types
+  on every host (libdevice is a dependency on every host, Android
+  included), and on Android converts libmobile's `DiskSpace` and
+  `DiskPressureReport` field by field into them. libmorph adds only
+  `DiskWatch`, `DiskVolume` and `DiskError` (a re-export of the engine's
+  `DiskSpaceError` replaces the latter if the owner prefers one error
+  type; this plan keeps `DiskError` as named, mapped one to one).
+  Scripted runs build their reports with `DiskThresholds::grade` and
+  `DiskPressureReport::new`. The desktop timer's interval is clamped with
+  the engine's `clamp_interval`.
+- **A new test, in step 2's Done when:** built on the host with
+  `--features mobile,mobile-disk-space`,
+  `libmobile::disk_space::ENGINE_SOURCE == libdevice::disk_space::ENGINE_SOURCE`,
+  beside the key store's in `tests/secure_store.rs` (or a new
+  `tests/disk_space.rs`).
+- **Step 1's "the shared test table"** is the engine's own tests, run in
+  libmobile and libdevice; step 1 here tests libmorph's use of them (the
+  script crossing grades, one hook call per change).
+- **Section 5:** libdevice's dependency lines (every host, and macOS's)
+  gain `"disk-space"`.
+- **Open question 1 is closed:** libdevice, not a libmorph exception.
+  Open question 2 stays open.
