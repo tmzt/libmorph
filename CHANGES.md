@@ -2018,3 +2018,9 @@ libmobile 0.5.1; the camera protocol and event API remain unchanged.
 libmorph now consumes libmobile 0.5.2, which restores the camera QR feature's
 contrast threshold constant. The camera protocol and event API remain
 unchanged.
+
+## 2026-11-19 18:18 EST — All files access and media scans, planned
+
+Plan: [All files access, the shared storage root and media scans on every host](docs/design/20261119_01_ALL_FILES_ACCESS_PLAN.md) (Draft).
+
+Planned new work, requested by ShotToss (`dev.tmzt.shottoss`) on the owner's instruction that generic JNI such as access checks belongs in libmobile and libmorph: four `MorphContext` methods over libmobile's plan of the same date, two passthrough features and a script verb, for libmorph 0.9.3 and libmorph-build 0.5.3. No code until the owner approves both plans.
