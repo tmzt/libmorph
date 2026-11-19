@@ -228,3 +228,77 @@ is the agreement for this amendment. It replaces the following:
   gain `"disk-space"`.
 - **Open question 1 is closed:** libdevice, not a libmorph exception.
   Open question 2 stays open.
+
+## Amendment — 2026-11-19 18:36 EST: libmorph owns the grading; the platforms give raw readings; where the schedule lives
+
+The owner decided on 2026-11-19, through the ShotToss coordinator
+(verbatim): "we can provide the low-level API in libmobile/libdevice and
+the high-level grading in libmorph, this doesn't have the security
+considerations of keystore (which is what the source-level checks are
+for)". That answer is the agreement for this amendment.
+
+**It replaces the amendment of 2026-11-19 18:32 EST** ("the desktop
+through libdevice's plan; one engine file; open question 1 closed") in
+everything but two points, which stand: the desktop's reading is
+libdevice's `disk_space::space` (libdevice
+`docs/design/20261119_01_DISK_SPACE_PLAN.md`, amended the same day to the
+low-level call only), and open question 1 is closed. Withdrawn from it:
+the shared engine file, re-exporting libdevice's types, the field-by-field
+conversion into libdevice's types, building reports with libdevice's
+`DiskPressureReport::new`, the engine's `clamp_interval`, and the
+`ENGINE_SOURCE` equality test added to step 2's Done when (removed).
+
+It replaces, in the original text:
+
+- **Section 2's paragraph beginning "`DiskThresholds::DEFAULT` and
+  `grade` are the same values"** by: libmorph alone owns `DiskSpace`,
+  `DiskPressure`, `DiskThresholds` (`DEFAULT`: Low under max(1 GiB, 5 %
+  of total), Critical under 256 MiB, 256 MiB of hysteresis; `new`;
+  `low_threshold`; `grade(prev, free, total)` with the rule libmobile's
+  plan first stated, now stated here: rising immediate, falling only at
+  threshold + hysteresis), `DiskPressureReport` and `DiskWatch`. There
+  is no copy anywhere else. libmorph converts each platform's reading into
+  its own `DiskSpace`: libmobile's `DiskSpace` (free, total, allocatable,
+  cache quota) and libdevice's (free, total; the other two `None`).
+  `DiskWatch.interval` defaults to 60 s and is clamped to 15 s ..= 600 s
+  by libmorph's own `DiskWatch::interval_clamped`.
+- **Section 3's Android row** by: `disk_space` is libmobile's
+  `android::disk_space::space`; the watch is libmobile's
+  `watch(path, interval)` at the first `init`, which posts a raw reading
+  as `MobileEvent::DiskSpace` on resume and every interval while resumed;
+  libmorph grades each against the last grade and calls
+  `on_disk_pressure` only on a change; `check_disk_now` calls libmobile's
+  `statvfs_space` on the loop thread and grades it the same way.
+- **Section 3's desktop row and "The desktop's timer"** stand, reading
+  libdevice's `disk_space::space` and grading in libmorph.
+- **Step 1's "(with the shared test table)"** by: the grading's own tests,
+  in libmorph: a 64 GiB and a 16 GiB volume, each rise, `Critical` from
+  `None`, at and just under each threshold, falls 1 byte short of and at
+  threshold + hysteresis, `Critical` to `None` on a large recovery, an
+  oscillation of ±100 MiB around the Low threshold giving one change, and
+  the interval clamp at 1 s, 60 s and 1 h.
+
+**The schedule: (b), libmobile's Kotlin timer posting raw readings on
+Android, and libmorph's own timer on the desktop.** Weighed:
+
+- (a) One libmorph timer everywhere, calling libmobile's reading on the
+  loop thread, is one implementation, but on Android it duplicates in
+  libmorph the activity's resumed/paused state that libmobile's plugin
+  hooks already have, and it puts the read on the thread that draws.
+  `statvfs` there would cost microseconds, but `StorageManager`'s
+  `getAllocatableBytes` and `getCacheQuotaBytes` are binder calls into
+  the storage service that may block for tens of milliseconds, so they
+  could never be part of a timed read on that thread.
+- (b) keeps the read on libmobile's main looper, off libmorph's loop
+  thread, started and stopped by the activity's own `onResume` and
+  `onPause`, through the callback-and-`mailbox::Latest` pattern the
+  owner pointed to; libmorph's per-tick cost is draining that slot, and
+  grading one reading per interval. The timer reads `statvfs` only;
+  `StorageManager` runs only when the app calls `disk_space`.
+
+(b) is chosen. On the desktop, where there is no activity lifecycle and
+the read is a `statvfs` of microseconds, libmorph's own timer (one
+`Instant` comparison per loop iteration, not run while suspended) stays.
+The timer never runs per tick or per frame on either host.
+
+Versioning stands: additive, a patch release.
