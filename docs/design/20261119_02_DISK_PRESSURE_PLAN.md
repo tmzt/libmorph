@@ -330,3 +330,89 @@ called"). It replaces nothing else, and no earlier amendment.
   `DISK_WATCH`'s documentation say so in step 1.
 
 Open question 2 is closed. No open questions remain in this plan.
+
+## Amendment — 2026-11-19 21:38 EST: no reading is `Unknown`; the hook hears automatic readings only
+
+The owner decided two things on 2026-11-19, through the ShotToss
+coordinator, before implementation started (verbatim): "if we can't check
+the disk pressure while locked (or for any other reason) it shouldn't
+return Critical", and, of `check_disk_now`, "the hook is something that
+should be called automatically, not in response to a request which should
+just return the result." Those answers are the agreement for this
+amendment. It replaces the text named below and no earlier amendment.
+
+**A grade only from a reading: `DiskPressure::Unknown`.** Section 2's
+`pub enum DiskPressure { None, Low, Critical }` is replaced by
+`{ Unknown, None, Low, Critical }`, still ordered and
+`#[non_exhaustive]`. `Unknown` sorts lowest, so an app's
+`pressure >= DiskPressure::Low` is never true for it. The grade is
+`Unknown` whenever there is no current reading of the watched volume:
+
+1. none since the start (the value before the first reading);
+2. the latest read failed (the platform's error, a missing directory);
+3. the latest successful reading is older than twice the watch's clamped
+   interval: on Android, while the activity is paused or the phone locked,
+   since libmobile's timer runs only while resumed; on the desktop, while
+   the window is minimised or the app suspended.
+
+`Low` and `Critical` come only from an actual reading.
+`DiskThresholds::grade(prev, free, total)` never returns `Unknown`;
+after `Unknown` it returns the reading's own grade, with no hysteresis
+to clear.
+
+`DiskPressureReport.space` becomes `Option<DiskSpace>`, `None` exactly
+when `pressure` is `Unknown`, so a report never carries a stale
+reading.
+
+**The grade after `init`.** The watched volume is read once right after
+`init` on the loop thread (`statvfs` only: libmobile's
+`disk_space::statvfs_space` on Android, libdevice's `disk_space::space`
+on the desktop, the scripted numbers in scripted runs). If it succeeds,
+its grade is the starting grade; if it fails, the starting grade is
+`Unknown`. Either way `on_disk_pressure` is called once with it, as
+section 2 says. The read succeeds while the phone is locked (`statvfs`
+needs no activity), so a locked app starts with a real grade, which turns
+`Unknown` after twice the interval without libmobile's timer.
+
+**The hook, replacing section 2's `check_disk_now` text** ("Calls
+on_disk_pressure before returning if the grade changed") and section 2's
+hook text "then only on a change":
+
+- `on_disk_pressure` is called only for automatic readings: the one
+  right after `init`, libmobile's `MobileEvent::DiskSpace` on Android,
+  libmorph's timer on the desktop, the `disk-space` verb in scripted
+  runs, and a grade going `Unknown` for a failed timer read or for
+  staleness. It is called when that grade differs from the last grade
+  the hook heard. Going from a real grade to `Unknown` is such a change:
+  the hook hears `Unknown` once, with `space: None`. From `Unknown`
+  the next real grade is told again.
+- `check_disk_now` reads the volume (`statvfs` only), grades it,
+  returns the result, and from then on `disk_pressure()` reports that
+  grade (or `Unknown` and the error, if the read failed). It never
+  calls `on_disk_pressure`. A later automatic reading is told if its
+  grade differs from the last one the hook heard, even when
+  `check_disk_now` already returned it.
+- `disk_pressure()` is the latest grade from any reading, `Unknown`
+  as above; `DiskPressure::None` without `DISK_WATCH`, as before.
+
+**Waking for staleness.** The runners wake the loop by the stale
+deadline (the last reading plus twice the interval): Android's
+`poll_timeout` and the desktop's `ControlFlow::WaitUntil` take the
+earlier of it and the GPU deadline. It is one `Instant` comparison per
+iteration, never a read.
+
+**Scripted runs.** A reading's age follows the run's fixed frame clock.
+The `disk-space` verb also takes `disk-space unreadable`: from then on
+the scripted volume cannot be read, and the grade is `Unknown`.
+
+**Tests, added to step 1's Done when:** unit tests of the watch state
+for each no-reading case (none since the start, a failed starting read
+told once as `Unknown`, a read error after a grade, a stale reading
+told once, a real grade only from a new reading, `Unknown` sorting below
+`None`), a unit test that `check_disk_now`'s readings are never told
+and that the next automatic one is told only on a difference from the
+last told, and the scripted run's `disk-space unreadable` and 120 s
+without a reading each giving one `Unknown` hook with no space.
+
+Versioning stands: additive, a patch release (libmorph 0.9.5, after the
+all-files access plan's 0.9.4).
