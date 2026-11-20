@@ -2068,3 +2068,48 @@ Departures, each small (Rule 1.7):
    0.9.3, which the all-files access plan's section 5 had named for
    itself; that plan's release becomes 0.9.4, and disk pressure's 0.9.5
    (as its section 7 foresaw). Recorded again when that plan starts.
+
+## 2026-11-19 21:38 EST — plan 20261119_01, steps 1 and 2 built; the pin exception and departures
+
+Plan: [All files access, the shared storage root and media scans on every host](docs/design/20261119_01_ALL_FILES_ACCESS_PLAN.md).
+Approved by the owner on 2026-11-19 ("approve and build"). libmobile
+0.5.3 (`cbcbbeb`) is on GitHub. `fabd0b7` moves the pin, `1f05471`
+is step 1 (the module, the four methods, the features, the verb, the
+tests), `4addbc8` step 2 (libmorph-build), `c39aa6f` the README.
+
+**An exception to Rule 3.1, agreed by the owner** ("one commit, record
+the exception"): `fabd0b7` moves libmobile's pin in libmorph (its
+dependency and build-dependency lines) and in libmorph-build in one
+commit, with `Cargo.lock` and nothing else. libmobile declares
+`links = "libmobile"` and cargo refuses two revisions of it in one
+workspace ("Only one package in the dependency graph may specify the
+same links value", checked with `cargo metadata`), so a commit moving
+one crate's pin alone does not resolve. The same holds for every later
+libmobile move.
+
+Checks, run from outside the checkout so the local `.cargo/config.toml`
+patches are not used, at each commit: `cargo fmt -- --check`; `cargo
+clippy -p libmorph --all-targets` with default features and `--features
+script`; `cargo clippy -p libmorph --target aarch64-linux-android` with
+`mobile` and with `mobile,mobile-all-files-access,mobile-media-scan`
+(each feature alone also, before the GitHub release, against the
+release's own tree): no warnings; `cargo test -p libmorph` and
+`--features script` (216 tests) pass; libmorph-build's fmt, clippy and
+tests pass, with the new manifest test.
+
+Departures, each small (Rule 1.7):
+
+1. **The version.** Section 5 names libmorph 0.9.3, which the memory
+   grades plan took first; this release is libmorph **0.9.4**.
+   libmorph-build is 0.5.3 as planned.
+2. **libmorph-build has no README.** Step 2's line naming
+   `all_files_access` is in its crate docs.
+3. **Step 2's "test build script"** is an integration test that sets the
+   variables cargo gives an Android build script and runs `generate()`.
+4. **`MAX_SCAN_PATHS`** (1 024, libmobile's) is a public constant of
+   `shared_storage`, so `BadPaths`' limit is named.
+5. **The desktop's fixed answers** are tested on the platform functions
+   in a unit test: a non-scripted desktop run needs a window.
+
+Open: step 3's S23 check through ShotToss's access card, so the plan stays
+`In implementation`.
