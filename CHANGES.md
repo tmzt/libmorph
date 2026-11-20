@@ -2168,3 +2168,48 @@ Departures, each small (Rule 1.7):
 Open: step 3's "none while minimised" on the Mac (someone must minimise
 the window), and on the S23 the timer's readings while resumed for longer
 than one interval. The plan stays `In implementation`.
+
+## 2026-11-19 22:33 EST — plan 20261119_02: four grades and capped thresholds, at the owner's word
+
+Plan: [Disk space and disk pressure, told to the app when it changes](docs/design/20261119_02_DISK_PRESSURE_PLAN.md)
+(`In implementation`). A departure that changes behaviour and an
+interface, directed by the owner on 2026-11-19 through the ShotToss
+coordinator (verbatim): "the disk pressure should translate to the amount
+of caching we allow, not enabling/disabling cache … we probably also need
+ExtremelyLow and Critical, this device has a lot of storage mostly full".
+Built in `4ae75ba`, with the README in `74cddd8`. It replaces, in the
+plan's section 2 and its amendments:
+
+- **`DiskPressure`** is `{ Unknown, None, Low, ExtremelyLow, Critical }`,
+  still ordered, `ExtremelyLow` between `Low` and `Critical`.
+- **`DiskThresholds::DEFAULT`**: `Low` under max(2 GiB, min(5 % of total,
+  16 GiB)), `ExtremelyLow` under max(1 GiB, min(2 %, 4 GiB)),
+  `Critical` under 512 MiB (was: `Low` under max(1 GiB, 5 %),
+  `Critical` under 256 MiB). The caps keep a large, mostly full volume
+  from being `Low` for ever: the S23's 495 GB data volume with 7.8 GB
+  free is `Low` (it was `Low` under any free space below 24.8 GB), 3 GB
+  is `ExtremelyLow`, 400 MB `Critical`; on a 16 GiB volume the floors
+  apply.
+- **`DiskThresholds`** gains `low_max`, `extremely_low_min`,
+  `extremely_low_fraction_permille` and `extremely_low_max`,
+  `extremely_low_threshold`, and const setters `with_low`,
+  `with_extremely_low`, `with_critical` and `with_hysteresis`. `new`
+  keeps its four arguments and takes the rest from `DEFAULT`.
+- **Hysteresis**, 256 MiB, applies at each boundary: a falling volume
+  leaves a grade only at its threshold plus 256 MiB, and may step down
+  several grades in one reading.
+- **The grade's documentation** says it is advisory, for scaling how much
+  an app caches, not for turning caching on or off.
+
+Checks: `cargo fmt -- --check`; clippy for libmorph with default features
+and `--features script`, for `aarch64-linux-android` with `mobile` and
+with every new feature, and for the diskwatch crate on the host and
+Android: no warnings; `cargo test -p libmorph` and `--features script`
+(237 tests) pass, with the grade's new tests (the caps on the 495 GB
+volume, the floors on 16 GiB, each rise and each fall's hysteresis, the
+setters) and the scripted run crossing all four grades.
+
+**The version.** Rule 5.4 makes this not strictly additive (fields
+added to the exhaustive `DiskThresholds`, and the default thresholds a
+caller observes changed), so the release is libmorph **0.10.0**, not the
+patch first asked for.
