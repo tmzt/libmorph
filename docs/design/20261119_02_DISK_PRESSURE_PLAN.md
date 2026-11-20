@@ -424,3 +424,24 @@ libmobile 0.5.4 and libdevice 0.1.4 are on GitHub. Implementation of
 steps 1 to 3 starts with this commit, which sets `status: In
 implementation`. From here the document changes only by amendment, on
 the owner's explicit instruction.
+
+## Amendment — 2026-11-20 01:17 EST: the owner's observation from ShotToss on the S23
+
+Written on the owner's explicit instruction (Rule 1.5): owner observations
+are appended to the plan they affect. Recorded in ShotToss's
+`docs/OWNER_OBSERVATIONS.md` (item 4):
+
+> the disk pressure should translate to the amount of caching we allow, not
+> enabling/disabling cache (the app isn't going to work without it), we
+> probably also need ExtremelyLow and Critical, this device has a lot of
+> storage mostly full of screenshots right now (which is what this app is
+> for)
+
+On the S23 (495 GB, 7.8 GB free) the original default thresholds graded the
+phone `Low` permanently, since 5% of the volume is about 25 GB. libmorph
+0.10.0 implements the change, recorded as a departure in `CHANGES.md`:
+`DiskPressure` gains `ExtremelyLow` between `Low` and `Critical`, the
+default thresholds are capped (Low below max(2 GiB, min(5%, 16 GiB)),
+ExtremelyLow below max(1 GiB, min(2%, 4 GiB)), Critical below 512 MiB), and
+the grade is documented as advice for scaling how much an app caches, not
+for turning caching off.
