@@ -64,10 +64,13 @@ index, with fixed answers elsewhere; read `all_files_access` again in
 
 With `const DISK_WATCH: Option<DiskWatch> = Some(DiskWatch::DEFAULT)`,
 `on_disk_pressure` hears the data directory's volume graded `None`, `Low`
-(under max(1 GiB, 5 %)) or `Critical` (under 256 MiB) after `init` and on
-each change, read every 60 s while the app is in front. With no current
-reading (none yet, a failed read, or none for twice the interval, as while
-the phone is locked) the grade is `Unknown`, never `Low` or `Critical`.
+(under max(2 GiB, min(5 %, 16 GiB))), `ExtremelyLow` (under max(1 GiB,
+min(2 %, 4 GiB))) or `Critical` (under 512 MiB) after `init` and on each
+change, read every 60 s while the app is in front; the caps keep a large,
+mostly full volume from being `Low` for ever. The grade is for scaling how
+much the app caches, not for turning caching off. With no current reading
+(none yet, a failed read, or none for twice the interval, as while the
+phone is locked) the grade is `Unknown`, never one of the pressure grades.
 `ctx.check_disk_now()` reads and returns the grade without calling the
 hook; `ctx.disk_space` and `disk_pressure` read on demand
 (`libmorph::disk`). The grade is advisory: libmorph frees nothing. `MorphContext` also provides the safe area,
