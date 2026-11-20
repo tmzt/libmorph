@@ -37,6 +37,7 @@ mod screenshot;
 pub mod script;
 mod secure_store;
 pub mod service;
+pub mod shared_storage;
 mod storage;
 pub mod system_events;
 pub mod text_input;
@@ -72,6 +73,7 @@ pub use safe_area::SafeArea;
 pub use secure_store::{
     MAX_NAME_LEN, MAX_VALUE_LEN, Protection, PutOptions, SecureStore, SecureStoreError,
 };
+pub use shared_storage::{AllFilesAccess, SharedStorageError};
 pub use text_input::{TextAction, TextInputEvent, TextInputOptions, TextKind};
 
 #[cfg(feature = "audio-cpal")]

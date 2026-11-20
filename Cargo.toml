@@ -57,6 +57,14 @@ mobile-clipboard = ["mobile", "libmobile/clipboard"]
 # (gallery, files and an optional camera entry) or the Photo Picker. Adds
 # libmobile's provider and `<queries>` to the manifest; no permission.
 mobile-media-request = ["mobile", "libmobile/media-request"]
+# All files access on Android (`ctx.all_files_access`,
+# `ctx.open_all_files_access_settings`, `ctx.external_storage_dir`;
+# libmobile's `all-files-access`). The build script declares the permission
+# with `gradle_project(id).all_files_access()`.
+mobile-all-files-access = ["mobile", "libmobile/all-files-access"]
+# Telling Android's media index about changed files (`ctx.scan_media`;
+# libmobile's `media-scan`, `MediaScannerConnection`). No permission.
+mobile-media-scan = ["mobile", "libmobile/media-scan"]
 # `system_events::subscribe_tokio`: libmobile's on Android, and libmorph's
 # own desktop stream. No tokio runtime is needed to send.
 tokio = ["libmobile?/tokio", "dep:tokio"]

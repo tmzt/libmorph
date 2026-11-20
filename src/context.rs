@@ -175,6 +175,9 @@ pub struct MorphContext {
     pub(crate) surface_lost: bool,
     /// The highest memory grade since the last resume (or the start).
     pub(crate) memory_pressure: Option<crate::MemoryPressure>,
+    /// What `all_files_access` answers in a scripted run (the
+    /// `all-files-access` verb).
+    pub(crate) scripted_all_files_access: crate::shared_storage::AllFilesAccess,
 }
 
 impl MorphContext {
@@ -215,6 +218,7 @@ impl MorphContext {
             frame_presented: false,
             surface_lost: false,
             memory_pressure: None,
+            scripted_all_files_access: crate::shared_storage::AllFilesAccess::NotRequired,
         }
     }
 
@@ -477,6 +481,88 @@ impl MorphContext {
             return Ok(());
         }
         crate::link::open(url)
+    }
+
+    /// Whether the app holds All files access now (Android's
+    /// `MANAGE_EXTERNAL_STORAGE`). Read it in [`init`](crate::MorphApp::init)
+    /// and again in [`on_resume`](crate::MorphApp::on_resume): Android says
+    /// nothing when the user changes it, and an app that reads it only in
+    /// `init` never sees the grant.
+    ///
+    /// Android (feature `mobile-all-files-access`): `Granted` or `Missing`,
+    /// or [`NotDeclared`](crate::shared_storage::SharedStorageError::NotDeclared)
+    /// when the build script did not call
+    /// `gradle_project(id).all_files_access()`; without the feature, and on
+    /// Android 10,
+    /// [`Unsupported`](crate::shared_storage::SharedStorageError::Unsupported).
+    /// The desktop and the web: `NotRequired`. Scripted runs: what the
+    /// `all-files-access` verb last set, `NotRequired` until then.
+    pub fn all_files_access(
+        &self,
+    ) -> Result<crate::shared_storage::AllFilesAccess, crate::shared_storage::SharedStorageError>
+    {
+        if self.scripted {
+            return Ok(self.scripted_all_files_access);
+        }
+        crate::shared_storage::state()
+    }
+
+    /// Open the system page where the user turns All files access on: this
+    /// app's own switch, or the list of apps where that page does not
+    /// exist (the page opened is logged). The app is paused while it
+    /// shows; read [`all_files_access`](Self::all_files_access) in
+    /// [`on_resume`](crate::MorphApp::on_resume).
+    ///
+    /// Android only (feature `mobile-all-files-access`), and only while the
+    /// app is visible
+    /// ([`NotVisible`](crate::shared_storage::SharedStorageError::NotVisible)).
+    /// Elsewhere [`Unsupported`](crate::shared_storage::SharedStorageError::Unsupported);
+    /// scripted runs log `open all-files-access settings` and answer `Ok`.
+    pub fn open_all_files_access_settings(
+        &mut self,
+    ) -> Result<(), crate::shared_storage::SharedStorageError> {
+        if self.scripted {
+            log::info!("libmorph: script: open all-files-access settings");
+            return Ok(());
+        }
+        crate::shared_storage::open_settings()
+    }
+
+    /// The root of the phone's shared storage (`/storage/emulated/0` on most
+    /// phones); `None` where there is no such volume: the desktop, the web,
+    /// scripted runs, and Android without `mobile-all-files-access`. An
+    /// Android error is logged and gives `None`.
+    #[must_use]
+    pub fn external_storage_dir(&self) -> Option<PathBuf> {
+        if self.scripted {
+            return None;
+        }
+        crate::shared_storage::external_storage_dir()
+    }
+
+    /// Tell the system's media index that these files were added, changed,
+    /// moved (give the old and the new path) or deleted. Returns once
+    /// queued. Every path must be absolute and UTF-8, and there may be at
+    /// most [`MAX_SCAN_PATHS`](crate::shared_storage::MAX_SCAN_PATHS):
+    /// otherwise [`BadPaths`](crate::shared_storage::SharedStorageError::BadPaths),
+    /// on every host.
+    ///
+    /// Android (feature `mobile-media-scan`): libmobile's `scan_paths`;
+    /// without it [`Unsupported`](crate::shared_storage::SharedStorageError::Unsupported).
+    /// The desktop and the web have no index to tell: `Ok(())`. Scripted
+    /// runs log each path at debug.
+    pub fn scan_media(
+        &self,
+        paths: &[&Path],
+    ) -> Result<(), crate::shared_storage::SharedStorageError> {
+        crate::shared_storage::check_paths(paths)?;
+        if self.scripted {
+            for path in paths {
+                log::debug!("libmorph: script: scan media {}", path.display());
+            }
+            return Ok(());
+        }
+        crate::shared_storage::scan(paths)
     }
 
     /// The clipboard's text, for the app's own Paste button: the plain text

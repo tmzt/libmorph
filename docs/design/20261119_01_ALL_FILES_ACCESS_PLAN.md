@@ -1,7 +1,7 @@
 ---
 title: All files access, the shared storage root and media scans on every host
 date: 2026-11-19
-status: Draft
+status: In implementation
 covers:
   - "`MorphContext::all_files_access`, `open_all_files_access_settings`, `external_storage_dir` and `scan_media`"
   - "Android: libmobile's `all-files-access` and `media-scan` features, through passthroughs `mobile-all-files-access` and `mobile-media-scan`; the desktop, the web and scripted runs: fixed answers"
@@ -189,3 +189,10 @@ libmorph-build 0.5.2 to **0.5.3** (its libmobile rev moves, which adds
   ShotToss's plan both say to read it in `on_resume`.
 - **The desktop's `NotRequired`.** It says there is no permission, not
   that every path is readable; the app still handles the OS's own errors.
+
+## Amendment — 2026-11-19 21:37 EST: implementation started; the document is now immutable
+
+The owner approved this plan on 2026-11-19 ("approve and build"), and
+libmobile 0.5.3 is on GitHub. Implementation of step 1 starts with this
+commit, which sets `status: In implementation`. From here the document
+changes only by amendment, on the owner's explicit instruction.

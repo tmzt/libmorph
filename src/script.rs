@@ -194,6 +194,12 @@ pub enum Command {
     /// (`true`): the waiting (or next) media request answers
     /// [`MediaError::PermissionDenied`](crate::media::MediaError::PermissionDenied).
     MediaDeny { settings_only: bool },
+    /// `all-files-access granted|missing|not-required`: what
+    /// [`all_files_access`](crate::MorphContext::all_files_access) answers
+    /// from now on (`not-required` before any such command). Accepted
+    /// while suspended, so a script can grant it while the settings page
+    /// would be showing and see it in `on_resume`.
+    AllFilesAccess(crate::shared_storage::AllFilesAccess),
 }
 
 /// Why a script could not be loaded, checked or run.
@@ -381,6 +387,7 @@ pub(crate) enum Action {
     MediaDeny {
         settings_only: bool,
     },
+    AllFilesAccess(crate::shared_storage::AllFilesAccess),
 }
 
 /// The static checks of the plan, section 3, with the expansion.
@@ -577,6 +584,7 @@ impl Planner {
             &Command::MediaDeny { settings_only } => {
                 self.push(line, Action::MediaDeny { settings_only });
             }
+            &Command::AllFilesAccess(state) => self.push(line, Action::AllFilesAccess(state)),
         }
         Ok(())
     }
@@ -833,6 +841,18 @@ fn parse_command(words: &[&str]) -> Result<Command, String> {
             Command::MediaDeny {
                 settings_only: true,
             }
+        }
+        "all-files-access" => {
+            const USAGE: &str = "all-files-access granted|missing|not-required";
+            arity(&[1], USAGE)?;
+            Command::AllFilesAccess(
+                crate::shared_storage::AllFilesAccess::from_script(args[0]).ok_or_else(|| {
+                    format!(
+                        "unknown all files access state `{}`; usage: {USAGE}",
+                        args[0]
+                    )
+                })?,
+            )
         }
         other => return Err(format!("unknown command `{other}`")),
     };
@@ -1101,6 +1121,36 @@ mod tests {
             actions("suspend\nmedia a.png\nmedia-cancel\nresume\n").len(),
             4
         );
+    }
+
+    #[test]
+    fn all_files_access_takes_one_of_three_states() {
+        use crate::shared_storage::AllFilesAccess;
+        assert_eq!(
+            actions(
+                "all-files-access missing\nsuspend\nall-files-access granted\nresume\nall-files-access not-required\n"
+            ),
+            [
+                Action::AllFilesAccess(AllFilesAccess::Missing),
+                Action::Suspend,
+                Action::AllFilesAccess(AllFilesAccess::Granted),
+                Action::Resume,
+                Action::AllFilesAccess(AllFilesAccess::NotRequired),
+            ]
+        );
+        for source in [
+            "all-files-access",
+            "all-files-access GRANTED",
+            "all-files-access granted now",
+            "all-files-access denied",
+        ] {
+            let (line, message) = rejected(source);
+            assert_eq!(line, 1, "{source}");
+            assert!(
+                message.contains("usage: all-files-access granted|missing|not-required"),
+                "{source}: {message}"
+            );
+        }
     }
 
     #[test]

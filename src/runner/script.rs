@@ -225,6 +225,10 @@ fn play<A: MorphApp>(
                 .ctx
                 .media
                 .script_answer(ScriptAnswer::Deny { settings_only }, None),
+            Action::AllFilesAccess(state) => {
+                log::info!("libmorph: script line {line}: all-files-access {state:?}");
+                shell.ctx.scripted_all_files_access = state;
+            }
             Action::Exit => {
                 manifest.exit_by = ExitBy::Script;
                 manifest.exit_line = Some(line);
