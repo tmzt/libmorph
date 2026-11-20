@@ -55,7 +55,11 @@ default body, so an app writes only the ones it uses. `on_memory_pressure`
 follows each `on_trim_memory` and `on_low_memory` with Android's levels
 graded into `MemoryPressure` (`UiHidden`, `Background`, `Low`: what to
 drop, in increasing order), and `ctx.memory_pressure()` holds the highest
-grade since the last resume. `MorphContext` also provides the safe area,
+grade since the last resume. `ctx.all_files_access`,
+`open_all_files_access_settings`, `external_storage_dir` and `scan_media`
+(`libmorph::shared_storage`) are Android's All files access and media
+index, with fixed answers elsewhere; read `all_files_access` again in
+`on_resume`, since Android says nothing when the user changes it. `MorphContext` also provides the safe area,
 scale factor, surface size and format, the device spec, audio, the app's data
 and cache directories, the clipboard, the secure store and key store,
 `open_link`, `request_permissions` and `exit`. The rustdoc documents each one,
@@ -215,7 +219,9 @@ key escape
 ```
 
 Commands: `fps`, `frames`, `touch`, `tap`, `drag`, `hover`, `key`,
-`screenshot`, `geometry`, `suspend`, `resume`, `exit`. The run has no window
+`screenshot`, `geometry`, `suspend`, `resume`, `exit`, and for the
+platform's answers `all-files-access granted|missing|not-required`, among
+others the rustdoc of `libmorph::script::Command` lists. The run has no window
 and a fixed frame time. `geometry <width> <height>` is the window reporting a
 new size, as it does when the device turns; it is accepted while suspended,
 where it sets the size the next `resume` attaches at. Screenshots are PNG files, and `run.json` lists them. Output
@@ -329,6 +335,8 @@ also what it rebuilds on `Restored`.
 | `mobile-system-events` | `libmorph::system_events` on Android: visibility, focus, the service, the network and Doze |
 | `mobile-battery` | `libmorph::battery`: battery optimization and app sleeping |
 | `mobile-clipboard` | The clipboard's text on Android, for `ctx.clipboard_text`, `ctx.clipboard_has_text` and `ctx.set_clipboard_text` |
+| `mobile-all-files-access` | `libmorph::shared_storage` on Android: `ctx.all_files_access` (`Granted`, `Missing`), `ctx.open_all_files_access_settings` and `ctx.external_storage_dir`, through libmobile's `all-files-access`; the build script declares the permission with `gradle_project(id).all_files_access()`. The desktop and the web answer `NotRequired` |
+| `mobile-media-scan` | `ctx.scan_media` on Android: tells the media index about added, changed, moved or deleted files (libmobile's `media-scan`); `Ok(())` off Android |
 | `mobile-secure-store-no-strongbox` | Keeps the secure store's key in the TEE only, never StrongBox. Negative, so turning default features off cannot turn StrongBox off; for apps, not libraries |
 | `secure-store` | `ctx.secure_store()` and `ctx.key_store()`: named secrets and adapter keys encrypted at rest, through libmobile's Keystore stores on Android and libdevice's login Keychain on macOS |
 | `tokio` | `system_events::subscribe_tokio`, on Android and off it; nothing needs a tokio runtime to send |
