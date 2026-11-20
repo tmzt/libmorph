@@ -62,45 +62,76 @@ impl DiskSpace {
     }
 }
 
-/// How short of space a volume is, in increasing order. `Unknown`, when
-/// there is no current reading, sorts lowest: `pressure >= Low` is never
-/// true for it, so an app trims nothing on missing data.
+/// How short of space a volume is, in increasing order. The grade is
+/// advisory, meant for scaling how much an app caches (a smaller cache at
+/// each step), not for turning caching on or off. `Unknown`, when there is
+/// no current reading, sorts lowest: `pressure >= Low` is never true for
+/// it, so an app trims nothing on missing data.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
 pub enum DiskPressure {
     /// No current reading of the watched volume: none since the start, the
     /// last one failed, or the latest is older than twice the watch's
     /// interval (on Android, while the app is paused or the phone locked;
-    /// on the desktop, while minimised or suspended). Never graded `Low`
-    /// or `Critical` from missing data.
+    /// on the desktop, while minimised or suspended). Never graded from
+    /// missing data.
     Unknown,
-    /// Enough space.
+    /// Enough space: the app's full cache.
     None,
-    /// Under the low threshold: trim caches, put off large writes.
+    /// Under the low threshold: a smaller cache, large writes put off.
     Low,
-    /// Under the critical threshold: write only what cannot wait.
+    /// Under the extremely-low threshold: a much smaller cache.
+    ExtremelyLow,
+    /// Under the critical threshold: cache next to nothing, write only what
+    /// cannot wait.
     Critical,
 }
 
 /// Where the grades start and how far a volume must recover to leave one.
+/// `Low` and `ExtremelyLow` are each a fraction of the volume's size,
+/// between a floor and a cap, so a large, mostly full volume is not graded
+/// `Low` for ever and a small one still has a margin.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DiskThresholds {
-    /// `Low` under `max(low_min, total * low_fraction_permille / 1000)`.
+    /// `Low` under `max(low_min, min(total * low_fraction_permille / 1000,
+    /// low_max))`.
     pub low_min: u64,
     /// See `low_min`; 50 is 5 %.
     pub low_fraction_permille: u32,
+    /// See `low_min`.
+    pub low_max: u64,
+    /// `ExtremelyLow` under `max(extremely_low_min, min(total *
+    /// extremely_low_fraction_permille / 1000, extremely_low_max))`.
+    pub extremely_low_min: u64,
+    /// See `extremely_low_min`; 20 is 2 %.
+    pub extremely_low_fraction_permille: u32,
+    /// See `extremely_low_min`.
+    pub extremely_low_max: u64,
     /// `Critical` under this many free bytes.
     pub critical: u64,
     /// A grade clears only once free space is this far above its
-    /// threshold, so a volume hovering at one does not flap.
+    /// threshold, at each boundary, so a volume hovering at one does not
+    /// flap.
     pub hysteresis: u64,
 }
 
 impl DiskThresholds {
-    /// `Low` under max(1 GiB, 5 % of total), `Critical` under 256 MiB, a
+    /// `Low` under max(2 GiB, min(5 % of total, 16 GiB)), `ExtremelyLow`
+    /// under max(1 GiB, min(2 %, 4 GiB)), `Critical` under 512 MiB, each
     /// grade clearing 256 MiB above its threshold.
-    pub const DEFAULT: Self = Self::new(GIB, 50, 256 * MIB, 256 * MIB);
+    pub const DEFAULT: Self = Self {
+        low_min: 2 * GIB,
+        low_fraction_permille: 50,
+        low_max: 16 * GIB,
+        extremely_low_min: GIB,
+        extremely_low_fraction_permille: 20,
+        extremely_low_max: 4 * GIB,
+        critical: 512 * MIB,
+        hysteresis: 256 * MIB,
+    };
 
+    /// [`DEFAULT`](Self::DEFAULT) with `Low`'s floor and fraction, the
+    /// critical threshold and the hysteresis replaced.
     #[must_use]
     pub const fn new(
         low_min: u64,
@@ -113,46 +144,117 @@ impl DiskThresholds {
             low_fraction_permille,
             critical,
             hysteresis,
+            ..Self::DEFAULT
         }
+    }
+
+    /// `Low`'s floor, fraction (per mille) and cap.
+    #[must_use]
+    pub const fn with_low(mut self, min: u64, fraction_permille: u32, max: u64) -> Self {
+        self.low_min = min;
+        self.low_fraction_permille = fraction_permille;
+        self.low_max = max;
+        self
+    }
+
+    /// `ExtremelyLow`'s floor, fraction (per mille) and cap.
+    #[must_use]
+    pub const fn with_extremely_low(mut self, min: u64, fraction_permille: u32, max: u64) -> Self {
+        self.extremely_low_min = min;
+        self.extremely_low_fraction_permille = fraction_permille;
+        self.extremely_low_max = max;
+        self
+    }
+
+    /// The critical threshold.
+    #[must_use]
+    pub const fn with_critical(mut self, critical: u64) -> Self {
+        self.critical = critical;
+        self
+    }
+
+    /// The hysteresis at each boundary.
+    #[must_use]
+    pub const fn with_hysteresis(mut self, hysteresis: u64) -> Self {
+        self.hysteresis = hysteresis;
+        self
+    }
+
+    const fn scaled(total: u64, min: u64, permille: u32, max: u64) -> u64 {
+        let fraction = (total as u128 * permille as u128 / 1000) as u64;
+        let capped = if fraction < max { fraction } else { max };
+        if capped > min { capped } else { min }
     }
 
     /// The free bytes under which a volume of `total` bytes is `Low`.
     #[must_use]
     pub const fn low_threshold(&self, total: u64) -> u64 {
-        let fraction = (total as u128 * self.low_fraction_permille as u128 / 1000) as u64;
-        if fraction > self.low_min {
-            fraction
-        } else {
-            self.low_min
+        Self::scaled(
+            total,
+            self.low_min,
+            self.low_fraction_permille,
+            self.low_max,
+        )
+    }
+
+    /// The free bytes under which a volume of `total` bytes is
+    /// `ExtremelyLow`.
+    #[must_use]
+    pub const fn extremely_low_threshold(&self, total: u64) -> u64 {
+        Self::scaled(
+            total,
+            self.extremely_low_min,
+            self.extremely_low_fraction_permille,
+            self.extremely_low_max,
+        )
+    }
+
+    /// The threshold under which `grade` starts; 0 for `None` and
+    /// `Unknown`.
+    const fn threshold(&self, grade: DiskPressure, total: u64) -> u64 {
+        match grade {
+            DiskPressure::Low => self.low_threshold(total),
+            DiskPressure::ExtremelyLow => self.extremely_low_threshold(total),
+            DiskPressure::Critical => self.critical,
+            DiskPressure::None | DiskPressure::Unknown => 0,
+        }
+    }
+
+    /// The next grade down.
+    const fn below(grade: DiskPressure) -> DiskPressure {
+        match grade {
+            DiskPressure::Critical => DiskPressure::ExtremelyLow,
+            DiskPressure::ExtremelyLow => DiskPressure::Low,
+            _ => DiskPressure::None,
         }
     }
 
     /// The grade for `free` of `total` bytes, after `prev`. A rise is
-    /// immediate; a fall only once `free` is at least the threshold of
-    /// the grade being left plus [`hysteresis`](Self::hysteresis). After
-    /// `Unknown` the reading's grade stands alone. Never `Unknown`.
+    /// immediate; a fall leaves each grade only once `free` is at least
+    /// that grade's threshold plus [`hysteresis`](Self::hysteresis), so it
+    /// may step down several grades at once. After `Unknown` the reading's
+    /// grade stands alone. Never `Unknown`.
     #[must_use]
     pub const fn grade(&self, prev: DiskPressure, free: u64, total: u64) -> DiskPressure {
-        let low = self.low_threshold(total);
         let raw = if free < self.critical {
             DiskPressure::Critical
-        } else if free < low {
+        } else if free < self.extremely_low_threshold(total) {
+            DiskPressure::ExtremelyLow
+        } else if free < self.low_threshold(total) {
             DiskPressure::Low
         } else {
             DiskPressure::None
         };
-        let clears_low = free >= low.saturating_add(self.hysteresis);
-        let clears_critical = free >= self.critical.saturating_add(self.hysteresis);
-        match (prev, raw) {
-            // From no reading, the reading's own grade: nothing to clear.
-            (_, DiskPressure::Critical) | (DiskPressure::None | DiskPressure::Unknown, _) => raw,
-            (DiskPressure::Low, DiskPressure::Low) => DiskPressure::Low,
-            (DiskPressure::Low, _) if clears_low => DiskPressure::None,
-            (DiskPressure::Low, _) => DiskPressure::Low,
-            (DiskPressure::Critical, _) if clears_low => DiskPressure::None,
-            (DiskPressure::Critical, _) if clears_critical => DiskPressure::Low,
-            (DiskPressure::Critical, _) => DiskPressure::Critical,
+        if matches!(prev, DiskPressure::Unknown | DiskPressure::None) || raw as u8 >= prev as u8 {
+            return raw;
         }
+        let mut grade = prev;
+        while !matches!(grade, DiskPressure::None)
+            && free >= self.threshold(grade, total).saturating_add(self.hysteresis)
+        {
+            grade = Self::below(grade);
+        }
+        grade
     }
 }
 
@@ -514,34 +616,64 @@ mod tests {
 
     const T: DiskThresholds = DiskThresholds::DEFAULT;
     const HYST: u64 = 256 * MIB;
-    const CRITICAL: u64 = 256 * MIB;
+    const CRITICAL: u64 = 512 * MIB;
 
     fn grade(prev: DiskPressure, free: u64, total: u64) -> DiskPressure {
         T.grade(prev, free, total)
     }
 
+    /// The S23's data volume: 495 GB, mostly full.
+    const PHONE: u64 = 495_498_260_480;
+
     #[test]
-    fn low_thresholds_of_two_volumes() {
-        // 5 % of 64 GiB is 3.2 GiB, above the 1 GiB floor.
+    fn thresholds_scale_between_a_floor_and_a_cap() {
+        // 64 GiB: the fractions, between floor and cap.
         assert_eq!(T.low_threshold(64 * GIB), 64 * GIB / 20);
-        // 5 % of 16 GiB is 0.8 GiB: the floor wins.
-        assert_eq!(T.low_threshold(16 * GIB), GIB);
-        assert_eq!(T.low_threshold(0), GIB);
-        assert_eq!(
-            T.low_threshold(u64::MAX),
-            (u64::MAX as u128 * 50 / 1000) as u64
-        );
+        assert_eq!(T.extremely_low_threshold(64 * GIB), 64 * GIB / 50);
+        // 16 GiB: 5 % (0.8 GiB) and 2 % (0.32 GiB) are under the floors.
+        assert_eq!(T.low_threshold(16 * GIB), 2 * GIB);
+        assert_eq!(T.extremely_low_threshold(16 * GIB), GIB);
+        assert_eq!(T.low_threshold(0), 2 * GIB);
+        // A large volume: 5 % (23 GiB) and 2 % (9 GiB) are over the caps.
+        assert_eq!(T.low_threshold(PHONE), 16 * GIB);
+        assert_eq!(T.extremely_low_threshold(PHONE), 4 * GIB);
+        assert_eq!(T.low_threshold(u64::MAX), 16 * GIB);
+    }
+
+    #[test]
+    fn a_large_mostly_full_volume() {
+        use DiskPressure::{Critical, ExtremelyLow, Low, None};
+        const GB: u64 = 1_000_000_000;
+        assert_eq!(grade(None, 7_800_000_000, PHONE), Low, "7.8 GB free");
+        assert_eq!(grade(None, 3 * GB, PHONE), ExtremelyLow, "3 GB free");
+        assert_eq!(grade(None, 400_000_000, PHONE), Critical, "400 MB free");
+        assert_eq!(grade(None, 20 * GB, PHONE), None, "20 GB free");
+    }
+
+    #[test]
+    fn a_small_volume_takes_the_floors() {
+        use DiskPressure::{Critical, ExtremelyLow, Low, None};
+        let total = 16 * GIB;
+        assert_eq!(grade(None, 2 * GIB, total), None);
+        assert_eq!(grade(None, 2 * GIB - 1, total), Low);
+        assert_eq!(grade(None, GIB, total), Low);
+        assert_eq!(grade(None, GIB - 1, total), ExtremelyLow);
+        assert_eq!(grade(None, CRITICAL, total), ExtremelyLow);
+        assert_eq!(grade(None, CRITICAL - 1, total), Critical);
     }
 
     #[test]
     fn each_rise_is_immediate() {
-        use DiskPressure::{Critical, Low, None};
-        for total in [64 * GIB, 16 * GIB] {
+        use DiskPressure::{Critical, ExtremelyLow, Low, None};
+        for total in [PHONE, 64 * GIB, 16 * GIB] {
             let low = T.low_threshold(total);
+            let xlow = T.extremely_low_threshold(total);
             assert_eq!(grade(None, low, total), None, "at the low threshold");
             assert_eq!(grade(None, low - 1, total), Low, "just under it");
-            assert_eq!(grade(Low, CRITICAL, total), Low, "at the critical one");
-            assert_eq!(grade(Low, CRITICAL - 1, total), Critical, "just under it");
+            assert_eq!(grade(Low, xlow, total), Low, "at the extremely low one");
+            assert_eq!(grade(Low, xlow - 1, total), ExtremelyLow, "just under it");
+            assert_eq!(grade(ExtremelyLow, CRITICAL, total), ExtremelyLow);
+            assert_eq!(grade(ExtremelyLow, CRITICAL - 1, total), Critical);
             assert_eq!(
                 grade(None, CRITICAL - 1, total),
                 Critical,
@@ -552,22 +684,45 @@ mod tests {
     }
 
     #[test]
-    fn a_fall_waits_for_the_hysteresis() {
-        use DiskPressure::{Critical, Low, None};
-        for total in [64 * GIB, 16 * GIB] {
+    fn a_fall_waits_for_the_hysteresis_at_each_boundary() {
+        use DiskPressure::{Critical, ExtremelyLow, Low, None};
+        for total in [PHONE, 64 * GIB, 16 * GIB] {
             let low = T.low_threshold(total);
+            let xlow = T.extremely_low_threshold(total);
             assert_eq!(grade(Low, low + HYST - 1, total), Low, "1 byte short");
             assert_eq!(
                 grade(Low, low + HYST, total),
                 None,
                 "at threshold + hysteresis"
             );
+            assert_eq!(grade(ExtremelyLow, xlow + HYST - 1, total), ExtremelyLow);
+            assert_eq!(grade(ExtremelyLow, xlow + HYST, total), Low);
             assert_eq!(grade(Critical, CRITICAL + HYST - 1, total), Critical);
-            assert_eq!(grade(Critical, CRITICAL + HYST, total), Low);
-            assert_eq!(grade(Critical, low + HYST - 1, total), Low);
+            assert_eq!(grade(Critical, CRITICAL + HYST, total), ExtremelyLow);
+            assert_eq!(
+                grade(Critical, xlow + HYST, total),
+                Low,
+                "two steps at once"
+            );
             assert_eq!(grade(Critical, low + HYST, total), None, "a large recovery");
             assert_eq!(grade(Critical, total, total), None);
         }
+    }
+
+    #[test]
+    fn the_setters_replace_their_fields() {
+        let t = DiskThresholds::DEFAULT
+            .with_low(GIB, 100, 8 * GIB)
+            .with_extremely_low(MIB, 10, GIB)
+            .with_critical(MIB)
+            .with_hysteresis(0);
+        assert_eq!(t.low_threshold(64 * GIB), 6_871_947_673);
+        assert_eq!(t.low_threshold(256 * GIB), 8 * GIB);
+        assert_eq!(t.extremely_low_threshold(64 * GIB), 687_194_767);
+        assert_eq!((t.critical, t.hysteresis), (MIB, 0));
+        let n = DiskThresholds::new(GIB, 10, MIB, 0);
+        assert_eq!((n.low_min, n.low_fraction_permille), (GIB, 10));
+        assert_eq!(n.low_max, DiskThresholds::DEFAULT.low_max);
     }
 
     #[test]

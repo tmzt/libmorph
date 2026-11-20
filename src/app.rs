@@ -576,9 +576,12 @@ pub trait MorphApp: Sized + 'static {
     /// is `Unknown` (`report.space` `None`), told once, and never `Low` or
     /// `Critical`. Never called without `DISK_WATCH`.
     ///
-    /// The grade is advisory: libmorph deletes, trims and refuses nothing
-    /// at any grade. At `Low` an app might trim its caches; at `Critical`
-    /// defer or refuse writes it cannot afford to lose halfway.
+    /// The grade is advisory, meant for scaling how much the app caches,
+    /// not for turning caching on or off: a full cache at `None`, a
+    /// smaller one at `Low`, much smaller at `ExtremelyLow`, next to
+    /// nothing at `Critical`, where it might also defer or refuse writes it
+    /// cannot afford to lose halfway. libmorph deletes, trims and refuses
+    /// nothing at any grade.
     ///
     /// May be called while the device is released, for an app whose
     /// [`GPU_IN_BACKGROUND`](Self::GPU_IN_BACKGROUND) is `Release`: check

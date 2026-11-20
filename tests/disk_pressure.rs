@@ -1,7 +1,7 @@
 //! Disk pressure in a scripted run (plan `20261119_02`, step 1): with
 //! `DISK_WATCH`, `on_disk_pressure` hears the starting grade after `init`
-//! and then exactly one call per change, as `disk-space` crosses `Low` and
-//! `Critical` and back, also while suspended; `check_disk_now` grades the
+//! and then exactly one call per change, as `disk-space` crosses `Low`,
+//! `ExtremelyLow` and `Critical` and back, also while suspended; `check_disk_now` grades the
 //! scripted numbers. With no current reading (`disk-space unreadable`, or
 //! none for twice the interval) the grade is `Unknown`, told once, never
 //! `Low` or `Critical`. Without it the hook is never called. Needs a GPU
@@ -67,9 +67,10 @@ impl MorphApp for Watched {
     }
 }
 
-// On 64 GiB, Low is under 3.2 GiB (3276.8 MiB), Critical under 256 MiB,
-// and each clears 256 MiB above its threshold. The watch's 60 s interval
-// makes a reading stale after 120 s: 7200 frames at 60 fps.
+// On 64 GiB, Low is under 3.2 GiB (3276.8 MiB), ExtremelyLow under
+// 1.28 GiB (1310.72 MiB), Critical under 512 MiB, and each clears 256 MiB
+// above its threshold. The watch's 60 s interval makes a reading stale
+// after 120 s: 7200 frames at 60 fps.
 const SCRIPT: &str = "\
 frames 1
 disk-space 10GiB 64GiB
@@ -77,8 +78,9 @@ disk-space 3GiB 64GiB
 disk-space 2900MiB 64GiB
 frames 1
 disk-space 200MiB 64GiB
-disk-space 400MiB 64GiB
-disk-space 600MiB 64GiB
+disk-space 700MiB 64GiB
+disk-space 1000MiB 64GiB
+disk-space 3000MiB 64GiB
 suspend
 disk-space 3300MiB 64GiB
 disk-space 4GiB 64GiB
@@ -120,14 +122,17 @@ fn one_hook_per_change() {
     if !run::<Watched>("watched") {
         return;
     }
-    use DiskPressure::{Critical, Low, None, Unknown};
+    use DiskPressure::{Critical, ExtremelyLow, Low, None, Unknown};
     assert_eq!(
         *WATCHED.lock().unwrap(),
         [
             (None, Some(64 * GIB), None),
             (Low, Some(3 * GIB), Low),
             (Critical, Some(200 * MIB), Critical),
-            (Low, Some(600 * MIB), Low),
+            // 700 MiB is short of 512 + 256 MiB: still Critical.
+            (ExtremelyLow, Some(1000 * MIB), ExtremelyLow),
+            // 3000 MiB clears ExtremelyLow (1566.72 MiB), not Low.
+            (Low, Some(3000 * MIB), Low),
             (None, Some(4 * GIB), None),
             // The read failed: told once, with no reading.
             (Unknown, Option::None, Unknown),

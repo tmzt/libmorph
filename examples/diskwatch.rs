@@ -2,8 +2,8 @@
 //! volume every 15 s (`MorphApp::DISK_WATCH`) and logs the starting grade
 //! and each change (`on_disk_pressure`), with the numbers. The screen is
 //! grey at `Unknown` (no current reading: none yet, a failed read, or none
-//! for 30 s, as while paused), green at `None`, amber at `Low` and red at
-//! `Critical`. A tap checks the
+//! for 30 s, as while paused), green at `None`, amber at `Low`, orange at
+//! `ExtremelyLow` and red at `Critical`. A tap checks the
 //! volume at once (`ctx.check_disk_now()`) and logs the full reading
 //! (`ctx.disk_space()`, which on Android adds `StorageManager`'s numbers).
 //!
@@ -133,6 +133,12 @@ impl MorphApp for Diskwatch {
                 r: 0.6,
                 g: 0.4,
                 b: 0.05,
+                a: 1.0,
+            },
+            DiskPressure::ExtremelyLow => libmorph::wgpu::Color {
+                r: 0.65,
+                g: 0.2,
+                b: 0.02,
                 a: 1.0,
             },
             _ => libmorph::wgpu::Color {
