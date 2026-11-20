@@ -2213,3 +2213,36 @@ setters) and the scripted run crossing all four grades.
 added to the exhaustive `DiskThresholds`, and the default thresholds a
 caller observes changed), so the release is libmorph **0.10.0**, not the
 patch first asked for.
+
+## 2026-11-20 01:56 EST — libmobile 0.5.5: app plugins through libmorph-build; libmorph 0.10.1 and libmorph-build 0.5.5
+
+libmobile's plan `docs/design/20261120_01_APP_PLUGINS_PLAN.md` (there,
+step 5), on the owner's instruction of 2026-11-20 to add app plugin
+registration to libmobile and let libmorph pick it up. No plan of
+libmorph's own: libmorph wraps nothing new, and libmorph-build re-exports
+`libmobile::gradle`, so `gradle_project(id).plugin(AppPlugin::new(..))`
+is libmobile's API.
+
+- `c759cee` moves libmobile's pin in libmorph and libmorph-build to
+  0.5.5 (`fb5aaab`) in one commit, under the Rule 3.1 exception
+  recorded on 2026-11-19 21:38 EST (`links = "libmobile"`). Cargo.lock
+  was regenerated without any patch (`cargo update -p libmobile` from
+  outside the checkout); cargo's resolver also moved two `windows-sys`
+  references from 0.52.0 to 0.61.2, Windows-only and already in the lock.
+- `9adef0d`: libmorph-build's crate docs name `Project::plugin` with a
+  `no_run` example, and `tests/app_plugin.rs` runs `generate()`
+  through the re-export with an app plugin and checks the list, the app
+  module's source root and the manifest.
+- `253ad2b` libmorph-build 0.5.5 (tag `libmorph-build-v0.5.5`) and
+  `e260e59` libmorph 0.10.1 (tag `v0.10.1`): patches, since libmobile's
+  bump is a patch (Rule 5.5 does not apply).
+
+Checks, run from outside the checkout so the local `.cargo/config.toml`
+patches are not used: `cargo fmt --all -- --check`; `cargo clippy -p
+libmorph --all-targets` with default features and `--features script`;
+`cargo clippy -p libmorph --target aarch64-linux-android` with every
+`mobile-*` feature; `cargo clippy -p libmorph-build --all-targets`: no
+warnings. `cargo test -p libmorph` (185 lib tests; 195 with `--features
+script`, run against the same libmobile tree through a `--config`
+patch before the push) and `cargo test -p libmorph-build` (with the new
+test and doctest) pass.
