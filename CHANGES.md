@@ -2030,3 +2030,41 @@ Planned new work, requested by ShotToss (`dev.tmzt.shottoss`) on the owner's ins
 Plans: [Disk space and disk pressure, told to the app when it changes](docs/design/20261119_02_DISK_PRESSURE_PLAN.md) and [Memory pressure in grades, shared from flankr](docs/design/20261119_03_MEMORY_PRESSURE_GRADES_PLAN.md) (both Draft).
 
 Planned new work, requested by ShotToss (`dev.tmzt.shottoss`) after the owner said disk and memory pressure might be valuable as libmorph/libmobile plans: a `disk` module with an `on_disk_pressure` hook over libmobile's `disk-space` and libdevice's (to be planned) `disk::space`; and `MemoryPressure` grades lifted from flankr's companion with an `on_memory_pressure` hook. No code until the owner approves them.
+
+## 2026-11-19 20:11 EST — plan 20261119_03, step 1 built; departures
+
+Plan: [Memory pressure in grades, shared from flankr](docs/design/20261119_03_MEMORY_PRESSURE_GRADES_PLAN.md).
+The owner approved it, with the all-files access and disk pressure
+plans, on 2026-11-19 ("approve and build"). Step 1 is `41ca38c` (the
+type, the hook, the context's value, the runners, the test and the
+`urlopen` example's log) and `05572e5` (the README line).
+
+Checks, run from outside the checkout so that the local
+`.cargo/config.toml` patches are not used and the lock's libmobile
+(`75fb7d9`) and libdevice (`v0.1.3`) are: `cargo fmt -p libmorph --
+--check`; `cargo clippy -p libmorph --all-targets` with default features
+and with `--features script`, and `cargo clippy -p libmorph --target
+aarch64-linux-android --features mobile`: no warnings; `cargo test -p
+libmorph` (162 lib tests) and `cargo test -p libmorph --features script`
+(172 lib tests and every integration test, `tests/memory_pressure.rs`
+run on the Mac's Metal adapter, not skipped) pass. On the S23 the
+`urlopen` example logged `on_memory_pressure(UiHidden)` when it went to
+the background, then `UiHidden` and `Background` for `am
+send-trim-memory` `HIDDEN` and `BACKGROUND` (`out/memory-pressure/LOG.md`).
+
+Departures, each small (Rule 1.7):
+
+1. **Step 1's script has a `suspend` before its `resume`.** The script
+   runner accepts `resume` only while suspended. A suspension changes no
+   grade, so the hook's `Low`, `UiHidden`, `Low` and the context's
+   `Low`, `Low`, `None` (in `on_resume`), `Low` are as planned.
+2. **The S23 app went to the background behind the keyguard.** The phone
+   was locked, so the activity was started behind it and Android sent
+   `UI_HIDDEN` at once, rather than on Home.
+3. **No `AGENTS.md` Core API line.** Section 5 names one, but that
+   section moved to the README (`2cc85df`); the README line is the only
+   one.
+4. **The version.** This plan is released first, so it takes libmorph
+   0.9.3, which the all-files access plan's section 5 had named for
+   itself; that plan's release becomes 0.9.4, and disk pressure's 0.9.5
+   (as its section 7 foresaw). Recorded again when that plan starts.
