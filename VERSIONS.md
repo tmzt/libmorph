@@ -615,3 +615,9 @@ All files access, the shared storage root and media scans (plan
 - Features `mobile-all-files-access` and `mobile-media-scan`.
 - The script verb `all-files-access granted|missing|not-required`.
 - libmobile 0.5.2 → 0.5.3 (revision `cbcbbeb`), semver-compatible.
+
+## libmorph-build 0.5.3 — 2026-11-19 (tag `libmorph-build-v0.5.3`)
+
+- libmobile 0.5.2 → 0.5.3 (revision `cbcbbeb`): the `libmorph_build::gradle`
+  re-export gains `Project::all_files_access()`, which declares
+  `MANAGE_EXTERNAL_STORAGE` (additive).
