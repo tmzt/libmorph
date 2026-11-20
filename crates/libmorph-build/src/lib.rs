@@ -22,6 +22,19 @@
 //!     .expect("gradle project");
 //! ```
 //!
+//! The manifest options are `gradle::Project`'s: among them
+//! `permission`, `url_scheme`, `foreground_service`,
+//! `request_ignore_battery_optimizations`, and `all_files_access`, which
+//! declares `MANAGE_EXTERNAL_STORAGE` for libmorph's
+//! `ctx.all_files_access()` (feature `mobile-all-files-access`):
+//!
+//! ```no_run
+//! libmorph_build::gradle_project("com.example.files")
+//!     .all_files_access()
+//!     .generate()
+//!     .expect("gradle project");
+//! ```
+//!
 //! libmorph's own build script republishes libmobile's Gradle handoff under
 //! libmorph's `links` key, which Cargo exposes to the app's build script
 //! because the app depends on libmorph directly.
