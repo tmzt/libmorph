@@ -148,6 +148,7 @@ impl<A: MorphApp> Shell<A> {
         // The context is not generic over the app, so the one thing it
         // needs from `OWNS` is read once, here, before `init`.
         ctx.owns_frame = A::OWNS.contains(Owned::FRAME);
+        ctx.disk.watch = A::DISK_WATCH;
         let mut app = A::init(&mut ctx);
         if ctx.audio.capture_format().is_some() {
             app.on_capture_ready(&mut ctx);
@@ -155,7 +156,7 @@ impl<A: MorphApp> Shell<A> {
         // Pipelines built in `init` are kept even if the process is killed
         // without a clean suspend.
         ctx.save_pipeline_cache();
-        Self {
+        let mut shell = Self {
             ctx,
             app,
             lifecycle: Lifecycle::default(),
@@ -170,6 +171,146 @@ impl<A: MorphApp> Shell<A> {
             overlay: None,
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             overlay_wanted: false,
+        };
+        shell.disk_start();
+        shell
+    }
+
+    /// After `init`: the watched volume's path, its starting grade for
+    /// `on_disk_pressure`, and the platform's watch (libmobile's timer on
+    /// Android, libmorph's own on the desktop; none in scripted runs).
+    fn disk_start(&mut self) {
+        let Some(watch) = A::DISK_WATCH else {
+            return;
+        };
+        if cfg!(any(
+            all(target_os = "android", not(feature = "mobile-disk-space")),
+            target_arch = "wasm32"
+        )) {
+            log::warn!(
+                "libmorph: DISK_WATCH is set, but this build has no disk readings \
+                 (Android needs the mobile-disk-space feature): no watch"
+            );
+            return;
+        }
+        self.ctx.disk.path = match watch.volume {
+            crate::disk::DiskVolume::DataDir => self.ctx.data_dir.clone(),
+            crate::disk::DiskVolume::CacheDir => self.ctx.cache_dir.clone(),
+        };
+        if self.ctx.disk.path.is_none() && !self.ctx.scripted {
+            log::warn!(
+                "libmorph: DISK_WATCH: no {:?} on this host: no watch",
+                watch.volume
+            );
+            return;
+        }
+        // The starting grade: a reading only if this read succeeds;
+        // otherwise `Unknown`, reported as such.
+        self.sync_disk_clock();
+        let result = self.ctx.disk_reading();
+        let now = self.ctx.disk.now();
+        let _ = self.ctx.disk.reading(result, now, true);
+        #[cfg(all(target_os = "android", feature = "mobile-disk-space"))]
+        if let Some(path) = &self.ctx.disk.path {
+            crate::disk::watch(path, watch.interval_clamped());
+        }
+        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        if !self.ctx.scripted {
+            self.ctx.disk.next_check = Some(Instant::now() + watch.interval_clamped());
+        }
+        self.disk_events();
+    }
+
+    /// Scripted runs stamp readings with the script's clock.
+    fn sync_disk_clock(&mut self) {
+        self.ctx.disk.scripted_clock = self.script_now;
+    }
+
+    /// A grade whose reading is older than twice the interval turns
+    /// `Unknown`; then the disk grades waiting go to `on_disk_pressure`,
+    /// oldest first.
+    pub fn disk_events(&mut self) {
+        self.sync_disk_clock();
+        let now = self.now();
+        self.ctx.disk.expire(now);
+        for report in self.ctx.disk.take_pending() {
+            self.app.on_disk_pressure(&mut self.ctx, &report);
+        }
+    }
+
+    /// A reading of the watched volume from the platform's watch
+    /// (libmobile's `MobileEvent::DiskSpace`): graded, and a change told.
+    #[cfg(all(target_os = "android", feature = "mobile-disk-space"))]
+    pub fn disk_reading(&mut self, space: crate::disk::DiskSpace) {
+        if self.ctx.disk.watch.is_none() {
+            return;
+        }
+        let now = self.now();
+        let _ = self.ctx.disk.reading(Ok(space), now, true);
+        self.disk_events();
+    }
+
+    /// The `disk-space` verb: the scripted numbers (or their absence) read
+    /// now, as a platform reading would be.
+    #[cfg(script_runner)]
+    pub fn scripted_disk_reading(&mut self) {
+        if self.ctx.disk.watch.is_none() {
+            return;
+        }
+        self.sync_disk_clock();
+        let result = self.ctx.disk_reading();
+        let now = self.now();
+        let _ = self.ctx.disk.reading(result, now, true);
+    }
+
+    /// When the loop must next wake for the disk: the stale deadline of the
+    /// current grade and, on the desktop while shown, the timer.
+    pub fn disk_deadline(&self, hidden: bool) -> Option<Instant> {
+        let stale = self.ctx.disk.stale_at();
+        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        if !hidden && !self.lifecycle.suspended {
+            return match (stale, self.ctx.disk.next_check) {
+                (Some(a), Some(b)) => Some(a.min(b)),
+                (a, b) => a.or(b),
+            };
+        }
+        let _ = hidden;
+        stale
+    }
+
+    /// The desktop's disk timer, from the runner's loop: one `Instant`
+    /// comparison, and a `statvfs` when due. Not while suspended or
+    /// `hidden` (minimised or covered).
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    pub fn poll_disk(&mut self, hidden: bool) {
+        let (Some(watch), Some(due)) = (self.ctx.disk.watch, self.ctx.disk.next_check) else {
+            return;
+        };
+        if hidden || self.lifecycle.suspended {
+            return;
+        }
+        let now = Instant::now();
+        if now < due {
+            return;
+        }
+        self.ctx.disk.next_check = Some(now + watch.interval_clamped());
+        let result = self.ctx.disk_reading();
+        if let Ok(space) = &result {
+            log::debug!(
+                "libmorph: disk check: {} of {} bytes free",
+                space.free,
+                space.total
+            );
+        }
+        let _ = self.ctx.disk.reading(result, now, true);
+        self.disk_events();
+    }
+
+    /// Back in front: the desktop's disk timer reads the volume once now.
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    pub fn disk_resume(&mut self) {
+        if self.ctx.disk.next_check.is_some() {
+            self.ctx.disk.next_check = Some(Instant::now());
         }
     }
 
@@ -264,6 +405,8 @@ impl<A: MorphApp> Shell<A> {
         if self.lifecycle.resume() {
             self.ctx.camera.resume();
             self.ctx.memory_pressure = None;
+            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            self.disk_resume();
             self.app.on_resume(&mut self.ctx);
         }
     }
@@ -718,6 +861,7 @@ impl<A: MorphApp> Shell<A> {
         self.audio_events();
         self.camera_events();
         self.media_events();
+        self.disk_events();
         let now = Instant::now();
         let dt = self.fixed_dt.unwrap_or(now - self.last_frame);
         self.last_frame = now;

@@ -200,6 +200,22 @@ pub enum Command {
     /// while suspended, so a script can grant it while the settings page
     /// would be showing and see it in `on_resume`.
     AllFilesAccess(crate::shared_storage::AllFilesAccess),
+    /// `disk-space <free> <total>` (each a whole number with the unit `B`,
+    /// `KiB`, `MiB` or `GiB`, e.g. `disk-space 900MiB 64GiB`): the scripted
+    /// volume's numbers, which
+    /// [`disk_space`](crate::MorphContext::disk_space) answers for any
+    /// path. Graded against
+    /// [`DISK_WATCH`](crate::MorphApp::DISK_WATCH)'s thresholds, and
+    /// [`on_disk_pressure`](crate::MorphApp::on_disk_pressure) called if
+    /// the grade changed. 64 GiB free of 128 GiB before any such command.
+    /// Accepted while suspended.
+    DiskSpace { free: u64, total: u64 },
+    /// `disk-space unreadable`: from now on the scripted volume cannot be
+    /// read ([`disk_space`](crate::MorphContext::disk_space) and
+    /// [`check_disk_now`](crate::MorphContext::check_disk_now) fail), and
+    /// the watched grade becomes `Unknown`. A later `disk-space <free>
+    /// <total>` reads again. Accepted while suspended.
+    DiskUnreadable,
 }
 
 /// Why a script could not be loaded, checked or run.
@@ -388,6 +404,8 @@ pub(crate) enum Action {
         settings_only: bool,
     },
     AllFilesAccess(crate::shared_storage::AllFilesAccess),
+    /// The scripted numbers, `None` for `disk-space unreadable`.
+    DiskSpace(Option<(u64, u64)>),
 }
 
 /// The static checks of the plan, section 3, with the expansion.
@@ -585,6 +603,15 @@ impl Planner {
                 self.push(line, Action::MediaDeny { settings_only });
             }
             &Command::AllFilesAccess(state) => self.push(line, Action::AllFilesAccess(state)),
+            &Command::DiskSpace { free, total } => {
+                if free > total {
+                    return Err(format!(
+                        "`disk-space`: {free} bytes free of {total} is more than the volume"
+                    ));
+                }
+                self.push(line, Action::DiskSpace(Some((free, total))));
+            }
+            Command::DiskUnreadable => self.push(line, Action::DiskSpace(None)),
         }
         Ok(())
     }
@@ -840,6 +867,22 @@ fn parse_command(words: &[&str]) -> Result<Command, String> {
             arity(&[0], "media-deny-forever")?;
             Command::MediaDeny {
                 settings_only: true,
+            }
+        }
+        "disk-space" => {
+            const USAGE: &str =
+                "disk-space <free> <total> (units B, KiB, MiB, GiB), or disk-space unreadable";
+            if args == ["unreadable"] {
+                return Ok(Command::DiskUnreadable);
+            }
+            arity(&[2], USAGE)?;
+            let size = |word: &str| {
+                crate::disk::parse_size(word)
+                    .ok_or_else(|| format!("`{word}` is not a size; usage: {USAGE}"))
+            };
+            Command::DiskSpace {
+                free: size(args[0])?,
+                total: size(args[1])?,
             }
         }
         "all-files-access" => {
@@ -1121,6 +1164,39 @@ mod tests {
             actions("suspend\nmedia a.png\nmedia-cancel\nresume\n").len(),
             4
         );
+    }
+
+    #[test]
+    fn disk_space_takes_two_sizes() {
+        const MIB: u64 = 1 << 20;
+        const GIB: u64 = 1 << 30;
+        assert_eq!(
+            actions(
+                "disk-space 900MiB 64GiB\nsuspend\ndisk-space 7B 8KiB\ndisk-space unreadable\n"
+            ),
+            [
+                Action::DiskSpace(Some((900 * MIB, 64 * GIB))),
+                Action::Suspend,
+                Action::DiskSpace(Some((7, 8 << 10))),
+                Action::DiskSpace(None),
+            ]
+        );
+        for source in [
+            "disk-space",
+            "disk-space 1GiB",
+            "disk-space 1GiB 2GiB 3GiB",
+            "disk-space 900 64GiB",
+            "disk-space 1.5GiB 64GiB",
+            "disk-space 1GB 64GiB",
+            "disk-space unreadable now",
+        ] {
+            let (line, message) = rejected(source);
+            assert_eq!(line, 1, "{source}");
+            assert!(message.contains("usage: disk-space"), "{source}: {message}");
+        }
+        let (line, message) = rejected("disk-space 2GiB 1GiB");
+        assert_eq!(line, 1);
+        assert!(message.contains("more than the volume"), "{message}");
     }
 
     #[test]

@@ -178,6 +178,8 @@ pub struct MorphContext {
     /// What `all_files_access` answers in a scripted run (the
     /// `all-files-access` verb).
     pub(crate) scripted_all_files_access: crate::shared_storage::AllFilesAccess,
+    /// The disk watch, its last grade and the scripted volume.
+    pub(crate) disk: crate::disk::DiskState,
 }
 
 impl MorphContext {
@@ -219,6 +221,7 @@ impl MorphContext {
             surface_lost: false,
             memory_pressure: None,
             scripted_all_files_access: crate::shared_storage::AllFilesAccess::NotRequired,
+            disk: crate::disk::DiskState::default(),
         }
     }
 
@@ -563,6 +566,93 @@ impl MorphContext {
             return Ok(());
         }
         crate::shared_storage::scan(paths)
+    }
+
+    /// The space of the volume holding `path`. On Android (feature
+    /// `mobile-disk-space`) this also asks `StorageManager` for the
+    /// allocatable bytes and the app's cache quota, which can take tens of
+    /// milliseconds: call it when deciding, not per frame. The desktop:
+    /// libdevice's `statvfs`, with `allocatable` and `cache_quota` `None`.
+    /// The web and Android without the feature:
+    /// [`Unsupported`](crate::disk::DiskError::Unsupported). Scripted runs:
+    /// the scripted numbers (the `disk-space` verb) for any path.
+    pub fn disk_space(
+        &self,
+        path: &Path,
+    ) -> Result<crate::disk::DiskSpace, crate::disk::DiskError> {
+        if self.scripted {
+            return self
+                .disk
+                .scripted
+                .ok_or_else(crate::disk::scripted_unreadable);
+        }
+        crate::disk::space(path)
+    }
+
+    /// The watched volume's last grade;
+    /// [`DiskPressure::Unknown`](crate::disk::DiskPressure::Unknown) when
+    /// there is no current reading (none yet, the last failed, or the
+    /// latest is older than twice the interval);
+    /// [`DiskPressure::None`](crate::disk::DiskPressure::None) without
+    /// [`DISK_WATCH`](crate::MorphApp::DISK_WATCH).
+    #[must_use]
+    pub fn disk_pressure(&self) -> crate::disk::DiskPressure {
+        if self.disk.watch.is_none() {
+            return crate::disk::DiskPressure::None;
+        }
+        self.disk.pressure
+    }
+
+    /// Check the watched volume now (before a batch write, say): read it
+    /// (`statvfs` only, microseconds; scripted runs, the scripted numbers)
+    /// and grade it against the last grade, returning the result;
+    /// [`disk_pressure`](Self::disk_pressure) reports it from now on. It
+    /// never calls [`on_disk_pressure`](crate::MorphApp::on_disk_pressure):
+    /// the hook hears only automatic readings. A failed read makes the
+    /// grade `Unknown` and is returned.
+    ///
+    /// Without [`DISK_WATCH`](crate::MorphApp::DISK_WATCH) it reads the
+    /// data directory's volume and grades it with
+    /// [`DiskThresholds::DEFAULT`](crate::disk::DiskThresholds::DEFAULT)
+    /// from `None`, changing nothing and calling no hook.
+    pub fn check_disk_now(
+        &mut self,
+    ) -> Result<crate::disk::DiskPressureReport, crate::disk::DiskError> {
+        let result = self.disk_reading();
+        if self.disk.watch.is_none() {
+            let space = result?;
+            let pressure = crate::disk::DiskThresholds::DEFAULT.grade(
+                crate::disk::DiskPressure::None,
+                space.free,
+                space.total,
+            );
+            return Ok(crate::disk::DiskPressureReport {
+                pressure,
+                space: Some(space),
+            });
+        }
+        let now = self.disk.now();
+        self.disk.reading(result, now, false)
+    }
+
+    /// A loop-thread reading of the watched volume (the data directory's
+    /// without a watch): the scripted numbers, or the platform's
+    /// `statvfs`.
+    pub(crate) fn disk_reading(&self) -> Result<crate::disk::DiskSpace, crate::disk::DiskError> {
+        if self.scripted {
+            return self
+                .disk
+                .scripted
+                .ok_or_else(crate::disk::scripted_unreadable);
+        }
+        let path = match self.disk.watch {
+            Some(_) => self.disk.path.as_deref(),
+            None => self.data_dir.as_deref(),
+        };
+        let path = path.ok_or_else(|| {
+            crate::disk::DiskError::Path("the app has no such directory on this host".into())
+        })?;
+        crate::disk::quick_space(path)
     }
 
     /// The clipboard's text, for the app's own Paste button: the plain text

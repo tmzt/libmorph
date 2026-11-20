@@ -65,6 +65,7 @@ pub fn run<A: MorphApp>() -> Result<(), MorphError> {
         #[cfg(target_os = "macos")]
         pad,
         error: None,
+        hidden: false,
     };
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -123,6 +124,8 @@ struct Handler<A> {
     #[cfg(target_os = "macos")]
     pad: Pad,
     error: Option<MorphError>,
+    /// The window is minimised or covered: the disk timer does not run.
+    hidden: bool,
 }
 
 /// Trackpad fingers as touches (macOS).
@@ -443,6 +446,11 @@ impl<A: MorphApp> ApplicationHandler<Ready> for Handler<A> {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         #[cfg(target_os = "macos")]
         self.drain_pad();
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(shell) = &mut self.shell {
+            shell.poll_disk(self.hidden);
+            shell.disk_events();
+        }
         self.poll_gpu(event_loop);
         self.check_exit(event_loop);
     }
@@ -474,7 +482,12 @@ impl<A: MorphApp> Handler<A> {
             return;
         };
         let had_surface = shell.has_surface();
-        let deadline = shell.poll_gpu();
+        let gpu = shell.poll_gpu();
+        // The disk timer and a grade going stale wake the loop too.
+        let deadline = match (gpu, shell.disk_deadline(self.hidden)) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
         if !had_surface
             && shell.has_surface()
             && let Some(window) = &self.window
@@ -496,6 +509,15 @@ impl<A: MorphApp> Handler<A> {
     /// the window attaches a new surface, restoring first if released. A
     /// `Keep` app's loop is unchanged.
     fn occluded(&mut self, event_loop: &ActiveEventLoop, occluded: bool) {
+        // The disk timer stops while the window is hidden, for every app,
+        // and reads once when it is shown again.
+        #[cfg(not(target_arch = "wasm32"))]
+        if std::mem::replace(&mut self.hidden, occluded)
+            && !occluded
+            && let Some(shell) = &mut self.shell
+        {
+            shell.disk_resume();
+        }
         if !Shell::<A>::releases() {
             return;
         }

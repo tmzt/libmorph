@@ -20,6 +20,7 @@ pub mod camera;
 mod clipboard;
 mod config;
 mod context;
+pub mod disk;
 mod gpu;
 mod input;
 pub mod intent;

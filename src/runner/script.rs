@@ -225,6 +225,12 @@ fn play<A: MorphApp>(
                 .ctx
                 .media
                 .script_answer(ScriptAnswer::Deny { settings_only }, None),
+            Action::DiskSpace(space) => {
+                log::info!("libmorph: script line {line}: disk-space {space:?}");
+                shell.ctx.disk.scripted =
+                    space.map(|(free, total)| crate::disk::DiskSpace::new(free, total));
+                shell.scripted_disk_reading();
+            }
             Action::AllFilesAccess(state) => {
                 log::info!("libmorph: script line {line}: all-files-access {state:?}");
                 shell.ctx.scripted_all_files_access = state;
@@ -239,6 +245,7 @@ fn play<A: MorphApp>(
         // its hooks) arrive now, before the next frame.
         shell.camera_events();
         shell.media_events();
+        shell.disk_events();
         if shell.exit_requested() {
             manifest.exit_by = ExitBy::App;
             manifest.exit_line = Some(line);

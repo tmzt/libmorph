@@ -433,6 +433,15 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
                     (_, None) => log::debug!("libmorph: an unknown trim level: {level:?}"),
                 }
             }
+            // A reading of the watched volume from libmobile's timer (on
+            // resume and every interval while resumed): graded here, and
+            // told only on a change. One before the app exists is dropped:
+            // the watch starts after `init`.
+            #[cfg(feature = "mobile-disk-space")]
+            MobileEvent::DiskSpace(space) => match &mut self.shell {
+                Some(shell) => shell.disk_reading(crate::disk::from_mobile(space)),
+                None => log::debug!("libmorph: a disk reading before the app exists"),
+            },
             MobileEvent::ConfigChanged => {
                 if let Some(shell) = &mut self.shell {
                     shell.ctx.scale_factor = scale_factor(app);
@@ -463,6 +472,10 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
     }
 
     fn tick(&mut self, app: &AndroidApp) {
+        // A change `check_disk_now` found in a hook outside a frame.
+        if let Some(shell) = &mut self.shell {
+            shell.disk_events();
+        }
         self.frame(app);
         // A releasing app's device goes once it has been off screen for
         // `after`; a failed restore is tried again.
@@ -476,9 +489,17 @@ impl<A: MorphApp> MobileApp for Adapter<A> {
             return Some(Duration::ZERO);
         }
         // Otherwise wake for the release clock if it is due sooner.
-        let until = self
-            .gpu_deadline
-            .map(|at| at.saturating_duration_since(web_time::Instant::now()));
+        // And for a disk grade going stale (`Unknown` after twice the
+        // watch's interval without a reading, as while paused).
+        let disk = self
+            .shell
+            .as_ref()
+            .and_then(|shell| shell.disk_deadline(false));
+        let deadline = match (self.gpu_deadline, disk) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+        let until = deadline.map(|at| at.saturating_duration_since(web_time::Instant::now()));
         Some(until.map_or(DEFAULT_POLL_TIMEOUT, |until| {
             until.min(DEFAULT_POLL_TIMEOUT)
         }))

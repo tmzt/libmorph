@@ -177,6 +177,27 @@ pub trait MorphApp: Sized + 'static {
     /// ```
     const MEMORY_HINTS: wgpu::MemoryHints = wgpu::MemoryHints::Performance;
 
+    /// Watch the volume of the app's data (or cache) directory and grade
+    /// how short of space it is: [`on_disk_pressure`](Self::on_disk_pressure)
+    /// hears the starting grade after [`init`](Self::init) and then each
+    /// change, and [`ctx.disk_pressure()`](MorphContext::disk_pressure)
+    /// holds the last. `None`, the default: no watch, no timer,
+    /// `on_disk_pressure` is never called.
+    ///
+    /// Android reads the volume on libmobile's timer while resumed
+    /// (feature `mobile-disk-space`; without it, one warning and no
+    /// watch); the desktop on libmorph's own, never while suspended or
+    /// minimised; scripted runs at each `disk-space` command. An app with
+    /// expendable caches opts in to trim them, and so should one that keeps
+    /// data it cannot afford to lose halfway through a write. The grade is
+    /// advisory: libmorph deletes, trims and refuses nothing.
+    ///
+    /// ```
+    /// # use libmorph::disk::DiskWatch;
+    /// const DISK_WATCH: Option<DiskWatch> = Some(DiskWatch::DEFAULT);
+    /// ```
+    const DISK_WATCH: Option<crate::disk::DiskWatch> = None;
+
     /// The device limits to ask for, before [`init`](Self::init). `base` is
     /// what libmorph asks for by default: the downlevel defaults (WebGL2
     /// defaults on a GL adapter) with texture sizes raised to the adapter's.
@@ -545,6 +566,31 @@ pub trait MorphApp: Sized + 'static {
         let _ = (ctx, pressure);
     }
 
+    /// The watched volume's grade changed
+    /// ([`DISK_WATCH`](Self::DISK_WATCH)). Called once after
+    /// [`init`](Self::init) with the starting grade, then only on a change,
+    /// on the loop thread, from automatic readings only (the platform's
+    /// timer, the first reading after `init`). A grade found by
+    /// [`ctx.check_disk_now()`](MorphContext::check_disk_now) is returned
+    /// to the caller, never told here. With no current reading the grade
+    /// is `Unknown` (`report.space` `None`), told once, and never `Low` or
+    /// `Critical`. Never called without `DISK_WATCH`.
+    ///
+    /// The grade is advisory: libmorph deletes, trims and refuses nothing
+    /// at any grade. At `Low` an app might trim its caches; at `Critical`
+    /// defer or refuse writes it cannot afford to lose halfway.
+    ///
+    /// May be called while the device is released, for an app whose
+    /// [`GPU_IN_BACKGROUND`](Self::GPU_IN_BACKGROUND) is `Release`: check
+    /// [`ctx.gpu()`](MorphContext::gpu) before GPU work, and defer it.
+    fn on_disk_pressure(
+        &mut self,
+        ctx: &mut MorphContext,
+        report: &crate::disk::DiskPressureReport,
+    ) {
+        let _ = (ctx, report);
+    }
+
     /// The surface is gone (app backgrounded). The device, queue and every
     /// resource built on them stay valid: a release, for an app that
     /// chose one, comes later, announced by [`on_gpu`](Self::on_gpu).
@@ -635,6 +681,7 @@ mod tests {
             }
         }
         assert_eq!(Quiet::GPU_IN_BACKGROUND, crate::GpuInBackground::Keep);
+        assert_eq!(Quiet::DISK_WATCH, None, "no disk watch unless asked");
         assert!(matches!(
             Quiet::MEMORY_HINTS,
             wgpu::MemoryHints::Performance

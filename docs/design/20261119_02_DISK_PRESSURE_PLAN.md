@@ -1,7 +1,7 @@
 ---
 title: Disk space and disk pressure, told to the app when it changes
 date: 2026-11-19
-status: Draft
+status: In implementation
 covers:
   - "`MorphContext::disk_space`, `disk_pressure` and `check_disk_now`, and a defaulted `MorphApp::on_disk_pressure` hook, in a new module `libmorph::disk`"
   - "`MorphApp::DISK_WATCH`, an associated const that turns the watch on, with the app's path, thresholds and interval"
@@ -416,3 +416,11 @@ without a reading each giving one `Unknown` hook with no space.
 
 Versioning stands: additive, a patch release (libmorph 0.9.5, after the
 all-files access plan's 0.9.4).
+
+## Amendment — 2026-11-19 21:39 EST: implementation started; the document is now immutable
+
+The owner approved this plan on 2026-11-19 ("approve and build"), and
+libmobile 0.5.4 and libdevice 0.1.4 are on GitHub. Implementation of
+steps 1 to 3 starts with this commit, which sets `status: In
+implementation`. From here the document changes only by amendment, on
+the owner's explicit instruction.
