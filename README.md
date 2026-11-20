@@ -50,8 +50,9 @@ writes no dead method.
 Other hooks: `update`, `on_touch`, `on_hover`, `on_key`, `on_text_input`,
 `on_suspend`, `on_resume`, `on_capture_ready`, `on_audio`, `on_permissions`,
 `on_camera`, `on_media`, `on_open_url`, `on_intent`, `on_service`,
-`on_low_memory`, `on_trim_memory` and `on_memory_pressure`. Every one has a
-default body, so an app writes only the ones it uses. `on_memory_pressure`
+`on_low_memory`, `on_trim_memory`, `on_memory_pressure` and
+`on_disk_pressure`. Every one has a default body, so an app writes only the
+ones it uses. `on_memory_pressure`
 follows each `on_trim_memory` and `on_low_memory` with Android's levels
 graded into `MemoryPressure` (`UiHidden`, `Background`, `Low`: what to
 drop, in increasing order), and `ctx.memory_pressure()` holds the highest
@@ -59,7 +60,17 @@ grade since the last resume. `ctx.all_files_access`,
 `open_all_files_access_settings`, `external_storage_dir` and `scan_media`
 (`libmorph::shared_storage`) are Android's All files access and media
 index, with fixed answers elsewhere; read `all_files_access` again in
-`on_resume`, since Android says nothing when the user changes it. `MorphContext` also provides the safe area,
+`on_resume`, since Android says nothing when the user changes it.
+
+With `const DISK_WATCH: Option<DiskWatch> = Some(DiskWatch::DEFAULT)`,
+`on_disk_pressure` hears the data directory's volume graded `None`, `Low`
+(under max(1 GiB, 5 %)) or `Critical` (under 256 MiB) after `init` and on
+each change, read every 60 s while the app is in front. With no current
+reading (none yet, a failed read, or none for twice the interval, as while
+the phone is locked) the grade is `Unknown`, never `Low` or `Critical`.
+`ctx.check_disk_now()` reads and returns the grade without calling the
+hook; `ctx.disk_space` and `disk_pressure` read on demand
+(`libmorph::disk`). The grade is advisory: libmorph frees nothing. `MorphContext` also provides the safe area,
 scale factor, surface size and format, the device spec, audio, the app's data
 and cache directories, the clipboard, the secure store and key store,
 `open_link`, `request_permissions` and `exit`. The rustdoc documents each one,
@@ -220,7 +231,9 @@ key escape
 
 Commands: `fps`, `frames`, `touch`, `tap`, `drag`, `hover`, `key`,
 `screenshot`, `geometry`, `suspend`, `resume`, `exit`, and for the
-platform's answers `all-files-access granted|missing|not-required`, among
+platform's answers `all-files-access granted|missing|not-required` and
+`disk-space <free> <total>` (e.g. `disk-space 900MiB 64GiB`, or
+`disk-space unreadable`), among
 others the rustdoc of `libmorph::script::Command` lists. The run has no window
 and a fixed frame time. `geometry <width> <height>` is the window reporting a
 new size, as it does when the device turns; it is accepted while suspended,
@@ -337,6 +350,7 @@ also what it rebuilds on `Restored`.
 | `mobile-clipboard` | The clipboard's text on Android, for `ctx.clipboard_text`, `ctx.clipboard_has_text` and `ctx.set_clipboard_text` |
 | `mobile-all-files-access` | `libmorph::shared_storage` on Android: `ctx.all_files_access` (`Granted`, `Missing`), `ctx.open_all_files_access_settings` and `ctx.external_storage_dir`, through libmobile's `all-files-access`; the build script declares the permission with `gradle_project(id).all_files_access()`. The desktop and the web answer `NotRequired` |
 | `mobile-media-scan` | `ctx.scan_media` on Android: tells the media index about added, changed, moved or deleted files (libmobile's `media-scan`); `Ok(())` off Android |
+| `mobile-disk-space` | `libmorph::disk` on Android: `ctx.disk_space` with `StorageManager`'s allocatable bytes and cache quota, and `MorphApp::DISK_WATCH` read on libmobile's timer while resumed. The desktop reads libdevice's `statvfs` on libmorph's own timer |
 | `mobile-secure-store-no-strongbox` | Keeps the secure store's key in the TEE only, never StrongBox. Negative, so turning default features off cannot turn StrongBox off; for apps, not libraries |
 | `secure-store` | `ctx.secure_store()` and `ctx.key_store()`: named secrets and adapter keys encrypted at rest, through libmobile's Keystore stores on Android and libdevice's login Keychain on macOS |
 | `tokio` | `system_events::subscribe_tokio`, on Android and off it; nothing needs a tokio runtime to send |
