@@ -66,7 +66,7 @@ pub use libdevice::key_store;
 #[cfg(all(feature = "secure-store", target_os = "android"))]
 pub use libmobile::key_store;
 pub use link::OpenLinkError;
-pub use memory::TrimLevel;
+pub use memory::{MemoryPressure, TrimLevel};
 pub use permission::{PermissionRequest, Permissions};
 pub use safe_area::SafeArea;
 pub use secure_store::{

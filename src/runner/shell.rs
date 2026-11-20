@@ -263,6 +263,7 @@ impl<A: MorphApp> Shell<A> {
         }
         if self.lifecycle.resume() {
             self.ctx.camera.resume();
+            self.ctx.memory_pressure = None;
             self.app.on_resume(&mut self.ctx);
         }
     }
@@ -416,6 +417,7 @@ impl<A: MorphApp> Shell<A> {
     #[cfg(any(script_runner, target_os = "android"))]
     pub fn low_memory(&mut self) {
         self.app.on_low_memory(&mut self.ctx);
+        self.memory_pressure(crate::MemoryPressure::LOW_MEMORY);
         self.release_under_pressure("low memory");
     }
 
@@ -425,9 +427,21 @@ impl<A: MorphApp> Shell<A> {
     #[cfg(any(script_runner, target_os = "android"))]
     pub fn trim_memory(&mut self, level: crate::TrimLevel) {
         self.app.on_trim_memory(&mut self.ctx, level);
+        if let Some(pressure) = crate::MemoryPressure::from_trim(level) {
+            self.memory_pressure(pressure);
+        }
         if level >= crate::TrimLevel::Background {
             self.release_under_pressure("trim memory");
         }
+    }
+
+    /// The graded report, right after the raw one: the context's highest
+    /// grade first, so the hook reads it with this report included.
+    #[cfg(any(script_runner, target_os = "android"))]
+    fn memory_pressure(&mut self, pressure: crate::MemoryPressure) {
+        self.ctx.memory_pressure = self.ctx.memory_pressure.max(Some(pressure));
+        log::debug!("libmorph: memory pressure {pressure:?}");
+        self.app.on_memory_pressure(&mut self.ctx, pressure);
     }
 
     /// Drop the surface (it must not outlive the platform window) and tell

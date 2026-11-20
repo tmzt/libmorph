@@ -1,7 +1,7 @@
 ---
 title: Memory pressure in grades, shared from flankr
 date: 2026-11-19
-status: Draft
+status: In implementation
 covers:
   - "`MemoryPressure` (`UiHidden`, `Background`, `Low`), its mapping from `TrimLevel` and from `on_low_memory`, lifted from flankr's companion"
   - "A defaulted `MorphApp::on_memory_pressure` hook and `MorphContext::memory_pressure`, the highest grade since the last resume"
@@ -142,3 +142,10 @@ libmorph-build do not change.
    `adb shell am send-trim-memory <pkg> BACKGROUND`, `Background`.
 2. **Release** on the owner's word.
    **Done when:** tagged, and ShotToss builds against it.
+
+## Amendment — 2026-11-19 20:11 EST: implementation started; the document is now immutable
+
+The owner approved this plan on 2026-11-19 ("approve and build").
+Implementation of step 1 starts with this commit, which sets `status: In
+implementation`. From here the document changes only by amendment, on the
+owner's explicit instruction.

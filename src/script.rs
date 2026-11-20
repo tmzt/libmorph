@@ -128,19 +128,23 @@ pub enum Command {
     Geometry { width: u32, height: u32 },
     /// `suspend`: the surface goes away.
     Suspend,
-    /// `resume`: a new surface.
+    /// `resume`: a new surface; the context's
+    /// [`memory_pressure`](crate::MorphContext::memory_pressure) is
+    /// cleared before `on_resume`.
     Resume,
     /// `exit`: end the run here.
     Exit,
     /// `low-memory`: the system is low on memory
-    /// ([`MorphApp::on_low_memory`](crate::MorphApp::on_low_memory)).
-    /// Accepted while suspended.
+    /// ([`MorphApp::on_low_memory`](crate::MorphApp::on_low_memory)), then
+    /// [`on_memory_pressure`](crate::MorphApp::on_memory_pressure) with
+    /// `Low`. Accepted while suspended.
     LowMemory,
     /// `trim-memory <level>`: Android asks the app to trim memory
     /// ([`MorphApp::on_trim_memory`](crate::MorphApp::on_trim_memory)), with
     /// the level as `running-moderate`, `running-low`, `running-critical`,
-    /// `ui-hidden`, `background`, `moderate` or `complete`. Accepted while
-    /// suspended.
+    /// `ui-hidden`, `background`, `moderate` or `complete`, then
+    /// [`on_memory_pressure`](crate::MorphApp::on_memory_pressure) with its
+    /// grade. Accepted while suspended.
     TrimMemory(TrimLevel),
     /// `gpu-report`: log the device's allocator report once, as libmorph
     /// does at each suspend (what it has allocated and reserved, or that

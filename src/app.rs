@@ -528,6 +528,23 @@ pub trait MorphApp: Sized + 'static {
         let _ = (ctx, level);
     }
 
+    /// A graded memory report, called right after
+    /// [`on_trim_memory`](Self::on_trim_memory) or
+    /// [`on_low_memory`](Self::on_low_memory) for the same report, with its
+    /// grade ([`MemoryPressure::from_trim`](crate::MemoryPressure::from_trim),
+    /// [`MemoryPressure::LOW_MEMORY`](crate::MemoryPressure::LOW_MEMORY)).
+    /// Every report is passed on, also one no higher than the last, so an
+    /// app may trim again; [`ctx.memory_pressure()`](MorphContext::memory_pressure)
+    /// already holds the highest grade since the last resume, this one
+    /// included. libmorph frees nothing for the app at any grade.
+    ///
+    /// May be called while the device is released, for an app whose
+    /// [`GPU_IN_BACKGROUND`](Self::GPU_IN_BACKGROUND) is `Release`: check
+    /// [`ctx.gpu()`](MorphContext::gpu) before GPU work, and defer it.
+    fn on_memory_pressure(&mut self, ctx: &mut MorphContext, pressure: crate::MemoryPressure) {
+        let _ = (ctx, pressure);
+    }
+
     /// The surface is gone (app backgrounded). The device, queue and every
     /// resource built on them stay valid: a release, for an app that
     /// chose one, comes later, announced by [`on_gpu`](Self::on_gpu).

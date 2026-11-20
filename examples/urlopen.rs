@@ -128,6 +128,13 @@ impl MorphApp for UrlOpen {
         log::info!("urlopen: on_trim_memory {level:?}");
     }
 
+    fn on_memory_pressure(&mut self, ctx: &mut MorphContext, pressure: libmorph::MemoryPressure) {
+        log::info!(
+            "urlopen: on_memory_pressure({pressure:?}), highest since resume {:?}",
+            ctx.memory_pressure()
+        );
+    }
+
     fn on_open_url(&mut self, _ctx: &mut MorphContext, url: &str) {
         match scheme_and_host(url) {
             Some((scheme, host)) => {

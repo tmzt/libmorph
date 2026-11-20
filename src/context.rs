@@ -173,6 +173,8 @@ pub struct MorphContext {
     /// `acquire_frame` found the surface lost and dropped it; the runner
     /// recreates it before the next iteration.
     pub(crate) surface_lost: bool,
+    /// The highest memory grade since the last resume (or the start).
+    pub(crate) memory_pressure: Option<crate::MemoryPressure>,
 }
 
 impl MorphContext {
@@ -212,6 +214,7 @@ impl MorphContext {
             frame_held: false,
             frame_presented: false,
             surface_lost: false,
+            memory_pressure: None,
         }
     }
 
@@ -345,6 +348,16 @@ impl MorphContext {
     #[must_use]
     pub fn data_dir(&self) -> Option<&Path> {
         self.data_dir.as_deref()
+    }
+
+    /// The highest memory grade reported since the app last resumed (or
+    /// started); `None` when there has been none. Cleared just before
+    /// [`on_resume`](crate::MorphApp::on_resume): back in front, the app
+    /// may grow again. See
+    /// [`on_memory_pressure`](crate::MorphApp::on_memory_pressure).
+    #[must_use]
+    pub fn memory_pressure(&self) -> Option<crate::MemoryPressure> {
+        self.memory_pressure
     }
 
     /// The real device's vendor, make and model (Android's
