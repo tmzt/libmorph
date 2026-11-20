@@ -673,3 +673,10 @@ CHANGES.md of the same date). Not strictly additive:
   re-export: `gradle::AppPlugin` and `gradle::Project::plugin`, so
   `gradle_project(id).plugin(AppPlugin::new(..))` registers the app's own
   `MobileActivityPlugin` objects (libmobile's plan `20261120_01`).
+
+## libmorph 0.10.1 — 2026-11-20 (tag `v0.10.1`)
+
+- libmobile 0.5.4 → 0.5.5 (revision `fb5aaab`), semver-compatible and
+  additive: app plugin registration (`gradle::AppPlugin`,
+  `Project::plugin`), Kotlin only on Android. libmorph's own API is
+  unchanged.
