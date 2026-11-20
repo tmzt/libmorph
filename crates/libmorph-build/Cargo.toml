@@ -8,4 +8,4 @@ repository = "https://github.com/tmzt/libmorph"
 
 [dependencies]
 # `icons`: gradle::Icon and Project::icon (host-only; this crate is a
-libmobile = { git = "https://github.com/tmzt/libmobile", rev = "8a2d39bbd13b303b896e50400a3b9d3c045ba1db", features = ["icons"] }
+libmobile = { git = "https://github.com/tmzt/libmobile", rev = "fb5aaabcd1d35959e53febe45ddf3c850aee844c", features = ["icons"] }
