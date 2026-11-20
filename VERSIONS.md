@@ -601,3 +601,17 @@ Memory pressure in grades (plan `20261119_03`). Additive:
   `trim-memory` and `low-memory` script verbs.
 - `MorphContext::memory_pressure()`: the highest grade since the last
   resume, cleared before `on_resume`.
+
+## libmorph 0.9.4 — 2026-11-19 (tag `v0.9.4`)
+
+All files access, the shared storage root and media scans (plan
+`20261119_01`). Additive:
+
+- `libmorph::shared_storage`: `AllFilesAccess` (`Granted`, `Missing`,
+  `NotRequired`) and `SharedStorageError`, both `#[non_exhaustive]` and
+  re-exported at the root, and `MAX_SCAN_PATHS`.
+- `MorphContext::all_files_access`, `open_all_files_access_settings`,
+  `external_storage_dir` and `scan_media`, on every host.
+- Features `mobile-all-files-access` and `mobile-media-scan`.
+- The script verb `all-files-access granted|missing|not-required`.
+- libmobile 0.5.2 → 0.5.3 (revision `cbcbbeb`), semver-compatible.
