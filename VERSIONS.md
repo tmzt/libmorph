@@ -647,3 +647,21 @@ Disk space and disk pressure (plan `20261119_02`, as amended). Additive:
   (libmobile's `links` key allows one copy in the workspace); the
   `libmorph_build::gradle` re-export follows the compatible release and its
   public API is unchanged.
+
+## libmorph 0.10.0 — 2026-11-19 (tag `v0.10.0`)
+
+Disk pressure in four grades, at the owner's word (plan `20261119_02`,
+CHANGES.md of the same date). Not strictly additive:
+
+- `DiskPressure::ExtremelyLow`, between `Low` and `Critical` (the enum is
+  `#[non_exhaustive]`).
+- **Breaking:** `DiskThresholds`, an exhaustive struct, gains `low_max`,
+  `extremely_low_min`, `extremely_low_fraction_permille` and
+  `extremely_low_max`; a struct literal without `..` no longer compiles.
+- **Breaking:** `DiskThresholds::DEFAULT` changes: `Low` under max(2 GiB,
+  min(5 %, 16 GiB)), `ExtremelyLow` under max(1 GiB, min(2 %, 4 GiB)),
+  `Critical` under 512 MiB (was max(1 GiB, 5 %) and 256 MiB); a volume
+  leaves each grade 256 MiB above its threshold.
+- `DiskThresholds::extremely_low_threshold`, and the const setters
+  `with_low`, `with_extremely_low`, `with_critical` and `with_hysteresis`;
+  `new` takes the fields it does not name from `DEFAULT`.
