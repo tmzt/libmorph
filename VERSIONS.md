@@ -640,3 +640,10 @@ Disk space and disk pressure (plan `20261119_02`, as amended). Additive:
   and `disk-space unreadable`.
 - libmobile 0.5.3 → 0.5.4 (revision `8a2d39b`) and libdevice 0.1.3 →
   0.1.4 (tag `v0.1.4`), both semver-compatible.
+
+## libmorph-build 0.5.4 — 2026-11-19 (tag `libmorph-build-v0.5.4`)
+
+- libmobile 0.5.3 → 0.5.4 (revision `8a2d39b`), moved with libmorph's pin
+  (libmobile's `links` key allows one copy in the workspace); the
+  `libmorph_build::gradle` re-export follows the compatible release and its
+  public API is unchanged.
