@@ -50,8 +50,12 @@ writes no dead method.
 Other hooks: `update`, `on_touch`, `on_hover`, `on_key`, `on_text_input`,
 `on_suspend`, `on_resume`, `on_capture_ready`, `on_audio`, `on_permissions`,
 `on_camera`, `on_media`, `on_open_url`, `on_intent`, `on_service`,
-`on_low_memory` and `on_trim_memory`. Every one has a default body, so an app
-writes only the ones it uses. `MorphContext` also provides the safe area,
+`on_low_memory`, `on_trim_memory` and `on_memory_pressure`. Every one has a
+default body, so an app writes only the ones it uses. `on_memory_pressure`
+follows each `on_trim_memory` and `on_low_memory` with Android's levels
+graded into `MemoryPressure` (`UiHidden`, `Background`, `Low`: what to
+drop, in increasing order), and `ctx.memory_pressure()` holds the highest
+grade since the last resume. `MorphContext` also provides the safe area,
 scale factor, surface size and format, the device spec, audio, the app's data
 and cache directories, the clipboard, the secure store and key store,
 `open_link`, `request_permissions` and `exit`. The rustdoc documents each one,
