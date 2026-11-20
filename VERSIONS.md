@@ -621,3 +621,22 @@ All files access, the shared storage root and media scans (plan
 - libmobile 0.5.2 → 0.5.3 (revision `cbcbbeb`): the `libmorph_build::gradle`
   re-export gains `Project::all_files_access()`, which declares
   `MANAGE_EXTERNAL_STORAGE` (additive).
+
+## libmorph 0.9.5 — 2026-11-19 (tag `v0.9.5`)
+
+Disk space and disk pressure (plan `20261119_02`, as amended). Additive:
+
+- `libmorph::disk`: `DiskSpace`, `DiskPressure` (`Unknown`, `None`, `Low`,
+  `Critical`; ordered), `DiskPressureReport` (its `space` `None` when
+  `Unknown`) and `DiskError`, all `#[non_exhaustive]`; `DiskThresholds`
+  (`DEFAULT`, `new`, `low_threshold`, `grade`), `DiskWatch` (`DEFAULT`,
+  `interval_clamped`, `MIN_INTERVAL`, `MAX_INTERVAL`) and `DiskVolume`.
+- `MorphApp::DISK_WATCH` (default `None`) and `MorphApp::on_disk_pressure`,
+  defaulted: the starting grade after `init`, then each change of an
+  automatic reading; `Unknown` when there is no current reading.
+- `MorphContext::disk_space`, `disk_pressure` and `check_disk_now` (which
+  returns its grade and never calls the hook).
+- Feature `mobile-disk-space`; the script verb `disk-space <free> <total>`
+  and `disk-space unreadable`.
+- libmobile 0.5.3 → 0.5.4 (revision `8a2d39b`) and libdevice 0.1.3 →
+  0.1.4 (tag `v0.1.4`), both semver-compatible.
