@@ -588,3 +588,16 @@ short-gap repair remains the default.
 - libmobile 0.5.1 → 0.5.2 (revision `75fb7d9`); the
   `libmorph_build::gradle` re-export follows the compatible release and its
   public API is unchanged.
+
+## libmorph 0.9.3 — 2026-11-19 (tag `v0.9.3`)
+
+Memory pressure in grades (plan `20261119_03`). Additive:
+
+- `MemoryPressure` (`UiHidden`, `Background`, `Low`; ordered,
+  `#[non_exhaustive]`), with `MemoryPressure::from_trim(TrimLevel)` and
+  `MemoryPressure::LOW_MEMORY`.
+- `MorphApp::on_memory_pressure(ctx, pressure)`, defaulted: called right
+  after each `on_trim_memory` and `on_low_memory`, also from the
+  `trim-memory` and `low-memory` script verbs.
+- `MorphContext::memory_pressure()`: the highest grade since the last
+  resume, cleared before `on_resume`.
