@@ -665,3 +665,11 @@ CHANGES.md of the same date). Not strictly additive:
 - `DiskThresholds::extremely_low_threshold`, and the const setters
   `with_low`, `with_extremely_low`, `with_critical` and `with_hysteresis`;
   `new` takes the fields it does not name from `DEFAULT`.
+
+## libmorph-build 0.5.5 — 2026-11-20 (tag `libmorph-build-v0.5.5`)
+
+- libmobile 0.5.4 → 0.5.5 (revision `fb5aaab`), moved with libmorph's pin;
+  semver-compatible and additive. Through the `libmorph_build::gradle`
+  re-export: `gradle::AppPlugin` and `gradle::Project::plugin`, so
+  `gradle_project(id).plugin(AppPlugin::new(..))` registers the app's own
+  `MobileActivityPlugin` objects (libmobile's plan `20261120_01`).
