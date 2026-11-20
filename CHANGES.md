@@ -2113,3 +2113,58 @@ Departures, each small (Rule 1.7):
 
 Open: step 3's S23 check through ShotToss's access card, so the plan stays
 `In implementation`.
+
+## 2026-11-19 21:42 EST — plan 20261119_02, steps 1 to 3 built; departures
+
+Plan: [Disk space and disk pressure, told to the app when it changes](docs/design/20261119_02_DISK_PRESSURE_PLAN.md),
+with its amendment of today (`5d1bad0`: no reading is `Unknown`; the
+hook hears automatic readings only). `45cfe08` moves libmobile to 0.5.4
+(`8a2d39b`) in libmorph and libmorph-build in one commit, under the
+Rule 3.1 exception recorded in plan 20261119_01's addendum, for the same
+reason (`links = "libmobile"`). `d182a09` is steps 1 to 3 with libdevice
+0.1.4, `1f76ac5` the `diskwatch` Android crate, `58c616e` its
+`build.sh` entry, `2b52527` the README.
+
+Checks, from outside the checkout, before each commit: `cargo fmt --
+--check`; `cargo clippy -p libmorph --all-targets` with default
+features and `--features script`; `--target aarch64-linux-android` with
+`mobile`, `mobile,mobile-disk-space` and every new feature together;
+the diskwatch crate on the host and for Android: no warnings (`--target
+wasm32-unknown-unknown --features web` shows only the two dead-code
+warnings in `shell.rs`'s GPU retry, `RETRY` and `Retry::failed`, not
+from this work); `cargo test -p libmorph` and `--features script` (234
+tests) pass.
+
+Evidence, `out/disk-pressure/LOG.md`: on the S23, one `Critical` hook
+after `init` with a raised threshold, `check_disk_now` returning
+`Critical` without a hook, and `Unknown` told once 30 s after the last
+reading once the app left the front; on the Mac, the starting grade's
+total equal to `df -k`'s and one check per 15 s.
+
+Departures, each small (Rule 1.7):
+
+1. **libmorph-build follows to libmobile 0.5.4** (as 0.5.4), though
+   section 5 says it does not change: the `links` key allows one
+   libmobile in the workspace.
+2. **The starting grade** comes from a `statvfs` read on the loop thread
+   right after `init` on every host (as the amendment states), not from
+   libmobile's first post.
+3. **Without `DISK_WATCH`**, `check_disk_now` reads the data
+   directory's volume and grades it with the default thresholds,
+   changing nothing; the plan is silent there.
+4. **The desktop timer stops while the window is hidden for every app**,
+   not only for one whose occlusion is a suspension (a `Release` app),
+   so step 3's "none while minimised" holds for all.
+5. **libdevice's `disk-space`** is on a new desktop dependency line
+   (`not(android or wasm32)`) as well as macOS's, so Linux reads too.
+6. **Additions:** `DiskVolume` is `#[non_exhaustive]`;
+   `DiskWatch::MIN_INTERVAL`/`MAX_INTERVAL` name the clamp; `Default`
+   for `DiskWatch`, `DiskThresholds` and `DiskVolume`; `disk-space`
+   rejects free space larger than the total.
+7. **The example** for steps 2 and 3 is a new `diskwatch`, on the
+   desktop and as an Android crate, whose critical threshold is raised
+   at build time with `DISKWATCH_CRITICAL_GIB`.
+
+Open: step 3's "none while minimised" on the Mac (someone must minimise
+the window), and on the S23 the timer's readings while resumed for longer
+than one interval. The plan stays `In implementation`.
