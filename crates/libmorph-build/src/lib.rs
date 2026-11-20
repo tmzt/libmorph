@@ -35,6 +35,20 @@
 //!     .expect("gradle project");
 //! ```
 //!
+//! The app's own `MobileActivityPlugin` objects are registered with
+//! `gradle::Project::plugin` (libmobile 0.5.5): Kotlin sources found from
+//! the crate root, dispatched after libmobile's plugins, with their natives
+//! in the app's cdylib:
+//!
+//! ```no_run
+//! use libmorph_build::gradle::AppPlugin;
+//!
+//! libmorph_build::gradle_project("dev.tmzt.shottoss")
+//!     .plugin(AppPlugin::new("dev.tmzt.shottoss.media.MediaStorePlugin").sources("android/java"))
+//!     .generate()
+//!     .expect("gradle project");
+//! ```
+//!
 //! libmorph's own build script republishes libmobile's Gradle handoff under
 //! libmorph's `links` key, which Cargo exposes to the app's build script
 //! because the app depends on libmorph directly.
